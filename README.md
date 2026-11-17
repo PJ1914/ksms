@@ -34,7 +34,7 @@ Tip: use `sslmode=verify-full` in both URLs (Neon certificates are publicly trus
 
 ```bash
 pnpm dev:api        # http://localhost:3000/api/v1/health  and /health/ready
-pnpm dev:mobile     # shows a QR code; scan it with Expo Go on your phone
+pnpm dev:mobile     # shows a QR code; scan it with Expo Go on your phone (see docs/guides/PHONE_TESTING.md)
 ```
 
 For a phone to reach the API, set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` to your PC's LAN address (for example `http://192.168.1.10:3000/api/v1`); the phone and PC must be on the same Wi-Fi.

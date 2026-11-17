@@ -109,3 +109,28 @@ Mutation checks (a rule is deliberately broken, a test must fail, then the code 
 One mutation attempt (idempotency) was invalid at first because it stopped the code compiling; it was redone correctly and is counted above.
 
 Neon after the runs: no leftover test schemas, real tables still empty.
+
+## Early mobile slice: sign-in and products on the phone (2026-11-18)
+
+| Suite                                                                                       | Result          |
+| ------------------------------------------------------------------------------------------- | --------------- |
+| Quick-add product rules (shared `@ksms/validation`: name and price checks, payload builder) | 11 / 11 pass    |
+| Mobile error messages (wrong password, field errors, rate limit, offline)                   | 6 / 6 pass      |
+| **Mobile flow on a real PostgreSQL schema**: the app's exact calls, end to end              | **1 / 1 pass**  |
+| Android bundle (`expo export`)                                                              | builds          |
+| All other suites                                                                            | unchanged, pass |
+
+The flow test creates a shop with the phone number as typed (`+91 …`). It then checks that:
+
+- a second registration with the same number is refused;
+- a wrong password is refused, and sign-in with the right one works;
+- an app restart gets a new session from the stored refresh token;
+- the product list is empty at first;
+- one product of each kind (kg, litre, piece) is added using the app's own payload builder;
+- the list shows unit and price as decimal strings in name order, and search and paging work;
+- a price with 3 decimals is refused by the server;
+- after sign-out the token stops working.
+
+The API was also started on the PC and answered on the Wi-Fi address (`/health` ok, database up).
+
+Not verified by me: the screens themselves on a physical phone. That needs you, with Expo Go (see `docs/guides/PHONE_TESTING.md`). There are no automated screen tests yet; component tests come with the UI phase.
