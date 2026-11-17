@@ -22,6 +22,13 @@ const envSchema = z.object({
     }),
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+  REFRESH_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+  AUTH_THROTTLE_LIMIT: z.coerce.number().int().min(1).default(10), // login/register/refresh per minute per IP
+  // Optional Postgres schema (used by integration tests to isolate data in a throwaway schema).
+  DATABASE_SCHEMA: z
+    .string()
+    .regex(/^[a-z_][a-z0-9_]{0,62}$/)
+    .optional(),
   THROTTLE_LIMIT: z.coerce.number().int().min(1).default(120),
   THROTTLE_TTL_MS: z.coerce.number().int().min(1000).default(60_000),
   CORS_ORIGINS: csv,

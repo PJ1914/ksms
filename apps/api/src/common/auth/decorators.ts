@@ -1,3 +1,4 @@
+import type { PermissionKey } from '@ksms/constants';
 import { createParamDecorator, ExecutionContext, SetMetadata } from '@nestjs/common';
 import { AppException } from '../errors/app.exception';
 import type { AppRequest, Principal, TenantContext } from './auth.types';
@@ -25,3 +26,20 @@ export const Tenant = createParamDecorator((_: unknown, ctx: ExecutionContext): 
   if (!t) throw new AppException('FORBIDDEN', 'Tenant context missing', 403);
   return t;
 });
+
+export const REQUIRE_PERMISSION = 'requirePermission';
+export const AUTHENTICATED_ONLY = 'authenticatedOnly';
+export const AUTH_THROTTLED = 'authThrottled';
+
+/**
+ * Route needs ALL listed permissions (see PERMISSIONS in @ksms/constants).
+ * Authenticated routes with no policy are DENIED by default, so a forgotten decorator fails closed.
+ */
+export const RequirePermission = (...keys: PermissionKey[]) =>
+  SetMetadata(REQUIRE_PERMISSION, keys);
+
+/** Any logged-in member may call this route (e.g. "who am I", logout). Use sparingly. */
+export const AuthenticatedOnly = () => SetMetadata(AUTHENTICATED_ONLY, true);
+
+/** Apply the stricter per-IP limit used for credential endpoints (login, register, refresh). */
+export const AuthThrottled = () => SetMetadata(AUTH_THROTTLED, true);

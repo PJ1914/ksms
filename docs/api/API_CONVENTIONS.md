@@ -70,3 +70,19 @@ Decimal **strings** (`"125.50"`, `"0.500"`). Never JSON numbers. Validated with 
 ## Pagination, filtering, sorting (to be implemented with the first list endpoint, Phase 6)
 
 `?page=1&pageSize=25&sort=-createdAt&q=rice`; `pageSize` max 100; delta sync uses `updated_since` cursors (see SYNC_WORKFLOW).
+
+## Error codes added in Phase 5
+
+| HTTP | code                                        | Meaning                                                                                  |
+| ---- | ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 401  | `INVALID_CREDENTIALS`                       | Wrong mobile/email/password (identical for unknown users)                                |
+| 403  | `NO_ACTIVE_MEMBERSHIP`                      | Login is valid but the account is not active in any shop                                 |
+| 409  | `ORGANIZATION_REQUIRED`                     | The login belongs to several shops; resend with `organizationId` (list in `details`)     |
+| 400  | `INVITATION_INVALID`                        | Wrong, expired, revoked or already used invitation code (deliberately one generic error) |
+| 409  | `INVITATION_ALREADY_USED`, `ALREADY_MEMBER` | Revoking an accepted invitation, or inviting an existing employee                        |
+| 400  | `OWNER_ROLE_NOT_ASSIGNABLE`                 | The Owner role cannot be given to anyone else                                            |
+| 403  | `OWNER_PROTECTED`, `SYSTEM_ROLE_PROTECTED`  | The owner account, Owner role and system roles cannot be changed this way                |
+| 403  | `CANNOT_MODIFY_SELF`                        | You cannot change your own role, branches or status                                      |
+| 403  | `PERMISSION_ESCALATION`                     | You tried to grant permissions you do not hold (`details.missing`)                       |
+| 404  | `ROLE_NOT_FOUND`, `BRANCH_NOT_FOUND`        | Referenced role or branch does not exist in your organization                            |
+| 409  | `ROLE_IN_USE`                               | Role still has employees or pending invitations                                          |

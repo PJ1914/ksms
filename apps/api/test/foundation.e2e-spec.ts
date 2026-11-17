@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { SignJWT } from 'jose';
 import request from 'supertest';
 import { AccessTokenService } from '../src/common/auth/access-token.service';
+import { RolePermissionService } from '../src/common/auth/role-permission.service';
 import { PrismaMock, createPrismaMock, createTestApp, ids } from './test-app';
 
 const claims = { sub: ids.user, sid: ids.session, org: ids.org, v: 0 };
@@ -288,5 +289,88 @@ describe('API foundation (e2e, database mocked)', () => {
       expect(paths).toEqual(expect.arrayContaining(['/api/v1/health', '/api/v1/context']));
       expect(doc.body.components.securitySchemes).toHaveProperty('bearer');
     });
+  });
+});
+
+describe('RBAC guard (e2e, database mocked)', () => {
+  let app: INestApplication;
+  let prisma: PrismaMock;
+  let tokens: AccessTokenService;
+
+  beforeAll(async () => {
+    prisma = createPrismaMock();
+    app = await createTestApp(prisma);
+    tokens = app.get(AccessTokenService);
+  });
+  afterAll(async () => {
+    await app.close();
+  });
+  beforeEach(() => {
+    jest.resetAllMocks();
+    app.get(RolePermissionService).invalidate(); // clear the role cache between tests
+    prisma.userSession.findUnique.mockResolvedValue(okSession());
+    prisma.organizationMember.findUnique.mockResolvedValue(okMember());
+  });
+
+  const get = async (path: string, status: number) =>
+    request(app.getHttpServer())
+      .get(path)
+      .set('Authorization', `Bearer ${await tokens.sign(claims)}`)
+      .expect(status);
+  const roleWith = (keys: string[], name = 'Custom', isSystem = false) => ({
+    name,
+    isSystem,
+    permissions: keys.map((key) => ({ permission: { key } })),
+  });
+
+  it('DENIES an authenticated route that declares no permission policy (fail closed)', async () => {
+    prisma.role.findUnique.mockResolvedValue(roleWith(['sale.create']));
+    const res = await get('/api/v1/test/no-policy', 403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('allows a role that holds the required permission', async () => {
+    prisma.role.findUnique.mockResolvedValue(roleWith(['sale.create']));
+    await get('/api/v1/test/needs-sale', 200);
+  });
+
+  it('denies a role without the permission and reports what was required', async () => {
+    prisma.role.findUnique.mockResolvedValue(roleWith(['product.read']));
+    const res = await get('/api/v1/test/needs-sale', 403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(res.body.error.details.required).toEqual(['sale.create']);
+  });
+
+  it('requires ALL listed permissions', async () => {
+    prisma.role.findUnique.mockResolvedValue(roleWith(['sale.create']));
+    await get('/api/v1/test/needs-both', 403);
+    app.get(RolePermissionService).invalidate();
+    prisma.role.findUnique.mockResolvedValue(roleWith(['sale.create', 'sale.cancel']));
+    await get('/api/v1/test/needs-both', 200);
+  });
+
+  it('treats the system Owner role as holding every permission, even with an empty list', async () => {
+    prisma.role.findUnique.mockResolvedValue(roleWith([], 'Owner', true));
+    await get('/api/v1/test/needs-both', 200);
+  });
+
+  it('does NOT treat a custom role merely named "Owner" as the owner', async () => {
+    prisma.role.findUnique.mockResolvedValue(roleWith([], 'Owner', false));
+    await get('/api/v1/test/needs-sale', 403);
+  });
+
+  it('denies when the role no longer exists', async () => {
+    prisma.role.findUnique.mockResolvedValue(null);
+    await get('/api/v1/test/needs-sale', 403);
+  });
+
+  it('caches role permissions briefly and re-reads after invalidation', async () => {
+    prisma.role.findUnique.mockResolvedValue(roleWith(['sale.create']));
+    await get('/api/v1/test/needs-sale', 200);
+    await get('/api/v1/test/needs-sale', 200);
+    expect(prisma.role.findUnique).toHaveBeenCalledTimes(1);
+    app.get(RolePermissionService).invalidate(ids.role);
+    prisma.role.findUnique.mockResolvedValue(roleWith([]));
+    await get('/api/v1/test/needs-sale', 403);
   });
 });

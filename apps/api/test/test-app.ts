@@ -1,7 +1,7 @@
 import { Body, Controller, Get, INestApplication, Post } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { IsInt, IsString, Length, Min } from 'class-validator';
-import { Public } from '../src/common/auth/decorators';
+import { Public, RequirePermission } from '../src/common/auth/decorators';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/common/configure-app';
 import { parseEnv } from '../src/config/env';
@@ -43,6 +43,24 @@ export class TestController {
     return { pong: true };
   }
 
+  // Authenticated route that declares no permission policy: must be denied by default.
+  @Get('no-policy')
+  noPolicy() {
+    return { reached: true };
+  }
+
+  @RequirePermission('sale.create')
+  @Get('needs-sale')
+  needsSale() {
+    return { reached: true };
+  }
+
+  @RequirePermission('sale.create', 'sale.cancel')
+  @Get('needs-both')
+  needsBoth() {
+    return { reached: true };
+  }
+
   @Public()
   @Get('boom')
   boom(): never {
@@ -64,6 +82,7 @@ export function createPrismaMock() {
     $queryRaw: jest.fn(),
     userSession: { findUnique: jest.fn() },
     organizationMember: { findUnique: jest.fn() },
+    role: { findUnique: jest.fn() },
   };
 }
 export type PrismaMock = ReturnType<typeof createPrismaMock>;

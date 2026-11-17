@@ -10,7 +10,10 @@ export const TRANSACTION_OPTIONS = { maxWait: 15_000, timeout: 20_000 } as const
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor(@Inject(ENV) env: Env) {
     super({
-      adapter: new PrismaPg({ connectionString: env.DATABASE_URL }),
+      adapter: new PrismaPg(
+        { connectionString: env.DATABASE_URL },
+        env.DATABASE_SCHEMA ? { schema: env.DATABASE_SCHEMA } : undefined,
+      ),
       // Prisma's defaults (2 s to start, 5 s to finish) are too tight when checkouts queue behind a
       // row lock on a remote database. Found by test/integration/pooled-locking.int-spec.ts.
       transactionOptions: TRANSACTION_OPTIONS,

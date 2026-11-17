@@ -7,3 +7,6 @@ process.env.THROTTLE_LIMIT = '1000';
 process.env.THROTTLE_TTL_MS = '60000';
 delete process.env.CORS_ORIGINS;
 delete process.env.SWAGGER_ENABLED;
+process.env.AUTH_THROTTLE_LIMIT = '1000';
+process.env.REFRESH_TTL_DAYS = '30';
+delete process.env.DATABASE_SCHEMA;

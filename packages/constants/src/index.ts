@@ -1,3 +1,4 @@
+export * from './permissions';
 export const CURRENCY = 'INR' as const;
 export const DEFAULT_TIMEZONE = 'Asia/Kolkata' as const;
 export const API_PREFIX = 'api/v1' as const;
