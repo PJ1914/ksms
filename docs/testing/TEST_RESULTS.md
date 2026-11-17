@@ -80,3 +80,32 @@ Two of my first mutation attempts were invalid (a syntax error from a wrong edit
 Not yet verifiable in this phase: that **sale and purchase lines keep their own conversion snapshot**. The engine produces an immutable snapshot (tested), but no purchase or sale lines exist yet. This is re-verified end to end in Phases 8 and 9.
 
 Neon after the run: migration applied, 20 global units seeded, no leftover test schemas, real tables still empty.
+
+## Phase 7 — Inventory engine (2026-11-18)
+
+| Suite                                                                         | Result           |
+| ----------------------------------------------------------------------------- | ---------------- |
+| Stock rules unit tests (weighted average, FEFO allocation, expiry, valuation) | 15 / 15 pass     |
+| All API unit tests (including the above)                                      | 60 / 60 pass     |
+| Other unit tests (validation 17, api-client 2, mobile 3)                      | 22 / 22 pass     |
+| API e2e, DB mocked                                                            | 37 / 37 pass     |
+| **Inventory integration on a real PostgreSQL schema (Neon)**                  | **26 / 26 pass** |
+
+The first integration run failed because hand-written SQL (row locks, idempotency claims) ran in the default `public` schema instead of the isolated test schema. This was a test-setup defect: the database connection now sets `search_path` for test schemas, and a new test proves raw SQL runs inside the test schema. The real tables were checked and were never written to.
+
+The inventory suite covers the specification example (opening 100 kg at 50, purchase 25 at 60, sale 2, damage 1 → 122 kg, average 52, value 6344, cost of goods 104.00), opening stock entered in bags, opening stock locked after real activity, negative-stock refusal and the audited override (shop setting + permission + reason), **20 simultaneous sales of the last 5 units (exactly 5 succeed, never below zero)**, mixed concurrent receipts and sales, concurrent weighted average, FEFO and expired-stock handling, concurrent sales of a batch-tracked product, idempotent retries (including 5 simultaneous double-taps applied once), validation, stock views (low stock, valuation, expiring, cost hidden from cashiers), reconciliation detecting a tampered balance, permissions, branch isolation, **cross-organization isolation**, and append-only movements with audit.
+
+Mutation checks (a rule is deliberately broken, a test must fail, then the code is restored byte-for-byte):
+
+| Broken rule                                              | Caught by                                  |
+| -------------------------------------------------------- | ------------------------------------------ |
+| FEFO order reversed (latest expiry sold first)           | stock rules unit tests (2 failures)        |
+| Expired batches no longer skipped when selling           | stock rules unit tests                     |
+| Balance row lock (`FOR UPDATE`) removed                  | concurrency integration tests (5 failures) |
+| Negative-stock check removed                             | negative-stock integration tests (3)       |
+| Idempotency claim ignored (duplicates run again)         | idempotency integration tests (2)          |
+| Organization filter removed from the stock balances list | isolation integration tests (2)            |
+
+One mutation attempt (idempotency) was invalid at first because it stopped the code compiling; it was redone correctly and is counted above.
+
+Neon after the runs: no leftover test schemas, real tables still empty.

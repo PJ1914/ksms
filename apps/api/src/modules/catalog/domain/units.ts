@@ -138,6 +138,17 @@ export function fromBaseQuantity(baseQuantity: Decimal, factorToBase: Decimal): 
 }
 
 /** Whole-number and minimum-step rules for a quantity that is about to be SOLD (expressed in base units). */
+/**
+ * Rules for a quantity entering or leaving STOCK (receipts, adjustments, write-offs): positive, and whole
+ * pieces for piece-counted products. The minimum sale step does not apply to stock (a bag holds 25 kg).
+ */
+export function assertStockBaseQuantity(rules: QuantityRules, baseQuantity: Decimal): void {
+  if (baseQuantity.lte(0)) bad('QUANTITY_INVALID', 'Quantity must be greater than zero');
+  if (rules.type === 'COUNT' && !rules.allowFractional && !baseQuantity.isInteger()) {
+    bad('FRACTIONAL_NOT_ALLOWED', 'This item is counted in whole pieces only');
+  }
+}
+
 export function assertSellableBaseQuantity(rules: QuantityRules, baseQuantity: Decimal): void {
   if (baseQuantity.lte(0)) bad('QUANTITY_INVALID', 'Quantity must be greater than zero');
   if (rules.type === 'COUNT' && !rules.allowFractional && !baseQuantity.isInteger()) {

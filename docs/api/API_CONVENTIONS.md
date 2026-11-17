@@ -105,3 +105,24 @@ Business-rule violations from the conversion and pricing engine return **HTTP 42
 | 409  | `SKU_IN_USE`, `BARCODE_IN_USE`                                                                                                    | Unique within the shop (`details` names the product holding the barcode)                        |
 | 409  | `VERSION_CONFLICT`                                                                                                                | The product changed on another device (`details.currentVersion`)                                |
 | 409  | `PRODUCT_HAS_HISTORY`, `CONVERSION_EXISTS`, `UNIT_IN_USE`, `UNIT_HAS_PRICES`, `CATEGORY_NOT_EMPTY`                                | Refused to protect existing data                                                                |
+
+## Error codes added in Phase 7 (inventory and idempotency)
+
+Stock commands (`POST /inventory/opening-stock`, `POST /inventory/adjustments`) require an `Idempotency-Key` header (a UUID). A repeat with the same key and the same body returns the stored result with the header `Idempotent-Replayed: true`.
+
+| HTTP | code                                                                                              | Meaning                                                                                         |
+| ---- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 400  | `IDEMPOTENCY_KEY_REQUIRED`, `IDEMPOTENCY_KEY_INVALID`                                             | The `Idempotency-Key` header is missing or not a UUID                                           |
+| 422  | `IDEMPOTENCY_KEY_REUSED`                                                                          | The key was already used for a different request                                                |
+| 409  | `IDEMPOTENCY_IN_PROGRESS`                                                                         | The original request is still running; retry shortly                                            |
+| 409  | `INSUFFICIENT_STOCK`                                                                              | Not enough sellable stock (`details.requested`, `details.available`, `details.expired`)         |
+| 409  | `OPENING_STOCK_LOCKED`                                                                            | The product already has activity in this branch; use an adjustment                              |
+| 422  | `NEGATIVE_STOCK_DISABLED`, `OVERRIDE_REASON_REQUIRED`                                             | Going below zero is off in shop settings, or no reason was given                                |
+| 403  | `FORBIDDEN` (`details.required: ["stock.override_negative"]`)                                     | You may not take stock below zero                                                               |
+| 422  | `ADJUSTMENT_DIRECTION`, `QUANTITY_INVALID`                                                        | Damage/expiry/loss must remove stock, found stock must add it; quantity must not be zero        |
+| 422  | `UNIT_COST_REQUIRED`, `UNIT_COST_INVALID`                                                         | A receipt needs a valid, non-negative cost                                                      |
+| 422  | `BATCH_REQUIRED`, `EXPIRY_REQUIRED`, `EXPIRY_INVALID`, `BATCH_INPUT_INVALID`, `BATCH_NOT_TRACKED` | Batch or expiry details are missing, malformed, or given for a product that does not track them |
+| 422  | `BATCH_EXPIRY_MISMATCH`                                                                           | A batch number keeps one expiry date                                                            |
+| 422  | `BATCH_ALREADY_EXPIRED`, `BATCH_EXPIRED`                                                          | Expired stock cannot be received or sold                                                        |
+| 404  | `BATCH_NOT_FOUND`                                                                                 | Batch not found for this product in this branch, or already empty                               |
+| 400  | `BRANCH_REQUIRED`                                                                                 | Inventory routes need the `X-Branch-Id` header                                                  |

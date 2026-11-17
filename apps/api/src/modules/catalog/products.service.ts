@@ -596,6 +596,63 @@ export class ProductsService {
     });
   }
 
+  // ---------- read model for other modules (inventory, purchasing, sales) ----------
+
+  /**
+   * Everything another module needs to move stock for a product: its quantity rules, tracking flags and
+   * current unit factors. Scoped to the organization (another shop's product is "not found").
+   */
+  async stockRules(db: Db, organizationId: string, productId: string) {
+    const p = await db.product.findFirst({
+      where: { id: productId, organizationId, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        status: true,
+        type: true,
+        allowFractional: true,
+        minSaleIncrement: true,
+        trackBatch: true,
+        trackExpiry: true,
+        baseUnitId: true,
+        baseUnit: { select: { code: true } },
+        conversions: {
+          select: {
+            unitId: true,
+            factorToBase: true,
+            isPurchaseUnit: true,
+            isSaleUnit: true,
+            unit: { select: { code: true } },
+          },
+        },
+      },
+    });
+    if (!p) throw new AppException('NOT_FOUND', 'Product not found', 404);
+    return {
+      id: p.id,
+      name: p.name,
+      sku: p.sku,
+      status: p.status,
+      baseUnitId: p.baseUnitId,
+      baseUnitCode: p.baseUnit.code,
+      trackBatch: p.trackBatch,
+      trackExpiry: p.trackExpiry,
+      rules: this.rulesOf(p),
+      conversions: new Map(
+        p.conversions.map((c) => [
+          c.unitId,
+          {
+            unitCode: c.unit.code,
+            factorToBase: dec(c.factorToBase),
+            isPurchaseUnit: c.isPurchaseUnit,
+            isSaleUnit: c.isSaleUnit,
+          },
+        ]),
+      ),
+    };
+  }
+
   // ---------- internals ----------
 
   /** Always scoped to the organization; another shop's product is simply "not found". */

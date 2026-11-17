@@ -11,7 +11,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   constructor(@Inject(ENV) env: Env) {
     super({
       adapter: new PrismaPg(
-        { connectionString: env.DATABASE_URL },
+        {
+          connectionString: env.DATABASE_URL,
+          // The adapter's `schema` option only qualifies Prisma's own queries; raw SQL (row locks, idempotency
+          // claims) would still hit "public". Setting search_path on the connection makes BOTH use the schema.
+          // DATABASE_SCHEMA is for isolated test schemas and needs a direct (non-pooled) connection.
+          ...(env.DATABASE_SCHEMA ? { options: `-c search_path=${env.DATABASE_SCHEMA}` } : {}),
+        },
         env.DATABASE_SCHEMA ? { schema: env.DATABASE_SCHEMA } : undefined,
       ),
       // Prisma's defaults (2 s to start, 5 s to finish) are too tight when checkouts queue behind a
