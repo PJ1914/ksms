@@ -64,6 +64,10 @@ jobs:
         run: pnpm db:migrate:deploy
       - name: Confirm schema is up to date
         run: pnpm db:status
+      - name: Real-database concurrency tests
+        run: pnpm --filter @ksms/api test:int
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
 
   mobile:
     name: Mobile bundle validation

@@ -55,4 +55,12 @@ Never commit `.env` files or credentials. See `AGENTS.md` for engineering rules.
 
 ## Status
 
-Phase 3 (monorepo and dev environment) complete. See `docs/IMPLEMENTATION_ROADMAP.md`.
+Phases 0-4 complete (planning, architecture, database, monorepo, backend foundation). See `docs/IMPLEMENTATION_ROADMAP.md`.
+
+## Tests in more detail
+
+```bash
+pnpm --filter @ksms/api test:int    # real-database concurrency tests (uses DATABASE_URL from apps/api/.env)
+```
+
+API docs while the API runs: http://localhost:3000/api/docs. See `docs/api/API_CONVENTIONS.md` and `docs/testing/TEST_STRATEGY.md`.

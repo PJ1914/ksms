@@ -1,13 +1,20 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma/client';
-import { parseEnv } from '../config/env';
+import { ENV, type Env } from '../config/config.module';
+
+/** Max time to wait for a free connection/lock to start a transaction, and to complete it (ms). */
+export const TRANSACTION_OPTIONS = { maxWait: 15_000, timeout: 20_000 } as const;
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  constructor() {
-    const { DATABASE_URL } = parseEnv();
-    super({ adapter: new PrismaPg({ connectionString: DATABASE_URL }) });
+  constructor(@Inject(ENV) env: Env) {
+    super({
+      adapter: new PrismaPg({ connectionString: env.DATABASE_URL }),
+      // Prisma's defaults (2 s to start, 5 s to finish) are too tight when checkouts queue behind a
+      // row lock on a remote database. Found by test/integration/pooled-locking.int-spec.ts.
+      transactionOptions: TRANSACTION_OPTIONS,
+    });
   }
 
   async onModuleInit(): Promise<void> {
