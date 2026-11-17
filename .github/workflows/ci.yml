@@ -82,5 +82,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Build shared packages
+        run: pnpm --filter "./packages/*" build
       - run: pnpm --filter @ksms/mobile typecheck
       - run: pnpm --filter @ksms/mobile export:check
