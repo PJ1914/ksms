@@ -29,6 +29,7 @@ model Supplier {
   purchases       Purchase[]
   ledger          SupplierLedgerEntry[]
   purchaseReturns PurchaseReturn[]
+  payments        Payment[]
 
   @@index([organizationId, name])
   @@index([organizationId, phone])
@@ -52,6 +53,8 @@ model Purchase {
   taxTotal          Decimal        @default(0) @map("tax_total") @db.Decimal(14, 2)
   roundOff          Decimal        @default(0) @map("round_off") @db.Decimal(14, 2)
   total             Decimal        @db.Decimal(14, 2)
+  billedTotal       Decimal        @default(0) @map("billed_total") @db.Decimal(14, 2) // payable posted so far (grows with each receipt)
+  returnedTotal     Decimal        @default(0) @map("returned_total") @db.Decimal(14, 2) // credit given back through purchase returns
   notes             String?
   createdById       String         @map("created_by_id") @db.Uuid
   cancelledAt       DateTime?      @map("cancelled_at") @db.Timestamptz(3)
@@ -83,6 +86,10 @@ model PurchaseItem {
   receivedBaseQuantity     Decimal   @default(0) @map("received_base_quantity") @db.Decimal(14, 3)
   unitCost                 Decimal   @map("unit_cost") @db.Decimal(14, 4) // per purchase unit
   baseUnitCost             Decimal   @map("base_unit_cost") @db.Decimal(14, 4) // landed cost per base unit incl. allocated extras
+  allocatedExtra           Decimal   @default(0) @map("allocated_extra") @db.Decimal(14, 2) // this line's share of freight/loading
+  billedAmount             Decimal   @default(0) @map("billed_amount") @db.Decimal(14, 2) // payable posted for what was received so far
+  returnedBaseQuantity     Decimal   @default(0) @map("returned_base_quantity") @db.Decimal(14, 3)
+  returnedAmount           Decimal   @default(0) @map("returned_amount") @db.Decimal(14, 2)
   discountAmount           Decimal   @default(0) @map("discount_amount") @db.Decimal(14, 2)
   taxRatePercent           Decimal   @default(0) @map("tax_rate_percent") @db.Decimal(7, 4)
   taxAmount                Decimal   @default(0) @map("tax_amount") @db.Decimal(14, 2)
@@ -136,6 +143,7 @@ model PurchaseReturnItem {
   id                       String         @id @default(uuid(7)) @db.Uuid
   returnId                 String         @map("return_id") @db.Uuid
   purchaseReturn           PurchaseReturn @relation(fields: [returnId], references: [id])
+  purchaseItemId           String?        @map("purchase_item_id") @db.Uuid
   productId                String         @map("product_id") @db.Uuid
   batchId                  String?        @map("batch_id") @db.Uuid
   unitId                   String         @map("unit_id") @db.Uuid

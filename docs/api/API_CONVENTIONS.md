@@ -126,3 +126,27 @@ Stock commands (`POST /inventory/opening-stock`, `POST /inventory/adjustments`) 
 | 422  | `BATCH_ALREADY_EXPIRED`, `BATCH_EXPIRED`                                                          | Expired stock cannot be received or sold                                                        |
 | 404  | `BATCH_NOT_FOUND`                                                                                 | Batch not found for this product in this branch, or already empty                               |
 | 400  | `BRANCH_REQUIRED`                                                                                 | Inventory routes need the `X-Branch-Id` header                                                  |
+
+## Error codes added in Phase 8 (suppliers, purchases, returns, payments)
+
+Money-writing routes need an `Idempotency-Key` header (see Phase 7) and `X-Branch-Id`.
+
+| HTTP | code                                                                                                                                             | Meaning                                                                                |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| 404  | `SUPPLIER_NOT_FOUND`, `PURCHASE_NOT_FOUND`, `PURCHASE_RETURN_NOT_FOUND`, `PAYMENT_NOT_FOUND`                                                     | Not found in this shop (or this branch, for purchases and returns)                     |
+| 409  | `SUPPLIER_NAME_IN_USE`                                                                                                                           | A supplier with this name exists (ignoring capital letters); `details.supplierId`      |
+| 409  | `SUPPLIER_INVOICE_DUPLICATE`                                                                                                                     | This supplier's bill number was already entered; `details.purchaseId`                  |
+| 409  | `VERSION_CONFLICT`                                                                                                                               | The supplier changed on another device (`details.currentVersion`)                      |
+| 422  | `SUPPLIER_INACTIVE`                                                                                                                              | Switched-off suppliers cannot receive new purchases                                    |
+| 409  | `PURCHASE_NOT_EDITABLE`, `PURCHASE_NOT_DRAFT`                                                                                                    | Only a draft can be edited / confirmed                                                 |
+| 409  | `PURCHASE_CANCELLED`, `PURCHASE_ALREADY_RECEIVED`, `PURCHASE_HAS_RECEIPTS`                                                                       | The purchase is in the wrong state: cancelled, fully received, or already has goods in |
+| 409  | `PURCHASE_NOT_RETURNABLE`                                                                                                                        | Goods that were never received cannot be returned                                      |
+| 422  | `RECEIPT_EXCEEDS_ORDER`, `NOTHING_TO_RECEIVE`                                                                                                    | More than outstanding was entered / nothing is left; `details.remainingBaseQuantity`   |
+| 422  | `RETURN_EXCEEDS_RECEIVED`                                                                                                                        | More than can still be returned; `details.returnableBaseQuantity`                      |
+| 422  | `ITEM_NOT_IN_PURCHASE`, `DUPLICATE_RECEIPT_LINE`                                                                                                 | A line does not belong to the purchase, or is listed twice                             |
+| 422  | `PRODUCT_NOT_ACTIVE`, `UNIT_NOT_CONFIGURED`, `UNIT_NOT_PURCHASE_ENABLED`                                                                         | The product or unit cannot be bought (`details.line` = line number)                    |
+| 422  | `DISCOUNT_EXCEEDS_LINE`, `ROUND_OFF_TOO_LARGE`, `PURCHASE_EMPTY`, `PURCHASE_TOTAL_NEGATIVE`, `AMOUNT_TOO_LARGE`, `ADDITIONAL_COST_UNALLOCATABLE` | Purchase arithmetic rules                                                              |
+| 422  | `PURCHASE_DATE_FUTURE`, `PURCHASE_DATE_INVALID`, `EXPIRY_INVALID`                                                                                | Dates must be real calendar dates; a purchase cannot be dated in the future            |
+| 422  | `PAYMENT_AMOUNT_INVALID`                                                                                                                         | A payment must be more than zero                                                       |
+| 422  | `ALLOCATION_NOT_PAYABLE`, `ALLOCATION_DUPLICATE`, `ALLOCATION_INVALID`, `ALLOCATION_EXCEEDS_OUTSTANDING`, `ALLOCATION_EXCEEDS_PAYMENT`           | Payment allocation rules                                                               |
+| 409  | `PAYMENT_ALREADY_REVERSED`                                                                                                                       | This payment was already reversed                                                      |

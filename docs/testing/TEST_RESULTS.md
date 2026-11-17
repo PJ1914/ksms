@@ -134,3 +134,41 @@ The flow test creates a shop with the phone number as typed (`+91 …`). It then
 The API was also started on the PC and answered on the Wi-Fi address (`/health` ok, database up).
 
 Not verified by me: the screens themselves on a physical phone. That needs you, with Expo Go (see `docs/guides/PHONE_TESTING.md`). There are no automated screen tests yet; component tests come with the UI phase.
+
+## Phase 8: Procurement and suppliers (2026-11-19)
+
+| Suite                                                                                                       | Result             |
+| ----------------------------------------------------------------------------------------------------------- | ------------------ |
+| Purchase money rules (freight sharing, discount, tax, round-off, exact partial billing), pure functions     | 23 / 23 pass       |
+| Calendar-date check added to the stock rules                                                                | 8 / 8 pass         |
+| All API unit tests                                                                                          | 91 / 91 pass       |
+| Other unit tests (validation 28, api-client 2, mobile 9)                                                    | 39 / 39 pass       |
+| API e2e, DB mocked                                                                                          | 37 / 37 pass       |
+| **Procurement integration on a real PostgreSQL schema** (all 4 migrations applied)                          | **34 / 34 pass**   |
+| **All six integration suites together** (identity, catalogue, inventory, mobile flow, locking, procurement) | **155 / 155 pass** |
+
+Mistakes found while testing, all in my own tests and fixed: a wrong field name for a batch's quantity (twice), and a quantity with four decimals that is correctly refused by request validation before the unit rules run. Two of my own sums were also wrong (a round-off example and a return credit); the program's figures were right. One real defect was found and fixed in the stock engine: an impossible date such as `2026-02-31` reached the database and caused a server error; it is now refused with `EXPIRY_INVALID`.
+
+The procurement suite covers: the specification example (5 bags of 25 kg at 1400 gives 125 kg at 56.00/kg and 7000.00 owed); weighted-average cost across purchases; draft, edit, confirm, receive and cancel; freight shared across items; discounts, tax and round-off for GST and non-GST shops; **partial receipts that add up to the exact total** (7 bags at 1000.01 received in four parts); an all-or-nothing receipt when one line fails; batch and expiry on receipt; 15 refusal cases; duplicate supplier bills; purchase returns (exact partial credits, goods already sold, batch required, unreceived purchases); payments (oldest first, chosen purchases, advances, reversals, cashbook lines); retries with the same key for create, receive, payment and return; **10 simultaneous payments, 3 simultaneous receipts of one purchase, 5 simultaneous double-taps, 12 simultaneous purchase numbers, and receipts, returns and payments racing together**; permissions (cashier refused, manager allowed); **another shop and another branch can never see or change these records**; database protection against edits and deletes; and the audit trail. After every money scenario the reconciliation check (stock, purchases, returns, payments, supplier balances) must report "consistent".
+
+Mutation checks (a rule is deliberately broken, a test must fail, then the code is restored byte-for-byte; all 13 were caught):
+
+| Broken rule                                          | Caught by                               |
+| ---------------------------------------------------- | --------------------------------------- |
+| Round-off no longer added with the last receipt      | round-off and partial receipt tests     |
+| A receipt posts nothing to the supplier ledger       | specification and partial receipt tests |
+| Over-receipt check removed                           | partial receipt test                    |
+| Supplier row lock removed                            | simultaneous payments and racing tests  |
+| Purchase row lock removed                            | simultaneous receipt test               |
+| Return credit always zero                            | purchase return test                    |
+| Explicit allocation may exceed what is outstanding   | allocation test                         |
+| Payments not applied to the oldest purchase first    | oldest-first test                       |
+| Reversal does not restore the supplier balance       | reversal test                           |
+| Supplier lookup ignores the shop (cross-tenant leak) | cross-shop test                         |
+| Purchase lookup ignores the branch                   | cross-branch test                       |
+| Idempotency key ignored on purchase create           | retry and double-tap tests              |
+| Document counter does not advance                    | numbering test                          |
+
+Neon after the runs: the new migration is applied and `migrate diff` reports no difference from the schema; no leftover test schemas; the real tables hold only the shop and owner account created from the phone (1 organization, 1 user) and no purchases, suppliers or stock yet.
+
+Not verified: the screens. This phase is server-side only; the mobile screens for suppliers and purchases come in the UI phase.

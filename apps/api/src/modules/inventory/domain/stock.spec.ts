@@ -3,6 +3,7 @@ import {
   BatchStock,
   allocateFefo,
   isExpired,
+  isRealIsoDate,
   stockValue,
   todayInIndia,
   weightedAverageCost,
@@ -125,5 +126,20 @@ describe('helpers', () => {
     expect(stockValue(d(125), d(52)).toFixed(2)).toBe('6500.00');
     expect(stockValue(d('0.333'), d('10.6667')).toFixed(2)).toBe('3.55'); // 3.5520111
     expect(stockValue(d(-5), d(40)).toFixed(2)).toBe('0.00');
+  });
+});
+
+describe('isRealIsoDate', () => {
+  it.each([
+    ['2026-11-18', true],
+    ['2028-02-29', true],
+    ['2026-02-29', false],
+    ['2026-02-31', false],
+    ['2026-13-01', false],
+    ['2026-1-1', false],
+    ['18-11-2026', false],
+    ['', false],
+  ])('%s -> %s', (value, expected) => {
+    expect(isRealIsoDate(value)).toBe(expected);
   });
 });

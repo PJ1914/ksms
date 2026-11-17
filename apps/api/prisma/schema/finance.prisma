@@ -66,6 +66,7 @@ model Payment {
   customerId     String?          @map("customer_id") @db.Uuid
   customer       Customer?        @relation(fields: [customerId], references: [id])
   supplierId     String?          @map("supplier_id") @db.Uuid
+  supplier       Supplier?        @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   receiptNumber  String?          @map("receipt_number")
   referenceNo    String?          @map("reference_no") // UPI txn id, cheque no, etc.
   recordedById   String           @map("recorded_by_id") @db.Uuid

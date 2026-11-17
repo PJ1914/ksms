@@ -83,3 +83,7 @@ Cost and value fields appear only for roles with `report.inventory` (or the Owne
 - Low-stock and expiry **push notifications** (the queries exist; delivery is the notifications work in Phase 13/15).
 - Stock transfers between branches (tables exist; future roadmap).
 - Quarantine of non-saleable returns is part of the sales-return workflow (Phase 9).
+
+### Update in Phase 8
+
+Purchase receipts and purchase returns now use this engine (`PURCHASE_RECEIPT`, `PURCHASE_RETURN`). See `PROCUREMENT_WORKFLOW.md`. The engine also refuses impossible calendar dates for expiry (`2026-02-31`).

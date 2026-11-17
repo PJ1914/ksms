@@ -11,6 +11,7 @@ import {
   type OutboundType,
   allocateFefo,
   isExpired,
+  isRealIsoDate,
   todayInIndia,
   weightedAverageCost,
 } from './domain/stock';
@@ -84,7 +85,6 @@ const d = (v: string | number | Decimal) => new Decimal(v.toString());
 const qty = (v: Decimal) => v.toFixed(3);
 const cost = (v: Decimal) =>
   v.toDecimalPlaces(COST_SCALE, Decimal.ROUND_HALF_UP).toFixed(COST_SCALE);
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 interface LockedBalance {
   onHand: Decimal;
@@ -338,7 +338,7 @@ export class InventoryService {
     if (
       input.expiryDate !== undefined &&
       input.expiryDate !== null &&
-      !ISO_DATE.test(input.expiryDate)
+      !isRealIsoDate(input.expiryDate)
     ) {
       throw new DomainError('EXPIRY_INVALID', 'expiryDate must be YYYY-MM-DD');
     }
