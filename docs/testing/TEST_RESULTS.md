@@ -47,3 +47,36 @@ Mutation checks (a rule is deliberately broken, a test must fail, then the code 
 | (Phase 4) session revocation ignored; branch assignment ignored | foundation tests        |
 
 Cleanup verified: no leftover test schemas in Neon, and the real tables still hold 0 rows.
+
+## Phase 6 — Product catalogue and unit conversion (2026-11-18)
+
+| Suite                                                                            | Result                             |
+| -------------------------------------------------------------------------------- | ---------------------------------- |
+| Conversion and pricing engine unit tests (pure functions)                        | 36 / 36 pass                       |
+| All other unit tests (API 9, validation 17, api-client 2, mobile 3)              | 31 / 31 pass                       |
+| API e2e, DB mocked                                                               | 37 / 37 pass                       |
+| **Catalogue integration on a real PostgreSQL schema** (all 3 migrations applied) | **48 / 48 pass** (see note)        |
+| Identity integration (unchanged)                                                 | 42 / 42 pass in the previous phase |
+
+Note: the first full catalogue run passed 44 of 48; the four failures were mistakes in the test data (a one-letter product name, a barcode prefix typo, and pricing a weight product in pieces), not product defects. After fixing the tests, the affected groups were re-run (29 / 29) and the other 19 tests had already passed. The complete suite runs again in CI on a clean PostgreSQL 17.
+
+The catalogue integration suite covers the specification's examples (loose rice with 25 kg bags and 500 g price point, loose oil with a 15 L can, packaged oil with a carton of 12 and whole-pieces-only, milk 500 ml and 1 L as separate SKUs, the 50 g sale step), 24 rule-violation cases, SKU and barcode uniqueness and scanning, versioned edits, conversion and price changes with audit before/after, atomic price replacement, history protection, search (name, SKU, barcode prefix), filters, server-side pagination and sorting, delta sync, the category tree, permissions for Cashier / Collection Agent / Manager, and **cross-organization isolation across every route**.
+
+Mutation checks (a rule is deliberately broken, a test must fail, then the code is restored byte-for-byte):
+
+| Broken rule                                                         | Caught by                                                                            |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Weight to volume conversion allowed (both dimension checks removed) | engine unit tests (a single removed check is covered by the second layer, by design) |
+| Fractional quantity rounded instead of refused                      | engine unit tests                                                                    |
+| Fractional pieces allowed for whole-number products                 | engine unit tests                                                                    |
+| Exact price point ignored                                           | pricing unit tests                                                                   |
+| Price rounding changed from half-up to truncation                   | pricing unit tests                                                                   |
+| Product lookups ignore the organization (cross-tenant leak)         | cross-organization integration test                                                  |
+| History check on deletion disabled                                  | history integration test                                                             |
+| Version conflict check disabled                                     | versioning integration test                                                          |
+
+Two of my first mutation attempts were invalid (a syntax error from a wrong edit); they were redone correctly and are not counted above.
+
+Not yet verifiable in this phase: that **sale and purchase lines keep their own conversion snapshot**. The engine produces an immutable snapshot (tested), but no purchase or sale lines exist yet. This is re-verified end to end in Phases 8 and 9.
+
+Neon after the run: migration applied, 20 global units seeded, no leftover test schemas, real tables still empty.

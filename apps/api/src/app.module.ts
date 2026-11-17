@@ -11,6 +11,7 @@ import { TenantGuard } from './common/tenant/tenant.guard';
 import { ConfigModule, ENV, type Env } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { CatalogModule } from './modules/catalog/catalog.module';
 import { ContextModule } from './modules/context/context.module';
 import { HealthModule } from './modules/health/health.module';
 import { IdentityModule } from './modules/identity/identity.module';
@@ -40,6 +41,7 @@ import { OrganizationModule } from './modules/organization/organization.module';
     ContextModule,
     OrganizationModule,
     IdentityModule,
+    CatalogModule,
   ],
   providers: [
     // Guard order matters: rate limit -> authenticate -> tenant context -> permission (default deny).

@@ -55,7 +55,7 @@ Never commit `.env` files or credentials. See `AGENTS.md` for engineering rules.
 
 ## Status
 
-Phases 0-5 complete (planning, architecture, database, monorepo, backend foundation, authentication and RBAC). See `docs/IMPLEMENTATION_ROADMAP.md`.
+Phases 0-6 complete (planning, architecture, database, monorepo, backend foundation, authentication and RBAC, product catalogue). See `docs/IMPLEMENTATION_ROADMAP.md`.
 
 ## Tests in more detail
 

@@ -18,6 +18,10 @@ model UnitOfMeasurement {
   code      String      @unique
   name      String
   dimension ProductType
+  // Packaging units (BAG, CARTON, CAN...) have no universal size; their size is defined per product.
+  isPackaging    Boolean @default(false) @map("is_packaging")
+  // Size relative to the canonical unit of the dimension (KG, L, PCS). Null for packaging units.
+  standardFactor Decimal? @map("standard_factor") @db.Decimal(18, 6)
 
   baseProducts Product[]
   conversions  ProductUnitConversion[]
@@ -60,6 +64,8 @@ model Product {
   mrp             Decimal?          @db.Decimal(14, 2)
   minStockLevel   Decimal           @default(0) @map("min_stock_level") @db.Decimal(14, 3) // in base unit
   allowFractional Boolean           @default(false) @map("allow_fractional") // COUNT products only
+  // Smallest sellable step in base units (e.g. 0.050 kg); null = no restriction.
+  minSaleIncrement Decimal?         @map("min_sale_increment") @db.Decimal(14, 3)
   trackBatch      Boolean           @default(false) @map("track_batch")
   trackExpiry     Boolean           @default(false) @map("track_expiry")
   isTaxable       Boolean           @default(false) @map("is_taxable")

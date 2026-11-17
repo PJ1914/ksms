@@ -3,6 +3,7 @@ import { ThrottlerException } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { CORRELATION_HEADER } from '@ksms/constants';
 import { AppException } from '../errors/app.exception';
+import { DomainError } from '../errors/domain.error';
 
 interface ErrorPayload {
   status: number;
@@ -53,6 +54,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (exception instanceof AppException) {
       return {
         status: exception.getStatus(),
+        code: exception.code,
+        message: exception.message,
+        details: exception.details,
+      };
+    }
+    if (exception instanceof DomainError) {
+      return {
+        status: 422,
         code: exception.code,
         message: exception.message,
         details: exception.details,

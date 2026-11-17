@@ -40,3 +40,11 @@ Prisma has no automatic down-migrations. Policy: each migration PR includes a do
 ## Test database resets
 
 History tables reject `TRUNCATE`/`DELETE`. Tests must create a fresh schema (`prisma migrate reset` / drop schema) instead of truncating tables.
+
+## Phase 6 migration (2026-11-18)
+
+| Migration                                | Content                                                                                                                                                                                |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `20261118000000_unit_conversion_support` | `units_of_measurement.is_packaging` and `standard_factor` (+ CHECK that a unit is exactly one kind), `products.min_sale_increment` (+ CHECK > 0), and the 20 global units as seed data |
+
+Rollback: delete the seeded unit rows (only possible while no product uses them), drop the two CHECK constraints (`units_factor_matches_kind`, `products_min_sale_increment_pos`), then the three columns. The migration is additive; it was applied to a clean test schema and to the Neon database.

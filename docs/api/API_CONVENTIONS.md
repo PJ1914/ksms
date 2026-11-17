@@ -86,3 +86,22 @@ Decimal **strings** (`"125.50"`, `"0.500"`). Never JSON numbers. Validated with 
 | 403  | `PERMISSION_ESCALATION`                     | You tried to grant permissions you do not hold (`details.missing`)                       |
 | 404  | `ROLE_NOT_FOUND`, `BRANCH_NOT_FOUND`        | Referenced role or branch does not exist in your organization                            |
 | 409  | `ROLE_IN_USE`                               | Role still has employees or pending invitations                                          |
+
+## Error codes added in Phase 6 (catalogue)
+
+Business-rule violations from the conversion and pricing engine return **HTTP 422**.
+
+| HTTP | code                                                                                                                              | Meaning                                                                                         |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 422  | `UNIT_DIMENSION_MISMATCH`                                                                                                         | Weight and volume (or count) cannot be converted without density                                |
+| 422  | `BASE_UNIT_INVALID`                                                                                                               | Base unit must be a standard unit of the product's own dimension                                |
+| 422  | `CONVERSION_FACTOR_REQUIRED`, `CONVERSION_INVALID`, `CONVERSION_MISMATCH`, `CONVERSION_DUPLICATE`, `CONVERSION_NOT_REPRESENTABLE` | A unit's size is missing, not positive, contradicts the standard size, repeated, or too precise |
+| 422  | `FRACTIONAL_NOT_ALLOWED`, `FRACTIONAL_REQUIRED`                                                                                   | Piece-counted items are sold whole; weight/volume items are always fractional                   |
+| 422  | `QUANTITY_PRECISION`, `QUANTITY_INVALID`, `INCREMENT_VIOLATION`                                                                   | Quantity finer than 0.001 base unit, not positive, or not a multiple of the sale step           |
+| 422  | `PRICE_NOT_CONFIGURED`, `PRICE_DUPLICATE`, `PRICE_UNIT_NOT_CONFIGURED`, `UNIT_NOT_CONFIGURED`, `UNIT_NOT_SALE_ENABLED`            | Pricing problems                                                                                |
+| 422  | `BASE_UNIT_REQUIRED`, `BASE_UNIT_MUST_SELL`                                                                                       | The base unit cannot be removed or made non-sellable                                            |
+| 422  | `CATEGORY_CYCLE`, `CATEGORY_TOO_DEEP`                                                                                             | Category tree rules                                                                             |
+| 404  | `UNIT_NOT_FOUND`, `CATEGORY_NOT_FOUND`                                                                                            | Referenced unit does not exist / category is not in your organization                           |
+| 409  | `SKU_IN_USE`, `BARCODE_IN_USE`                                                                                                    | Unique within the shop (`details` names the product holding the barcode)                        |
+| 409  | `VERSION_CONFLICT`                                                                                                                | The product changed on another device (`details.currentVersion`)                                |
+| 409  | `PRODUCT_HAS_HISTORY`, `CONVERSION_EXISTS`, `UNIT_IN_USE`, `UNIT_HAS_PRICES`, `CATEGORY_NOT_EMPTY`                                | Refused to protect existing data                                                                |
