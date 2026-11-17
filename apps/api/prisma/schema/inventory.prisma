@@ -1,0 +1,154 @@
+// ===== Inventory =====
+// inventory_balances is a derived cache. stock_movements is the append-only source (DB trigger blocks UPDATE/DELETE).
+
+enum StockMovementType {
+  OPENING
+  PURCHASE_RECEIPT
+  SALE
+  SALE_RETURN
+  PURCHASE_RETURN
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  DAMAGE
+  EXPIRY
+  CANCELLATION_REVERSAL
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+enum BatchStatus {
+  ACTIVE
+  DEPLETED
+  EXPIRED
+  QUARANTINED
+}
+
+enum AdjustmentReason {
+  COUNT_CORRECTION
+  DAMAGE
+  EXPIRY
+  LOSS
+  FOUND
+  OTHER
+}
+
+enum TransferStatus {
+  DRAFT
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+model InventoryBalance {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  branchId       String   @map("branch_id") @db.Uuid
+  productId      String   @map("product_id") @db.Uuid
+  product        Product  @relation(fields: [productId], references: [id])
+  quantityOnHand Decimal  @default(0) @map("quantity_on_hand") @db.Decimal(14, 3) // base unit; CHECK >= 0 unless override (see 0002 migration)
+  reservedQty    Decimal  @default(0) @map("reserved_qty") @db.Decimal(14, 3)
+  averageCost    Decimal  @default(0) @map("average_cost") @db.Decimal(14, 4) // moving weighted average per base unit
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([branchId, productId])
+  @@index([organizationId, branchId])
+  @@map("inventory_balances")
+}
+
+model InventoryBatch {
+  id             String      @id @default(uuid(7)) @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  branchId       String      @map("branch_id") @db.Uuid
+  productId      String      @map("product_id") @db.Uuid
+  product        Product     @relation(fields: [productId], references: [id])
+  batchNumber    String      @map("batch_number")
+  expiryDate     DateTime?   @map("expiry_date") @db.Date
+  quantityOnHand Decimal     @default(0) @map("quantity_on_hand") @db.Decimal(14, 3)
+  unitCost       Decimal     @map("unit_cost") @db.Decimal(14, 4)
+  status         BatchStatus @default(ACTIVE)
+  receivedAt     DateTime    @default(now()) @map("received_at") @db.Timestamptz(3)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  movements StockMovement[]
+
+  @@unique([branchId, productId, batchNumber])
+  @@index([organizationId, branchId, productId, expiryDate]) // FEFO lookup
+  @@index([organizationId, expiryDate])
+  @@map("inventory_batches")
+}
+
+model StockMovement {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  organizationId  String            @map("organization_id") @db.Uuid
+  branchId        String            @map("branch_id") @db.Uuid
+  productId       String            @map("product_id") @db.Uuid
+  product         Product           @relation(fields: [productId], references: [id])
+  batchId         String?           @map("batch_id") @db.Uuid
+  batch           InventoryBatch?   @relation(fields: [batchId], references: [id])
+  type            StockMovementType
+  quantity        Decimal           @db.Decimal(14, 3) // signed, base unit
+  unitCost        Decimal           @map("unit_cost") @db.Decimal(14, 4) // cost snapshot at transaction time
+  balanceAfter    Decimal           @map("balance_after") @db.Decimal(14, 3) // on-hand after this movement (aids reconciliation)
+  referenceType   String            @map("reference_type") // SALE, PURCHASE, ADJUSTMENT, SALE_RETURN, ...
+  referenceId     String            @map("reference_id") @db.Uuid
+  referenceLineId String?           @map("reference_line_id") @db.Uuid
+  reason          String?
+  createdById     String            @map("created_by_id") @db.Uuid
+  createdBy       User              @relation("MovementCreatedBy", fields: [createdById], references: [id])
+  occurredAt      DateTime          @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, branchId, productId, occurredAt])
+  @@index([referenceType, referenceId])
+  @@index([organizationId, occurredAt])
+  @@map("stock_movements")
+}
+
+model StockAdjustment {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  branchId       String           @map("branch_id") @db.Uuid
+  productId      String           @map("product_id") @db.Uuid
+  batchId        String?          @map("batch_id") @db.Uuid
+  reason         AdjustmentReason
+  quantity       Decimal          @db.Decimal(14, 3) // signed delta, base unit
+  notes          String?
+  movementId     String           @unique @map("movement_id") @db.Uuid
+  approvedById   String?          @map("approved_by_id") @db.Uuid
+  createdById    String           @map("created_by_id") @db.Uuid
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, branchId, createdAt])
+  @@map("stock_adjustments")
+}
+
+model StockTransfer {
+  id             String         @id @default(uuid(7)) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  fromBranchId   String         @map("from_branch_id") @db.Uuid
+  toBranchId     String         @map("to_branch_id") @db.Uuid
+  status         TransferStatus @default(DRAFT)
+  notes          String?
+  createdById    String         @map("created_by_id") @db.Uuid
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  items StockTransferItem[]
+
+  @@index([organizationId, status])
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  transferId  String        @map("transfer_id") @db.Uuid
+  transfer    StockTransfer @relation(fields: [transferId], references: [id])
+  productId   String        @map("product_id") @db.Uuid
+  batchId     String?       @map("batch_id") @db.Uuid
+  quantity    Decimal       @db.Decimal(14, 3)
+  receivedQty Decimal       @default(0) @map("received_qty") @db.Decimal(14, 3)
+
+  @@index([transferId])
+  @@map("stock_transfer_items")
+}

@@ -1,0 +1,150 @@
+// ===== Procurement and suppliers =====
+
+enum PurchaseStatus {
+  DRAFT
+  CONFIRMED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+model Supplier {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  name             String
+  contactPerson    String?   @map("contact_person")
+  phone            String?
+  email            String?
+  gstin            String?
+  addressLine      String?   @map("address_line")
+  stateCode        String?   @map("state_code")
+  paymentTermsDays Int?      @map("payment_terms_days")
+  balance          Decimal   @default(0) @db.Decimal(14, 2) // derived cache of supplier_ledger_entries (positive = we owe)
+  isActive         Boolean   @default(true) @map("is_active")
+  version          Int       @default(1)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  purchases       Purchase[]
+  ledger          SupplierLedgerEntry[]
+  purchaseReturns PurchaseReturn[]
+
+  @@index([organizationId, name])
+  @@index([organizationId, phone])
+  @@map("suppliers")
+}
+
+model Purchase {
+  id                String         @id @default(uuid(7)) @db.Uuid
+  organizationId    String         @map("organization_id") @db.Uuid
+  branchId          String         @map("branch_id") @db.Uuid
+  supplierId        String         @map("supplier_id") @db.Uuid
+  supplier          Supplier       @relation(fields: [supplierId], references: [id])
+  purchaseNumber    String         @map("purchase_number")
+  supplierInvoiceNo String?        @map("supplier_invoice_no")
+  status            PurchaseStatus @default(DRAFT)
+  purchaseDate      DateTime       @map("purchase_date") @db.Date
+  receivedAt        DateTime?      @map("received_at") @db.Timestamptz(3)
+  subtotal          Decimal        @db.Decimal(14, 2)
+  discountTotal     Decimal        @default(0) @map("discount_total") @db.Decimal(14, 2)
+  additionalCosts   Decimal        @default(0) @map("additional_costs") @db.Decimal(14, 2) // freight, loading, etc.
+  taxTotal          Decimal        @default(0) @map("tax_total") @db.Decimal(14, 2)
+  roundOff          Decimal        @default(0) @map("round_off") @db.Decimal(14, 2)
+  total             Decimal        @db.Decimal(14, 2)
+  notes             String?
+  createdById       String         @map("created_by_id") @db.Uuid
+  cancelledAt       DateTime?      @map("cancelled_at") @db.Timestamptz(3)
+  cancelReason      String?        @map("cancel_reason")
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  items    PurchaseItem[]
+  payments PurchasePayment[]
+  returns  PurchaseReturn[]
+
+  @@unique([organizationId, branchId, purchaseNumber])
+  @@index([organizationId, branchId, purchaseDate])
+  @@index([organizationId, supplierId, purchaseDate])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id                       String    @id @default(uuid(7)) @db.Uuid
+  organizationId           String    @map("organization_id") @db.Uuid
+  purchaseId               String    @map("purchase_id") @db.Uuid
+  purchase                 Purchase  @relation(fields: [purchaseId], references: [id])
+  productId                String    @map("product_id") @db.Uuid
+  product                  Product   @relation(fields: [productId], references: [id])
+  unitId                   String    @map("unit_id") @db.Uuid
+  quantity                 Decimal   @db.Decimal(14, 3) // in purchase unit
+  conversionFactorSnapshot Decimal   @map("conversion_factor_snapshot") @db.Decimal(18, 6)
+  baseQuantity             Decimal   @map("base_quantity") @db.Decimal(14, 3)
+  receivedBaseQuantity     Decimal   @default(0) @map("received_base_quantity") @db.Decimal(14, 3)
+  unitCost                 Decimal   @map("unit_cost") @db.Decimal(14, 4) // per purchase unit
+  baseUnitCost             Decimal   @map("base_unit_cost") @db.Decimal(14, 4) // landed cost per base unit incl. allocated extras
+  discountAmount           Decimal   @default(0) @map("discount_amount") @db.Decimal(14, 2)
+  taxRatePercent           Decimal   @default(0) @map("tax_rate_percent") @db.Decimal(7, 4)
+  taxAmount                Decimal   @default(0) @map("tax_amount") @db.Decimal(14, 2)
+  lineTotal                Decimal   @map("line_total") @db.Decimal(14, 2)
+  batchNumber              String?   @map("batch_number")
+  expiryDate               DateTime? @map("expiry_date") @db.Date
+
+  @@index([purchaseId])
+  @@index([organizationId, productId])
+  @@map("purchase_items")
+}
+
+// Allocation of a payment (payments table) to a purchase.
+model PurchasePayment {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  purchaseId     String   @map("purchase_id") @db.Uuid
+  purchase       Purchase @relation(fields: [purchaseId], references: [id])
+  paymentId      String   @map("payment_id") @db.Uuid
+  payment        Payment  @relation(fields: [paymentId], references: [id])
+  amount         Decimal  @db.Decimal(14, 2)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([purchaseId, paymentId])
+  @@index([paymentId])
+  @@map("purchase_payments")
+}
+
+model PurchaseReturn {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  branchId       String    @map("branch_id") @db.Uuid
+  purchaseId     String?   @map("purchase_id") @db.Uuid
+  purchase       Purchase? @relation(fields: [purchaseId], references: [id])
+  supplierId     String    @map("supplier_id") @db.Uuid
+  supplier       Supplier  @relation(fields: [supplierId], references: [id])
+  returnNumber   String    @map("return_number")
+  reason         String?
+  total          Decimal   @db.Decimal(14, 2)
+  createdById    String    @map("created_by_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  items PurchaseReturnItem[]
+
+  @@unique([organizationId, branchId, returnNumber])
+  @@index([organizationId, supplierId])
+  @@map("purchase_returns")
+}
+
+model PurchaseReturnItem {
+  id                       String         @id @default(uuid(7)) @db.Uuid
+  returnId                 String         @map("return_id") @db.Uuid
+  purchaseReturn           PurchaseReturn @relation(fields: [returnId], references: [id])
+  productId                String         @map("product_id") @db.Uuid
+  batchId                  String?        @map("batch_id") @db.Uuid
+  unitId                   String         @map("unit_id") @db.Uuid
+  quantity                 Decimal        @db.Decimal(14, 3)
+  conversionFactorSnapshot Decimal        @map("conversion_factor_snapshot") @db.Decimal(18, 6)
+  baseQuantity             Decimal        @map("base_quantity") @db.Decimal(14, 3)
+  baseUnitCost             Decimal        @map("base_unit_cost") @db.Decimal(14, 4)
+  lineTotal                Decimal        @map("line_total") @db.Decimal(14, 2)
+
+  @@index([returnId])
+  @@map("purchase_return_items")
+}

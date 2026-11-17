@@ -1,0 +1,143 @@
+// ===== Product catalogue and unit conversion =====
+
+enum ProductType {
+  WEIGHT
+  VOLUME
+  COUNT
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  DISCONTINUED
+}
+
+// Global catalogue of units (KG, G, L, ML, PCS, BAG, CARTON, CAN...). Seeded.
+model UnitOfMeasurement {
+  id        String      @id @default(uuid(7)) @db.Uuid
+  code      String      @unique
+  name      String
+  dimension ProductType
+
+  baseProducts Product[]
+  conversions  ProductUnitConversion[]
+
+  @@map("units_of_measurement")
+}
+
+model ProductCategory {
+  id             String            @id @default(uuid(7)) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  parentId       String?           @map("parent_id") @db.Uuid
+  parent         ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children       ProductCategory[] @relation("CategoryTree")
+  name           String
+  sortOrder      Int               @default(0) @map("sort_order")
+  isActive       Boolean           @default(true) @map("is_active")
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime?         @map("deleted_at") @db.Timestamptz(3)
+
+  products Product[]
+
+  @@unique([organizationId, parentId, name])
+  @@index([organizationId])
+  @@map("product_categories")
+}
+
+model Product {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  organizationId  String            @map("organization_id") @db.Uuid
+  categoryId      String?           @map("category_id") @db.Uuid
+  category        ProductCategory?  @relation(fields: [categoryId], references: [id])
+  sku             String
+  name            String
+  localName       String?           @map("local_name") // Telugu/Hindi display name later
+  type            ProductType
+  baseUnitId      String            @map("base_unit_id") @db.Uuid
+  baseUnit        UnitOfMeasurement @relation(fields: [baseUnitId], references: [id])
+  status          ProductStatus     @default(ACTIVE)
+  mrp             Decimal?          @db.Decimal(14, 2)
+  minStockLevel   Decimal           @default(0) @map("min_stock_level") @db.Decimal(14, 3) // in base unit
+  allowFractional Boolean           @default(false) @map("allow_fractional") // COUNT products only
+  trackBatch      Boolean           @default(false) @map("track_batch")
+  trackExpiry     Boolean           @default(false) @map("track_expiry")
+  isTaxable       Boolean           @default(false) @map("is_taxable")
+  hsnCode         String?           @map("hsn_code")
+  gstRatePercent  Decimal?          @map("gst_rate_percent") @db.Decimal(7, 4)
+  taxMode         TaxMode?          @map("tax_mode") // null = use organization default
+  imageKey        String?           @map("image_key") // R2 object key
+  version         Int               @default(1) // optimistic concurrency for sync
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime?         @map("deleted_at") @db.Timestamptz(3)
+
+  conversions   ProductUnitConversion[]
+  prices        ProductUnitPrice[]
+  barcodes      ProductBarcode[]
+  balances      InventoryBalance[]
+  movements     StockMovement[]
+  batches       InventoryBatch[]
+  purchaseItems PurchaseItem[]
+  saleItems     SaleItem[]
+
+  @@unique([organizationId, sku])
+  @@index([organizationId, status])
+  @@index([organizationId, name])
+  @@index([organizationId, categoryId])
+  @@index([organizationId, updatedAt])
+  @@map("products")
+}
+
+// How many BASE units one of this unit equals, for this product.
+// KG product: G = 0.001, BAG = 25.  A product's own base unit has factor 1.
+model ProductUnitConversion {
+  id             String            @id @default(uuid(7)) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  productId      String            @map("product_id") @db.Uuid
+  product        Product           @relation(fields: [productId], references: [id])
+  unitId         String            @map("unit_id") @db.Uuid
+  unit           UnitOfMeasurement @relation(fields: [unitId], references: [id])
+  factorToBase   Decimal           @map("factor_to_base") @db.Decimal(18, 6)
+  isPurchaseUnit Boolean           @default(false) @map("is_purchase_unit")
+  isSaleUnit     Boolean           @default(false) @map("is_sale_unit")
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([productId, unitId])
+  @@index([organizationId])
+  @@map("product_unit_conversions")
+}
+
+// Selling price for a quantity of a unit, e.g. 500 G = 30.00, 1 KG = 58.00.
+model ProductUnitPrice {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  productId      String   @map("product_id") @db.Uuid
+  product        Product  @relation(fields: [productId], references: [id])
+  unitId         String   @map("unit_id") @db.Uuid
+  quantity       Decimal  @default(1) @db.Decimal(14, 3)
+  price          Decimal  @db.Decimal(14, 2)
+  label          String?
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([productId, unitId, quantity])
+  @@index([organizationId])
+  @@map("product_unit_prices")
+}
+
+model ProductBarcode {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  productId      String   @map("product_id") @db.Uuid
+  product        Product  @relation(fields: [productId], references: [id])
+  barcode        String
+  unitId         String?  @map("unit_id") @db.Uuid // optional: barcode of a specific pack unit
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([organizationId, barcode])
+  @@index([productId])
+  @@map("product_barcodes")
+}

@@ -1,0 +1,254 @@
+// ===== Customers, sales, invoices, returns =====
+// Completed sales are never deleted. Every line stores price/tax/conversion SNAPSHOTS.
+
+enum SaleStatus {
+  COMPLETED
+  CANCELLED
+}
+
+enum InvoiceType {
+  NORMAL
+  GST
+  BILL_OF_SUPPLY
+}
+
+enum InvoiceStatus {
+  ISSUED
+  CANCELLED
+}
+
+enum ReturnDisposition {
+  SALEABLE
+  DAMAGED
+  EXPIRED
+  QUARANTINED
+}
+
+enum DocumentType {
+  INVOICE
+  RECEIPT
+  PURCHASE
+  SALE_RETURN
+  PURCHASE_RETURN
+}
+
+model Customer {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String
+  phone          String?
+  email          String?
+  gstin          String?
+  stateCode      String?   @map("state_code")
+  addressLine    String?   @map("address_line")
+  creditLimit    Decimal?  @map("credit_limit") @db.Decimal(14, 2) // null = no limit
+  balance        Decimal   @default(0) @db.Decimal(14, 2) // derived cache of customer_ledger_entries (positive = customer owes)
+  isActive       Boolean   @default(true) @map("is_active")
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  sales       Sale[]
+  ledger      CustomerLedgerEntry[]
+  payments    Payment[]
+  assignments CollectionAssignment[]
+  collections CollectionRecord[]
+
+  @@index([organizationId, name])
+  @@index([organizationId, phone])
+  @@map("customers")
+}
+
+model Sale {
+  id                     String     @id @default(uuid(7)) @db.Uuid
+  organizationId         String     @map("organization_id") @db.Uuid
+  branchId               String     @map("branch_id") @db.Uuid
+  customerId             String?    @map("customer_id") @db.Uuid // null = walk-in
+  customer               Customer?  @relation(fields: [customerId], references: [id])
+  status                 SaleStatus @default(COMPLETED)
+  saleNumber             String     @map("sale_number")
+  subtotal               Decimal    @db.Decimal(14, 2) // before discount & tax
+  discountTotal          Decimal    @default(0) @map("discount_total") @db.Decimal(14, 2)
+  taxableTotal           Decimal    @default(0) @map("taxable_total") @db.Decimal(14, 2)
+  cgstTotal              Decimal    @default(0) @map("cgst_total") @db.Decimal(14, 2)
+  sgstTotal              Decimal    @default(0) @map("sgst_total") @db.Decimal(14, 2)
+  igstTotal              Decimal    @default(0) @map("igst_total") @db.Decimal(14, 2)
+  roundOff               Decimal    @default(0) @map("round_off") @db.Decimal(14, 2)
+  total                  Decimal    @db.Decimal(14, 2)
+  paidTotal              Decimal    @default(0) @map("paid_total") @db.Decimal(14, 2)
+  creditAmount           Decimal    @default(0) @map("credit_amount") @db.Decimal(14, 2) // total - paidTotal at sale time
+  taxMode                TaxMode    @map("tax_mode")
+  placeOfSupplyStateCode String?    @map("place_of_supply_state_code")
+  soldById               String     @map("sold_by_id") @db.Uuid
+  soldBy                 User       @relation("SaleSoldBy", fields: [soldById], references: [id])
+  deviceId               String?    @map("device_id") @db.Uuid
+  soldAt                 DateTime   @default(now()) @map("sold_at") @db.Timestamptz(3)
+  cancelledAt            DateTime?  @map("cancelled_at") @db.Timestamptz(3)
+  cancelledById          String?    @map("cancelled_by_id") @db.Uuid
+  cancelReason           String?    @map("cancel_reason")
+  createdAt              DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  items    SaleItem[]
+  payments SalePayment[]
+  invoice  Invoice?
+  returns  SaleReturn[]
+
+  @@unique([organizationId, branchId, saleNumber])
+  @@index([organizationId, branchId, soldAt])
+  @@index([organizationId, customerId, soldAt])
+  @@index([organizationId, status, soldAt])
+  @@map("sales")
+}
+
+model SaleItem {
+  id                       String   @id @default(uuid(7)) @db.Uuid
+  organizationId           String   @map("organization_id") @db.Uuid
+  saleId                   String   @map("sale_id") @db.Uuid
+  sale                     Sale     @relation(fields: [saleId], references: [id])
+  productId                String   @map("product_id") @db.Uuid
+  product                  Product  @relation(fields: [productId], references: [id])
+  productNameSnapshot      String   @map("product_name_snapshot")
+  skuSnapshot              String   @map("sku_snapshot")
+  hsnSnapshot              String?  @map("hsn_snapshot")
+  unitId                   String   @map("unit_id") @db.Uuid
+  unitCodeSnapshot         String   @map("unit_code_snapshot")
+  quantity                 Decimal  @db.Decimal(14, 3) // in selling unit
+  conversionFactorSnapshot Decimal  @map("conversion_factor_snapshot") @db.Decimal(18, 6)
+  baseQuantity             Decimal  @map("base_quantity") @db.Decimal(14, 3)
+  unitPrice                Decimal  @map("unit_price") @db.Decimal(14, 2) // price per selling unit used
+  mrpSnapshot              Decimal? @map("mrp_snapshot") @db.Decimal(14, 2)
+  discountAmount           Decimal  @default(0) @map("discount_amount") @db.Decimal(14, 2)
+  taxRatePercent           Decimal  @default(0) @map("tax_rate_percent") @db.Decimal(7, 4)
+  taxableValue             Decimal  @map("taxable_value") @db.Decimal(14, 2)
+  cgstAmount               Decimal  @default(0) @map("cgst_amount") @db.Decimal(14, 2)
+  sgstAmount               Decimal  @default(0) @map("sgst_amount") @db.Decimal(14, 2)
+  igstAmount               Decimal  @default(0) @map("igst_amount") @db.Decimal(14, 2)
+  lineTotal                Decimal  @map("line_total") @db.Decimal(14, 2)
+  unitCostSnapshot         Decimal  @map("unit_cost_snapshot") @db.Decimal(14, 4) // per base unit, for COGS / gross profit
+  returnedBaseQuantity     Decimal  @default(0) @map("returned_base_quantity") @db.Decimal(14, 3)
+
+  returnItems SaleReturnItem[]
+
+  @@index([saleId])
+  @@index([organizationId, productId])
+  @@map("sale_items")
+}
+
+// Allocation of payments to a sale (a payment may also be unallocated "on account").
+model SalePayment {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  saleId         String   @map("sale_id") @db.Uuid
+  sale           Sale     @relation(fields: [saleId], references: [id])
+  paymentId      String   @map("payment_id") @db.Uuid
+  payment        Payment  @relation(fields: [paymentId], references: [id])
+  amount         Decimal  @db.Decimal(14, 2)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([saleId, paymentId])
+  @@index([paymentId])
+  @@map("sale_payments")
+}
+
+model Invoice {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  branchId       String        @map("branch_id") @db.Uuid
+  saleId         String        @unique @map("sale_id") @db.Uuid
+  sale           Sale          @relation(fields: [saleId], references: [id])
+  type           InvoiceType
+  status         InvoiceStatus @default(ISSUED)
+  series         String
+  sequenceNumber Int           @map("sequence_number")
+  invoiceNumber  String        @map("invoice_number")
+  issuedAt       DateTime      @default(now()) @map("issued_at") @db.Timestamptz(3)
+  sellerSnapshot Json          @map("seller_snapshot") // name, address, GSTIN, state at issue time
+  buyerSnapshot  Json?         @map("buyer_snapshot") // customer details at issue time
+  totalsSnapshot Json          @map("totals_snapshot") // full tax breakdown at issue time
+  pdfKey         String?       @map("pdf_key") // R2 key if archived
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([organizationId, branchId, invoiceNumber])
+  @@unique([organizationId, branchId, series, sequenceNumber])
+  @@index([organizationId, issuedAt])
+  @@map("invoices")
+}
+
+// Concurrency-safe counters; row locked (SELECT ... FOR UPDATE) when incremented. Generic for invoices, receipts, etc.
+model DocumentSequence {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  branchId       String       @map("branch_id") @db.Uuid
+  documentType   DocumentType @map("document_type")
+  series         String // e.g. "INV"
+  financialYear  String       @map("financial_year") // e.g. "2026-27"
+  nextNumber     Int          @default(1) @map("next_number")
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([organizationId, branchId, documentType, series, financialYear])
+  @@map("document_sequences")
+}
+
+model HeldBill {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  branchId       String    @map("branch_id") @db.Uuid
+  customerId     String?   @map("customer_id") @db.Uuid
+  label          String?
+  payload        Json // cart draft; NO stock effect
+  deviceId       String?   @map("device_id") @db.Uuid
+  createdById    String    @map("created_by_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  @@index([organizationId, branchId, createdAt])
+  @@map("held_bills")
+}
+
+model SaleReturn {
+  id             String         @id @default(uuid(7)) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  branchId       String         @map("branch_id") @db.Uuid
+  saleId         String         @map("sale_id") @db.Uuid
+  sale           Sale           @relation(fields: [saleId], references: [id])
+  returnNumber   String         @map("return_number")
+  reason         String?
+  refundMethod   PaymentMethod? @map("refund_method")
+  subtotal       Decimal        @db.Decimal(14, 2)
+  taxTotal       Decimal        @default(0) @map("tax_total") @db.Decimal(14, 2)
+  roundOff       Decimal        @default(0) @map("round_off") @db.Decimal(14, 2)
+  total          Decimal        @db.Decimal(14, 2)
+  createdById    String         @map("created_by_id") @db.Uuid
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  items SaleReturnItem[]
+
+  @@unique([organizationId, branchId, returnNumber])
+  @@index([organizationId, saleId])
+  @@index([organizationId, createdAt])
+  @@map("sale_returns")
+}
+
+model SaleReturnItem {
+  id               String            @id @default(uuid(7)) @db.Uuid
+  returnId         String            @map("return_id") @db.Uuid
+  saleReturn       SaleReturn        @relation(fields: [returnId], references: [id])
+  saleItemId       String            @map("sale_item_id") @db.Uuid
+  saleItem         SaleItem          @relation(fields: [saleItemId], references: [id])
+  productId        String            @map("product_id") @db.Uuid
+  unitId           String            @map("unit_id") @db.Uuid
+  quantity         Decimal           @db.Decimal(14, 3)
+  baseQuantity     Decimal           @map("base_quantity") @db.Decimal(14, 3)
+  disposition      ReturnDisposition
+  unitPrice        Decimal           @map("unit_price") @db.Decimal(14, 2) // from original sale snapshot
+  taxAmount        Decimal           @default(0) @map("tax_amount") @db.Decimal(14, 2)
+  lineTotal        Decimal           @map("line_total") @db.Decimal(14, 2)
+  unitCostSnapshot Decimal           @map("unit_cost_snapshot") @db.Decimal(14, 4)
+
+  @@index([returnId])
+  @@index([saleItemId])
+  @@map("sale_return_items")
+}

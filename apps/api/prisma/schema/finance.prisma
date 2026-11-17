@@ -1,0 +1,223 @@
+// ===== Payments, ledgers, cashbook, expenses, closing =====
+// Ledger and cashbook rows are append-only (DB triggers). Corrections are reversing entries.
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  BANK_TRANSFER
+  OTHER
+}
+
+enum PaymentDirection {
+  IN
+  OUT
+}
+
+enum PaymentPurpose {
+  SALE
+  CUSTOMER_COLLECTION
+  SUPPLIER_PAYMENT
+  REFUND
+}
+
+enum PaymentStatus {
+  COMPLETED
+  REVERSED
+}
+
+enum LedgerEntryType {
+  OPENING_BALANCE
+  CREDIT_SALE
+  PURCHASE
+  PAYMENT
+  SALE_RETURN
+  PURCHASE_RETURN
+  CANCELLATION_REVERSAL
+  ADJUSTMENT
+}
+
+enum CashbookEntryKind {
+  SALE_RECEIPT
+  CUSTOMER_COLLECTION
+  SUPPLIER_PAYMENT
+  EXPENSE
+  REFUND
+  CASH_IN
+  CASH_OUT
+  REVERSAL
+  OPENING_BALANCE
+}
+
+enum ClosingStatus {
+  OPEN
+  CLOSED
+}
+
+model Payment {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  branchId       String           @map("branch_id") @db.Uuid
+  direction      PaymentDirection
+  purpose        PaymentPurpose
+  method         PaymentMethod
+  amount         Decimal          @db.Decimal(14, 2) // always positive; direction gives sign
+  status         PaymentStatus    @default(COMPLETED)
+  customerId     String?          @map("customer_id") @db.Uuid
+  customer       Customer?        @relation(fields: [customerId], references: [id])
+  supplierId     String?          @map("supplier_id") @db.Uuid
+  receiptNumber  String?          @map("receipt_number")
+  referenceNo    String?          @map("reference_no") // UPI txn id, cheque no, etc.
+  recordedById   String           @map("recorded_by_id") @db.Uuid
+  recordedBy     User             @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+  paidAt         DateTime         @default(now()) @map("paid_at") @db.Timestamptz(3)
+  reversedAt     DateTime?        @map("reversed_at") @db.Timestamptz(3)
+  reversalOfId   String?          @unique @map("reversal_of_id") @db.Uuid
+  notes          String?
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  salePayments     SalePayment[]
+  purchasePayments PurchasePayment[]
+  collection       CollectionRecord?
+
+  @@unique([organizationId, branchId, receiptNumber])
+  @@index([organizationId, branchId, paidAt])
+  @@index([organizationId, customerId, paidAt])
+  @@index([organizationId, supplierId, paidAt])
+  @@map("payments")
+}
+
+model CustomerLedgerEntry {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  branchId       String          @map("branch_id") @db.Uuid
+  customerId     String          @map("customer_id") @db.Uuid
+  customer       Customer        @relation(fields: [customerId], references: [id])
+  entryType      LedgerEntryType @map("entry_type")
+  amount         Decimal         @db.Decimal(14, 2) // signed: + increases receivable, - reduces
+  balanceAfter   Decimal         @map("balance_after") @db.Decimal(14, 2)
+  referenceType  String          @map("reference_type")
+  referenceId    String          @map("reference_id") @db.Uuid
+  description    String?
+  createdById    String          @map("created_by_id") @db.Uuid
+  occurredAt     DateTime        @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, customerId, occurredAt])
+  @@index([referenceType, referenceId])
+  @@map("customer_ledger_entries")
+}
+
+model SupplierLedgerEntry {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  branchId       String          @map("branch_id") @db.Uuid
+  supplierId     String          @map("supplier_id") @db.Uuid
+  supplier       Supplier        @relation(fields: [supplierId], references: [id])
+  entryType      LedgerEntryType @map("entry_type")
+  amount         Decimal         @db.Decimal(14, 2) // signed: + increases payable, - reduces
+  balanceAfter   Decimal         @map("balance_after") @db.Decimal(14, 2)
+  referenceType  String          @map("reference_type")
+  referenceId    String          @map("reference_id") @db.Uuid
+  description    String?
+  createdById    String          @map("created_by_id") @db.Uuid
+  occurredAt     DateTime        @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, supplierId, occurredAt])
+  @@index([referenceType, referenceId])
+  @@map("supplier_ledger_entries")
+}
+
+model ExpenseCategory {
+  id             String  @id @default(uuid(7)) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  name           String
+  isActive       Boolean @default(true) @map("is_active")
+
+  expenses Expense[]
+
+  @@unique([organizationId, name])
+  @@map("expense_categories")
+}
+
+model Expense {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  branchId       String          @map("branch_id") @db.Uuid
+  categoryId     String          @map("category_id") @db.Uuid
+  category       ExpenseCategory @relation(fields: [categoryId], references: [id])
+  amount         Decimal         @db.Decimal(14, 2)
+  method         PaymentMethod
+  description    String?
+  referenceNo    String?         @map("reference_no")
+  attachmentKey  String?         @map("attachment_key") // R2 key
+  expenseDate    DateTime        @map("expense_date") @db.Date
+  recordedById   String          @map("recorded_by_id") @db.Uuid
+  cancelledAt    DateTime?       @map("cancelled_at") @db.Timestamptz(3) // expenses are cancelled, not deleted; reversal entry in cashbook
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, branchId, expenseDate])
+  @@map("expenses")
+}
+
+model CashRegister {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  branchId       String   @map("branch_id") @db.Uuid
+  name           String
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  entries  CashbookEntry[]
+  closings DailyClosing[]
+
+  @@unique([branchId, name])
+  @@map("cash_registers")
+}
+
+model CashbookEntry {
+  id             String            @id @default(uuid(7)) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  branchId       String            @map("branch_id") @db.Uuid
+  registerId     String            @map("register_id") @db.Uuid
+  register       CashRegister      @relation(fields: [registerId], references: [id])
+  kind           CashbookEntryKind
+  method         PaymentMethod
+  amount         Decimal           @db.Decimal(14, 2) // signed: + money in, - money out
+  paymentId      String?           @map("payment_id") @db.Uuid
+  referenceType  String            @map("reference_type")
+  referenceId    String            @map("reference_id") @db.Uuid
+  description    String?
+  businessDate   DateTime          @map("business_date") @db.Date
+  createdById    String            @map("created_by_id") @db.Uuid
+  occurredAt     DateTime          @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, branchId, businessDate])
+  @@index([registerId, businessDate])
+  @@index([referenceType, referenceId])
+  @@map("cashbook_entries")
+}
+
+model DailyClosing {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  branchId       String        @map("branch_id") @db.Uuid
+  registerId     String        @map("register_id") @db.Uuid
+  register       CashRegister  @relation(fields: [registerId], references: [id])
+  businessDate   DateTime      @map("business_date") @db.Date
+  openingCash    Decimal       @map("opening_cash") @db.Decimal(14, 2)
+  expectedCash   Decimal       @map("expected_cash") @db.Decimal(14, 2) // opening + net CASH cashbook entries
+  actualCash     Decimal?      @map("actual_cash") @db.Decimal(14, 2)
+  difference     Decimal?      @db.Decimal(14, 2) // actual - expected
+  status         ClosingStatus @default(OPEN)
+  notes          String?
+  closedById     String?       @map("closed_by_id") @db.Uuid
+  closedAt       DateTime?     @map("closed_at") @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([registerId, businessDate])
+  @@index([organizationId, branchId, businessDate])
+  @@map("daily_closings")
+}

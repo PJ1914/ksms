@@ -1,0 +1,33 @@
+{
+  "name": "ksms",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kirana Store Management System",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=24.3.0 <25"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/*\" build && pnpm --filter @ksms/api build",
+    "typecheck": "pnpm -r --filter \"./packages/*\" build && pnpm -r typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "pnpm -r --filter \"./packages/*\" build && pnpm -r test",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "dev:api": "pnpm --filter @ksms/api dev",
+    "dev:mobile": "pnpm --filter @ksms/mobile start",
+    "db:generate": "pnpm --filter @ksms/api db:generate",
+    "db:migrate:deploy": "pnpm --filter @ksms/api db:migrate:deploy",
+    "db:status": "pnpm --filter @ksms/api db:status"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.15.0",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.14.0",
+    "prettier": "3.10.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.73.0"
+  }
+}

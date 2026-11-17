@@ -1,0 +1,226 @@
+// ===== Identity, organization, branches =====
+
+enum TaxMode {
+  INCLUSIVE
+  EXCLUSIVE
+}
+
+enum MemberStatus {
+  INVITED
+  ACTIVE
+  DEACTIVATED
+}
+
+model Organization {
+  id                        String    @id @default(uuid(7)) @db.Uuid
+  name                      String
+  legalName                 String?   @map("legal_name")
+  pan                       String?
+  phone                     String?
+  email                     String?
+  gstEnabled                Boolean   @default(false) @map("gst_enabled")
+  defaultTaxMode            TaxMode   @default(INCLUSIVE) @map("default_tax_mode")
+  currency                  String    @default("INR")
+  timezone                  String    @default("Asia/Kolkata")
+  allowNegativeStock        Boolean   @default(false) @map("allow_negative_stock")
+  maxCashierDiscountPercent Decimal   @default(5) @map("max_cashier_discount_percent") @db.Decimal(7, 4)
+  settings                  Json      @default("{}")
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt                 DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  branches    Branch[]
+  members     OrganizationMember[]
+  roles       Role[]
+  invitations Invitation[]
+
+  @@map("organizations")
+}
+
+model Branch {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  addressLine    String?      @map("address_line")
+  city           String?
+  state          String?
+  pincode        String?
+  stateCode      String?      @map("state_code") // GST state code, e.g. "36"
+  gstin          String?
+  phone          String?
+  isActive       Boolean      @default(true) @map("is_active")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime?    @map("deleted_at") @db.Timestamptz(3)
+
+  memberships BranchMembership[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("branches")
+}
+
+model User {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  fullName     String    @map("full_name")
+  phone        String    @unique
+  email        String?   @unique
+  passwordHash String    @map("password_hash")
+  isActive     Boolean   @default(true) @map("is_active")
+  tokenVersion Int       @default(0) @map("token_version")
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  memberships OrganizationMember[]
+  sessions    UserSession[]
+  devices     Device[]
+
+  // Actor relations (named because several relations point at User)
+  salesSold        Sale[]          @relation("SaleSoldBy")
+  paymentsRecorded Payment[]       @relation("PaymentRecordedBy")
+  stockMovements   StockMovement[] @relation("MovementCreatedBy")
+  auditLogs        AuditLog[]      @relation("AuditActor")
+
+  @@map("users")
+}
+
+model OrganizationMember {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String       @map("user_id") @db.Uuid
+  user           User         @relation(fields: [userId], references: [id])
+  roleId         String       @map("role_id") @db.Uuid
+  role           Role         @relation(fields: [roleId], references: [id])
+  status         MemberStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  branches BranchMembership[]
+
+  @@unique([organizationId, userId])
+  @@index([organizationId, roleId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+model BranchMembership {
+  id             String             @id @default(uuid(7)) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  memberId       String             @map("member_id") @db.Uuid
+  member         OrganizationMember @relation(fields: [memberId], references: [id])
+  branchId       String             @map("branch_id") @db.Uuid
+  branch         Branch             @relation(fields: [branchId], references: [id])
+  isDefault      Boolean            @default(false) @map("is_default")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([memberId, branchId])
+  @@index([organizationId, branchId])
+  @@map("branch_memberships")
+}
+
+model Role {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  description    String?
+  isSystem       Boolean      @default(false) @map("is_system") // Owner/Manager/Cashier/Collection Agent seeds
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  members     OrganizationMember[]
+  permissions RolePermission[]
+  invitations Invitation[]
+
+  @@unique([organizationId, name])
+  @@map("roles")
+}
+
+// Global catalogue of permission keys, e.g. "sale.create". Seeded by migration/seed.
+model Permission {
+  id          String  @id @default(uuid(7)) @db.Uuid
+  key         String  @unique
+  module      String
+  description String?
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id") @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id])
+  permissionId String     @map("permission_id") @db.Uuid
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Device {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  user           User      @relation(fields: [userId], references: [id])
+  deviceUid      String    @map("device_uid") // client-generated stable id, stored in SecureStore
+  name           String?
+  platform       String    @default("android")
+  appVersion     String?   @map("app_version")
+  pushToken      String?   @map("push_token") // FCM token
+  lastSeenAt     DateTime? @map("last_seen_at") @db.Timestamptz(3)
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  sessions UserSession[]
+
+  @@unique([organizationId, deviceUid])
+  @@index([userId])
+  @@map("devices")
+}
+
+model UserSession {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  user              User      @relation(fields: [userId], references: [id])
+  organizationId    String    @map("organization_id") @db.Uuid
+  deviceId          String?   @map("device_id") @db.Uuid
+  device            Device?   @relation(fields: [deviceId], references: [id])
+  refreshTokenHash  String    @unique @map("refresh_token_hash") // SHA-256 of current refresh token
+  previousTokenHash String?   @map("previous_token_hash") // for rotated-token reuse detection
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(3)
+  lastUsedAt        DateTime? @map("last_used_at") @db.Timestamptz(3)
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokedReason     String?   @map("revoked_reason")
+  ipAddress         String?   @map("ip_address")
+  userAgent         String?   @map("user_agent")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([userId, revokedAt])
+  @@index([previousTokenHash])
+  @@map("user_sessions")
+}
+
+model Invitation {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  phone          String
+  email          String?
+  roleId         String       @map("role_id") @db.Uuid
+  role           Role         @relation(fields: [roleId], references: [id])
+  branchIds      String[]     @map("branch_ids") @db.Uuid
+  codeHash       String       @unique @map("code_hash")
+  expiresAt      DateTime     @map("expires_at") @db.Timestamptz(3)
+  acceptedAt     DateTime?    @map("accepted_at") @db.Timestamptz(3)
+  revokedAt      DateTime?    @map("revoked_at") @db.Timestamptz(3)
+  createdById    String       @map("created_by_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, phone])
+  @@map("invitations")
+}

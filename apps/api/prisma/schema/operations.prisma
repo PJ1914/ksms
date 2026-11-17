@@ -1,0 +1,167 @@
+// ===== Collections, notifications, audit, idempotency, sync =====
+
+enum AssignmentStatus {
+  ACTIVE
+  ENDED
+}
+
+enum NotificationType {
+  LOW_STOCK
+  EXPIRING_SOON
+  PAYMENT_DUE
+  SYNC_FAILURE
+  GENERAL
+}
+
+enum IdempotencyStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum SyncStatus {
+  PENDING
+  DONE
+  FAILED
+  CONFLICT
+}
+
+model CollectionAgent {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  userId         String?   @map("user_id") @db.Uuid // linked login, if the agent has one
+  name           String
+  phone          String?
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  assignments CollectionAssignment[]
+  records     CollectionRecord[]
+
+  @@index([organizationId, isActive])
+  @@map("collection_agents")
+}
+
+model CollectionAssignment {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  agentId        String           @map("agent_id") @db.Uuid
+  agent          CollectionAgent  @relation(fields: [agentId], references: [id])
+  customerId     String           @map("customer_id") @db.Uuid
+  customer       Customer         @relation(fields: [customerId], references: [id])
+  status         AssignmentStatus @default(ACTIVE)
+  targetAmount   Decimal?         @map("target_amount") @db.Decimal(14, 2)
+  startDate      DateTime         @map("start_date") @db.Date
+  endDate        DateTime?        @map("end_date") @db.Date
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, agentId, status])
+  @@index([customerId])
+  @@map("collection_assignments")
+}
+
+model CollectionRecord {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  branchId       String          @map("branch_id") @db.Uuid
+  agentId        String          @map("agent_id") @db.Uuid
+  agent          CollectionAgent @relation(fields: [agentId], references: [id])
+  customerId     String          @map("customer_id") @db.Uuid
+  customer       Customer        @relation(fields: [customerId], references: [id])
+  paymentId      String          @unique @map("payment_id") @db.Uuid
+  payment        Payment         @relation(fields: [paymentId], references: [id])
+  receiptNumber  String          @map("receipt_number")
+  amount         Decimal         @db.Decimal(14, 2)
+  recordedById   String          @map("recorded_by_id") @db.Uuid
+  collectedAt    DateTime        @default(now()) @map("collected_at") @db.Timestamptz(3)
+  notes          String?
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, agentId, collectedAt])
+  @@index([organizationId, customerId, collectedAt])
+  @@map("collection_records")
+}
+
+model Notification {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  branchId       String?          @map("branch_id") @db.Uuid
+  userId         String?          @map("user_id") @db.Uuid // null = all permitted users in branch
+  type           NotificationType
+  title          String
+  body           String
+  data           Json?
+  readAt         DateTime?        @map("read_at") @db.Timestamptz(3)
+  sentAt         DateTime?        @map("sent_at") @db.Timestamptz(3)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, userId, readAt])
+  @@index([organizationId, createdAt])
+  @@map("notifications")
+}
+
+// Append-only (DB trigger).
+model AuditLog {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  branchId       String?  @map("branch_id") @db.Uuid
+  actorId        String?  @map("actor_id") @db.Uuid
+  actor          User?    @relation("AuditActor", fields: [actorId], references: [id])
+  action         String // e.g. "sale.cancel", "stock.override"
+  entityType     String   @map("entity_type")
+  entityId       String?  @map("entity_id") @db.Uuid
+  beforeData     Json?    @map("before_data")
+  afterData      Json?    @map("after_data")
+  reason         String?
+  correlationId  String?  @map("correlation_id")
+  ipAddress      String?  @map("ip_address")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, entityType, entityId])
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
+}
+
+model IdempotencyRecord {
+  id             String            @id @default(uuid(7)) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  key            String
+  endpoint       String
+  requestHash    String            @map("request_hash") // detects same key with different payload
+  status         IdempotencyStatus @default(IN_PROGRESS)
+  responseStatus Int?              @map("response_status")
+  responseBody   Json?             @map("response_body")
+  resourceType   String?           @map("resource_type")
+  resourceId     String?           @map("resource_id") @db.Uuid
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt    DateTime?         @map("completed_at") @db.Timestamptz(3)
+  expiresAt      DateTime          @map("expires_at") @db.Timestamptz(3) // cleanup job removes after retention
+
+  @@unique([organizationId, key])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
+
+model SyncOperation {
+  id               String     @id @default(uuid(7)) @db.Uuid
+  organizationId   String     @map("organization_id") @db.Uuid
+  branchId         String?    @map("branch_id") @db.Uuid
+  operationId      String     @map("operation_id") @db.Uuid // client-generated UUID
+  deviceId         String     @map("device_id") @db.Uuid
+  operationType    String     @map("operation_type")
+  entityId         String?    @map("entity_id") @db.Uuid
+  payloadVersion   Int        @default(1) @map("payload_version")
+  status           SyncStatus @default(PENDING)
+  errorCode        String?    @map("error_code")
+  errorMessage     String?    @map("error_message")
+  localCreatedAt   DateTime   @map("local_created_at") @db.Timestamptz(3)
+  serverReceivedAt DateTime   @default(now()) @map("server_received_at") @db.Timestamptz(3)
+  processedAt      DateTime?  @map("processed_at") @db.Timestamptz(3)
+
+  @@unique([organizationId, deviceId, operationId])
+  @@index([organizationId, status])
+  @@map("sync_operations")
+}

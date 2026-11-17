@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "KSMS",
+    "slug": "ksms",
+    "version": "0.1.0",
+    "scheme": "ksms",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-router"],
+    "android": {
+      "package": "com.ksms.storemanager"
+    },
+    "web": { "bundler": "metro" },
+    "experiments": { "typedRoutes": true }
+  }
+}

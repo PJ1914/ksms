@@ -1,0 +1,19 @@
+{
+  "name": "@ksms/constants",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "jest --passWithNoTests"
+  },
+  "devDependencies": {
+    "@types/jest": "30.0.0",
+    "@types/node": "24.19.2",
+    "jest": "30.5.2",
+    "ts-jest": "29.4.15",
+    "typescript": "6.0.3"
+  }
+}
