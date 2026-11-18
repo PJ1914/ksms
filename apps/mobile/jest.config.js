@@ -15,7 +15,7 @@ module.exports = {
           esModuleInterop: true,
           strict: true,
           target: 'ES2022',
-          types: ['jest'],
+          types: ['jest', 'node'], // 'node' gives the tests `require` (used by src/utils/uuid.ts)
         },
         diagnostics: { ignoreCodes: [151002] },
       },
