@@ -143,3 +143,7 @@ A held bill is a cart parked at the counter, stored per branch (at most 64 KB). 
 - The POS screens on the phone, with offline billing and sync (UI and sync phases).
 - Selling below zero stock at the counter (refused; only adjustments may override).
 - Choosing a batch by hand at the counter (FEFO always decides).
+
+### Cart preview (added with the phone screens)
+
+`POST /sales/preview` (`sale.create`, `X-Branch-Id`) takes the same body as checkout (payments optional) and returns the bill exactly as checkout would work it out: each line's unit price and amount, the discount, round-off, total, and, if payments are given, what is paid now and what goes on khata. It runs the SAME pricing code as checkout (catalogue price rules, discount permissions and limit, rounding), so the figures on the phone cannot drift from what is charged. It saves nothing, moves no stock and uses no bill number. It also returns **warnings**: items asked for in more than the branch has (`warnings.stock`) and a credit limit that would be exceeded (`warnings.creditLimit`); checkout still refuses these, the preview just tells the cashier early.

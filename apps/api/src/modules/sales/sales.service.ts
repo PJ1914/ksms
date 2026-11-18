@@ -18,7 +18,7 @@ import { CustomerLedgerService } from '../customers/customer-ledger.service';
 import { CashbookService } from '../finance/cashbook.service';
 import { InventoryService, type StockContext } from '../inventory/inventory.service';
 import { computeSale, effectiveUnitPrice, grossFromUnitPrice, settle } from './domain/sale-math';
-import type { CreateSaleDto, SalesQuery } from './sales.dto';
+import type { CreateSaleDto, PreviewSaleDto, SaleItemDto, SalesQuery } from './sales.dto';
 
 interface Meta {
   correlationId?: string;
@@ -76,77 +76,8 @@ export class SalesService {
           );
         }
 
-        let customer: { id: string; name: string } | null = null;
-        if (dto.customerId) {
-          customer = await tx.customer.findFirst({
-            where: { id: dto.customerId, organizationId: t.organizationId, deletedAt: null },
-            select: { id: true, name: true },
-          });
-          if (!customer) throw new AppException('CUSTOMER_NOT_FOUND', 'Customer not found', 404);
-        }
-
-        // ---- price every line from the catalogue (or an allowed typed price)
-        const overrides: { line: number; catalogue: string; typed: string }[] = [];
-        const lines = [];
-        for (const [index, item] of dto.items.entries()) {
-          const quantity = new Decimal(item.quantity);
-          const price = await this.catalog.priceForSale(
-            tx,
-            t.organizationId,
-            item.productId,
-            item.unitId,
-            quantity,
-          );
-          let gross = price.amount;
-          if (item.unitPrice !== undefined) {
-            if (!may(perms, 'price.override')) {
-              throw new AppException('FORBIDDEN', 'You may not change the selling price', 403, {
-                required: ['price.override'],
-              });
-            }
-            gross = grossFromUnitPrice(quantity, new Decimal(item.unitPrice));
-            overrides.push({
-              line: index + 1,
-              catalogue: price.amount.toFixed(2),
-              typed: gross.toFixed(2),
-            });
-          }
-          lines.push({
-            item,
-            quantity,
-            price,
-            gross,
-            lineDiscount: new Decimal(item.discount ?? 0),
-          });
-        }
-
-        // ---- discounts and their limit
-        const billDiscount = new Decimal(dto.billDiscount ?? 0);
-        const anyDiscount = billDiscount.gt(0) || lines.some((l) => l.lineDiscount.gt(0));
-        if (anyDiscount && !may(perms, 'discount.apply')) {
-          throw new AppException('FORBIDDEN', 'You may not give discounts', 403, {
-            required: ['discount.apply'],
-          });
-        }
-        const figures = computeSale(
-          lines.map((l) => ({ gross: l.gross, lineDiscount: l.lineDiscount })),
-          billDiscount,
-        );
-        const limit = dec(org.maxCashierDiscountPercent);
-        if (figures.discountPercent.gt(limit) && !may(perms, 'discount.override_limit')) {
-          throw new AppException(
-            'DISCOUNT_LIMIT_EXCEEDED',
-            `Discounts above ${limit.toFixed(2)}% need a manager`,
-            403,
-            {
-              limitPercent: limit.toFixed(2),
-              requestedPercent: figures.discountPercent
-                .toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
-                .toFixed(2),
-              required: ['discount.override_limit'],
-            },
-          );
-        }
+        const priced = await this.priceBill(tx, t, dto, perms, org);
+        const { customer, lines, figures, overrides } = priced;
 
         // ---- how it is paid
         const payments = dto.payments.map((p) => ({ ...p, amount: new Decimal(p.amount) }));
@@ -336,6 +267,185 @@ export class SalesService {
         return this.view(tx, t.organizationId, saleId);
       },
     );
+  }
+
+  /**
+   * The cart as the counter should show it: every figure comes from the same code as checkout (catalogue prices,
+   * discounts and their limits, rounding), but nothing is saved and no stock moves. Stock and credit-limit
+   * problems are reported as warnings so the screen can say so before the customer pays.
+   */
+  async preview(t: TenantContext, dto: PreviewSaleDto) {
+    const branchId = branchOf(t);
+    const perms = await this.rolePerms.get(t.roleId);
+    const org = await this.prisma.organization.findUniqueOrThrow({
+      where: { id: t.organizationId },
+      select: { gstEnabled: true, maxCashierDiscountPercent: true },
+    });
+    if (org.gstEnabled) {
+      throw new DomainError(
+        'GST_BILLING_NOT_READY',
+        'GST bills arrive with the GST billing update. Switch GST off in shop settings to sell now',
+      );
+    }
+    const { customer, lines, figures } = await this.priceBill(this.prisma, t, dto, perms, org);
+    const payments = (dto.payments ?? []).map((p) => ({ ...p, amount: new Decimal(p.amount) }));
+    const { paid, credit } = settle(figures.total, payments);
+
+    // stock: total wanted per product against what is on the shelf (an early warning, not a guarantee)
+    const wanted = new Map<string, Decimal>();
+    for (const l of lines) {
+      wanted.set(
+        l.price.productId,
+        (wanted.get(l.price.productId) ?? new Decimal(0)).plus(l.price.baseQuantity),
+      );
+    }
+    const balances = await this.prisma.inventoryBalance.findMany({
+      where: { branchId, productId: { in: [...wanted.keys()] } },
+      select: { productId: true, quantityOnHand: true, reservedQty: true },
+    });
+    const have = new Map(
+      balances.map((b) => [b.productId, dec(b.quantityOnHand).minus(dec(b.reservedQty))]),
+    );
+    const stockWarnings = [...wanted.entries()]
+      .map(([productId, requested]) => ({
+        productId,
+        requested,
+        available: have.get(productId) ?? new Decimal(0),
+      }))
+      .filter((w) => w.requested.gt(w.available))
+      .map((w) => ({
+        productId: w.productId,
+        requestedBaseQuantity: w.requested.toFixed(3),
+        availableBaseQuantity: Decimal.max(w.available, 0).toFixed(3),
+      }));
+
+    let creditWarning: { creditLimit: string; balance: string; available: string } | null = null;
+    if (customer && credit.gt(0)) {
+      const c = await this.prisma.customer.findUniqueOrThrow({
+        where: { id: customer.id },
+        select: { creditLimit: true, balance: true },
+      });
+      if (c.creditLimit !== null && dec(c.balance).plus(credit).gt(dec(c.creditLimit))) {
+        creditWarning = {
+          creditLimit: m2(c.creditLimit),
+          balance: m2(c.balance),
+          available: Decimal.max(dec(c.creditLimit).minus(dec(c.balance)), 0).toFixed(2),
+        };
+      }
+    }
+
+    return {
+      customer,
+      lines: lines.map((l, i) => {
+        const f = figures.lines[i]!;
+        return {
+          productId: l.price.productId,
+          name: l.price.name,
+          unitId: l.price.unitId,
+          unitCode: l.price.unitCode,
+          quantity: l.quantity.toFixed(3),
+          baseQuantity: l.price.baseQuantity.toFixed(3),
+          unitPrice: effectiveUnitPrice(f.gross, l.quantity).toFixed(2),
+          priceSource: l.price.priceSource,
+          gross: f.gross.toFixed(2),
+          discount: f.discount.toFixed(2),
+          net: f.net.toFixed(2),
+        };
+      }),
+      subtotal: figures.subtotal.toFixed(2),
+      discountTotal: figures.discountTotal.toFixed(2),
+      roundOff: figures.roundOff.toFixed(2),
+      total: figures.total.toFixed(2),
+      paid: paid.toFixed(2),
+      credit: credit.toFixed(2),
+      warnings: { stock: stockWarnings, creditLimit: creditWarning },
+    };
+  }
+
+  /**
+   * Prices a bill exactly as checkout does: the customer, every line from the catalogue (or an allowed typed price),
+   * the discounts and their limits, and the rounded total. Read-only, so the preview can use it too.
+   */
+  private async priceBill(
+    db: Db,
+    t: TenantContext,
+    dto: { customerId?: string; items: SaleItemDto[]; billDiscount?: string },
+    perms: Permissions,
+    org: { maxCashierDiscountPercent: { toString(): string } },
+  ) {
+    let customer: { id: string; name: string } | null = null;
+    if (dto.customerId) {
+      customer = await db.customer.findFirst({
+        where: { id: dto.customerId, organizationId: t.organizationId, deletedAt: null },
+        select: { id: true, name: true },
+      });
+      if (!customer) throw new AppException('CUSTOMER_NOT_FOUND', 'Customer not found', 404);
+    }
+
+    // ---- price every line from the catalogue (or an allowed typed price)
+    const overrides: { line: number; catalogue: string; typed: string }[] = [];
+    const lines = [];
+    for (const [index, item] of dto.items.entries()) {
+      const quantity = new Decimal(item.quantity);
+      const price = await this.catalog.priceForSale(
+        db,
+        t.organizationId,
+        item.productId,
+        item.unitId,
+        quantity,
+      );
+      let gross = price.amount;
+      if (item.unitPrice !== undefined) {
+        if (!may(perms, 'price.override')) {
+          throw new AppException('FORBIDDEN', 'You may not change the selling price', 403, {
+            required: ['price.override'],
+          });
+        }
+        gross = grossFromUnitPrice(quantity, new Decimal(item.unitPrice));
+        overrides.push({
+          line: index + 1,
+          catalogue: price.amount.toFixed(2),
+          typed: gross.toFixed(2),
+        });
+      }
+      lines.push({
+        item,
+        quantity,
+        price,
+        gross,
+        lineDiscount: new Decimal(item.discount ?? 0),
+      });
+    }
+
+    // ---- discounts and their limit
+    const billDiscount = new Decimal(dto.billDiscount ?? 0);
+    const anyDiscount = billDiscount.gt(0) || lines.some((l) => l.lineDiscount.gt(0));
+    if (anyDiscount && !may(perms, 'discount.apply')) {
+      throw new AppException('FORBIDDEN', 'You may not give discounts', 403, {
+        required: ['discount.apply'],
+      });
+    }
+    const figures = computeSale(
+      lines.map((l) => ({ gross: l.gross, lineDiscount: l.lineDiscount })),
+      billDiscount,
+    );
+    const limit = dec(org.maxCashierDiscountPercent);
+    if (figures.discountPercent.gt(limit) && !may(perms, 'discount.override_limit')) {
+      throw new AppException(
+        'DISCOUNT_LIMIT_EXCEEDED',
+        `Discounts above ${limit.toFixed(2)}% need a manager`,
+        403,
+        {
+          limitPercent: limit.toFixed(2),
+          requestedPercent: figures.discountPercent
+            .toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+            .toFixed(2),
+          required: ['discount.override_limit'],
+        },
+      );
+    }
+
+    return { customer, lines, figures, overrides };
   }
 
   async get(t: TenantContext, id: string) {

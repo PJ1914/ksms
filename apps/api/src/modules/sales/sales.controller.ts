@@ -28,6 +28,7 @@ import {
   CreateSaleReturnDto,
   HeldBillDto,
   HeldBillsQuery,
+  PreviewSaleDto,
   ReturnsQuery,
   SalesQuery,
 } from './sales.dto';
@@ -83,6 +84,17 @@ export class SalesController {
     @Res({ passthrough: true }) res: Response,
   ) {
     return this.idempotent(rawKey, res, (key) => this.sales.checkout(t, key, dto, meta(req)));
+  }
+
+  @Post('sales/preview')
+  @HttpCode(200)
+  @RequirePermission('sale.create')
+  @ApiOperation({
+    summary:
+      'Price a cart exactly as checkout would (same code), saving nothing. Warns about stock and credit limit',
+  })
+  preview(@Tenant() t: TenantContext, @Body() dto: PreviewSaleDto) {
+    return this.sales.preview(t, dto);
   }
 
   @Get('sales/reconciliation')

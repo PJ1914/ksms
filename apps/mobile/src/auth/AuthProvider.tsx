@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   type Profile,
+  getActiveBranch,
+  setActiveBranch,
   type RegisterInput,
   refreshSession,
   registerShop,
@@ -20,6 +22,9 @@ interface AuthState {
   /** Tries again to restore the saved session after a network problem at start-up. */
   retry: () => void;
   can: (permission: string) => boolean;
+  /** The branch the app is working in right now. */
+  branch: { id: string; code: string; name: string } | null;
+  switchBranch: (id: string) => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -27,12 +32,14 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<Status>('loading');
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [branchId, setBranchId] = useState<string | null>(null);
 
   const restore = useCallback(() => {
     setStatus('loading');
     refreshSession()
       .then((p) => {
         setProfile(p);
+        setBranchId(getActiveBranch());
         setStatus(p ? 'signedIn' : 'signedOut');
       })
       .catch(() => setStatus('offline'));
@@ -53,10 +60,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       profile,
       signIn: async (identifier, password) => {
         setProfile(await signIn(identifier, password));
+        setBranchId(getActiveBranch());
         setStatus('signedIn');
       },
       register: async (input) => {
         setProfile(await registerShop(input));
+        setBranchId(getActiveBranch());
         setStatus('signedIn');
       },
       signOut: async () => {
@@ -65,9 +74,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setStatus('signedOut');
       },
       retry: restore,
-      can: (permission) => profile?.permissions.includes(permission) ?? false,
+      can: (permission) =>
+        profile?.role.name === 'Owner' || (profile?.permissions.includes(permission) ?? false),
+      branch: profile?.branches.find((b) => b.id === branchId) ?? null,
+      switchBranch: (id) => {
+        if (!profile?.branches.some((b) => b.id === id)) return;
+        setActiveBranch(id);
+        setBranchId(id);
+      },
     }),
-    [status, profile, restore],
+    [status, profile, branchId, restore],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -50,3 +50,24 @@ The data goes into your real Neon database.
 | The QR code does not open              | In terminal 2 press `s` to switch to Expo Go mode. Or run `pnpm --filter @ksms/mobile start --tunnel` |
 | "Too many attempts"                    | Sign-in is rate-limited for safety. Wait one minute                                                   |
 | You changed `.env` and nothing changed | Stop terminal 2 (Ctrl+C) and run `pnpm dev:mobile` again; `.env` is read only at start                |
+
+## The full set of screens (through Phase 9)
+
+After signing in you can try everything below. Create your data in this order the first time, because each step needs the one before:
+
+1. **Stock tab, + button:** add a few products (kg, litre or piece, with a selling price).
+2. **Open a product, "Set opening stock":** say how many you have and what each cost you.
+3. **More, Suppliers, +:** add a supplier. **More, Purchases, +:** record goods you bought (pick the supplier and items, enter the price, choose "arrived"). Stock goes up and the supplier balance shows what you owe.
+4. **Khata tab, +:** add a customer (optionally with a credit limit).
+5. **Billing tab, New bill:** add items by search or by scanning a barcode, choose a customer for khata or leave walk-in, take the payment (cash, UPI, or split), and tap Pay. Try "Hold this bill for later" and open it again from Held bills.
+6. **Open a bill from Today's bills:** return some goods, or cancel the bill.
+7. **Home:** pull down to refresh the counts.
+
+Things worth checking on the phone, because only a phone can show them:
+
+- The camera asks for permission the first time you scan; scanning a barcode that exists on a product adds it to the bill.
+- Typing quantities with the decimal keypad (for example 1.5 kg) and seeing the price update.
+- The keyboard does not hide the Pay button.
+- Going back and forth between screens keeps the bill you were building.
+
+If something looks wrong, a photo of the screen and what you tapped is the most useful thing to send.

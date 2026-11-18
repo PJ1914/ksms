@@ -1,19 +1,30 @@
-import { formatINR } from './currency';
+import { absMoney, formatINR, isMoreThan, isNegative, isPositive, isZero } from './currency';
 
 describe('formatINR', () => {
-  it('uses Indian grouping', () => {
-    expect(formatINR('1234567.5')).toBe('₹12,34,567.50');
-    expect(formatINR('999')).toBe('₹999.00');
-    expect(formatINR('1000')).toBe('₹1,000.00');
-    expect(formatINR('100000')).toBe('₹1,00,000.00');
+  it.each([
+    ['0', '₹0.00'],
+    ['52.5', '₹52.50'],
+    ['999', '₹999.00'],
+    ['1000', '₹1,000.00'],
+    ['123456', '₹1,23,456.00'],
+    ['1234567.5', '₹12,34,567.50'],
+    ['-45.5', '-₹45.50'],
+    ['0.005', '₹0.01'],
+  ])('%s -> %s', (input, expected) => {
+    expect(formatINR(input)).toBe(expected);
   });
+});
 
-  it('rounds half up to paise and handles negatives', () => {
-    expect(formatINR('10.005')).toBe('₹10.01');
-    expect(formatINR('-250.5')).toBe('-₹250.50');
-  });
-
-  it('formats zero', () => {
-    expect(formatINR('0')).toBe('₹0.00');
+describe('decimal string helpers', () => {
+  it('compares and flips signs exactly, with no floating point drift', () => {
+    expect(isPositive('0.01')).toBe(true);
+    expect(isPositive('0.00')).toBe(false);
+    expect(isNegative('-0.01')).toBe(true);
+    expect(isZero('0.000')).toBe(true);
+    expect(absMoney('-120.5')).toBe('120.50');
+    expect(absMoney('3')).toBe('3.00');
+    expect(isMoreThan('0.3', '0.1')).toBe(true);
+    expect(isMoreThan('0.30000000000000004', '0.3')).toBe(true);
+    expect(isMoreThan('100.10', '100.1')).toBe(false);
   });
 });

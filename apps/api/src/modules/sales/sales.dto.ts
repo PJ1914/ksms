@@ -73,6 +73,25 @@ export class CreateSaleDto {
   @IsOptional() @IsUUID() heldBillId?: string;
 }
 
+/** What the counter shows while the cart is being built: the same figures checkout would charge, nothing saved. */
+export class PreviewSaleDto {
+  @IsOptional() @IsUUID() customerId?: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => SaleItemDto)
+  items!: SaleItemDto[];
+  @IsOptional() @Matches(MONEY, msg('billDiscount')) billDiscount?: string;
+  /** Optional: when given they are checked and split into paid and credit, as checkout would. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => SalePaymentDto)
+  payments?: SalePaymentDto[];
+}
+
 export class SalesQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize?: number;

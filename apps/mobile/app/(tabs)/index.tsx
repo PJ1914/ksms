@@ -1,25 +1,146 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { Pressable, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { getData, getPage } from '@/api/client';
+import type { ExpiringRow } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
+import { useCart } from '@/cart/CartProvider';
+import { Button, Card, Screen, SectionTitle } from '@/components/ui';
+import { useLoad } from '@/hooks/useLoad';
 import { colors } from '@/theme/colors';
+import { todayInIndia } from '@/utils/today';
 
+interface Counts {
+  billsToday: number | null;
+  lowStock: number | null;
+  expiring: number | null;
+  customersOwing: number | null;
+  suppliersOwed: number | null;
+}
+
+/** Home: today at a glance. Exact counts only; money totals and charts arrive with the reports update. */
 export default function HomeScreen() {
-  const { profile } = useAuth();
+  const { profile, branch, can } = useAuth();
+  const { cart } = useCart();
+  const today = todayInIndia();
+
+  const { data, refreshing, reload } = useLoad<Counts>(async () => {
+    const total = async (path: string) => (await getPage(path)).meta.total;
+    const [billsToday, lowStock, expiring, customersOwing, suppliersOwed] = await Promise.all([
+      can('sale.read')
+        ? total(`/sales?from=${today}&to=${today}&status=COMPLETED&pageSize=1`).catch(() => null)
+        : null,
+      can('stock.read')
+        ? total('/inventory/balances?lowStock=true&pageSize=1').catch(() => null)
+        : null,
+      can('stock.read')
+        ? getData<ExpiringRow[]>('/inventory/expiring?withinDays=30')
+            .then((r) => r.length)
+            .catch(() => null)
+        : null,
+      can('customer.read') ? total('/customers?owes=true&pageSize=1').catch(() => null) : null,
+      can('supplier.read') ? total('/suppliers?owed=true&pageSize=1').catch(() => null) : null,
+    ]);
+    return { billsToday, lowStock, expiring, customersOwing, suppliersOwed };
+  }, [today, branch?.id]);
+
   const firstName = profile?.user.fullName.split(' ')[0] ?? '';
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Namaste, {firstName}</Text>
-      <Text style={styles.shop}>{profile?.organization.name}</Text>
-      <Text style={styles.note}>
-        Today&apos;s sales, low stock and dues will appear here in a later phase. Open the Stock tab
-        to see and add products.
+    <Screen onRefresh={() => void reload(true)} refreshing={refreshing}>
+      <Text style={{ fontSize: 24, fontWeight: '800', color: colors.text }}>
+        Namaste, {firstName}
       </Text>
-    </View>
+      <Text style={{ color: colors.primary, fontWeight: '600', marginBottom: 16 }}>
+        {profile?.organization.name}
+        {branch ? ` · ${branch.name}` : ''}
+      </Text>
+
+      {can('sale.create') ? (
+        <Button
+          title={cart.lines.length ? `Continue the bill (${cart.lines.length} items)` : 'New bill'}
+          onPress={() => router.push('/sale/new')}
+        />
+      ) : null}
+
+      <SectionTitle>Today</SectionTitle>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <Tile
+          icon="receipt-outline"
+          label="Bills today"
+          value={data?.billsToday}
+          onPress={() => router.push('/(tabs)/billing')}
+        />
+        <Tile
+          icon="alert-circle-outline"
+          label="Low stock"
+          value={data?.lowStock}
+          warn
+          onPress={() => router.push('/(tabs)/stock')}
+        />
+        <Tile
+          icon="time-outline"
+          label="Expiring in 30 days"
+          value={data?.expiring}
+          warn
+          onPress={() => router.push('/(tabs)/stock')}
+        />
+        <Tile
+          icon="people-outline"
+          label="Customers owing"
+          value={data?.customersOwing}
+          onPress={() => router.push('/(tabs)/khata')}
+        />
+        <Tile
+          icon="business-outline"
+          label="Suppliers you owe"
+          value={data?.suppliersOwed}
+          onPress={() => router.push('/suppliers')}
+        />
+      </View>
+      <Card style={{ marginTop: 12 }}>
+        <Text style={{ color: colors.textMuted }}>
+          Sales totals, profit and reports arrive in a later update. Pull down to refresh these
+          counts.
+        </Text>
+      </Card>
+    </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: colors.background },
-  title: { fontSize: 24, fontWeight: '700', color: colors.text },
-  shop: { fontSize: 16, color: colors.primary, marginTop: 4, fontWeight: '600' },
-  note: { fontSize: 14, color: colors.textMuted, marginTop: 16, lineHeight: 20 },
-});
+function Tile({
+  icon,
+  label,
+  value,
+  warn,
+  onPress,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  value: number | null | undefined;
+  warn?: boolean;
+  onPress: () => void;
+}) {
+  if (value === null) return null; // not allowed for this role
+  const bad = warn && (value ?? 0) > 0;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={{
+        width: '48%',
+        backgroundColor: bad ? colors.warningSoft : colors.surface,
+        borderColor: bad ? colors.warning : colors.border,
+        borderWidth: 1,
+        borderRadius: 12,
+        padding: 14,
+      }}
+    >
+      <Ionicons name={icon} size={22} color={bad ? colors.warning : colors.primary} />
+      <Text style={{ fontSize: 28, fontWeight: '800', color: colors.text, marginTop: 6 }}>
+        {value ?? '…'}
+      </Text>
+      <Text style={{ color: colors.textMuted }}>{label}</Text>
+    </Pressable>
+  );
+}

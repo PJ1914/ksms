@@ -265,3 +265,22 @@ Two of my own test gaps were found this way and closed. First, removing the cust
 Neon after the runs: the new migration is applied and `migrate diff` reports no difference from the schema; there are no leftover test schemas, and the real tables hold only the owner's shop (no products, sales or customers yet).
 
 Not verified: the screens. This phase is server-side; the POS screens (with offline billing) come in the UI and sync phases.
+
+## Phone screens through Phase 9 (2026-11-21)
+
+| Suite                                                                                                   | Result         |
+| ------------------------------------------------------------------------------------------------------- | -------------- |
+| Cart, payments, idempotency-key and held-bill logic (shared package)                                    | 26 / 26 pass   |
+| Form rules and request builders: customers, suppliers, stock, purchases, payments, returns (shared)     | 26 / 26 pass   |
+| All shared-package tests (validation)                                                                   | 80 / 80 pass   |
+| Phone app unit tests (money formatting and helpers, error messages, dates, quantities, product form)    | 25 / 25 pass   |
+| Cart preview endpoint on a real database (agrees with checkout, saves nothing, warns, same permissions) | 4 / 4 pass     |
+| **Phone screens contract on a real database** (the requests of every screen, built by the app's code)   | **7 / 7 pass** |
+| Android bundle (`expo export`) with all 26 screens                                                      | builds         |
+| TypeScript strict and lint on the app                                                                   | clean          |
+
+What the contract test replays, in the order the screens do it: opening, adding and removing stock with a retried request; the till (build cart, preview, split payment, checkout, retry with the same key replayed, new key after a change, credit-limit refusal and the explicit override); a held bill parked and resumed; cancelling a bill; returning goods; the customer and supplier forms and statements; paying a supplier; a purchase received at once, part paid, partly returned, saved as a draft then received, and cancelled; and the paging fields every list screen reads.
+
+**Not verified:** the screens themselves on a physical phone (layout, keyboard behaviour, camera permission, scanning). The build has no phone or emulator; the owner's walk-through in `docs/guides/PHONE_TESTING.md` is the check. Barcode scanning in particular is untested on a device.
+
+Known gaps of this pass: no offline billing, no customer payments (Phase 11), no GST bills (Phase 10), no product price editing on the phone, no printing.

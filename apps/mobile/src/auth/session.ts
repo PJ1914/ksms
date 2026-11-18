@@ -47,6 +47,15 @@ export const api = createApiClient({
   getBranchId: () => branchId,
 });
 
+/** Which branch the app works in (sent as X-Branch-Id). Must be one of the user's branches. */
+export function setActiveBranch(id: string | null): void {
+  branchId = id;
+}
+
+export function getActiveBranch(): string | null {
+  return branchId;
+}
+
 export function setSignedOutListener(fn: (() => void) | null): void {
   onSignedOut = fn;
 }

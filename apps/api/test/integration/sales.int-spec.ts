@@ -671,6 +671,117 @@ suite('Sales and POS (real database)', () => {
     });
   });
 
+  describe('cart preview', () => {
+    it('shows exactly what checkout will charge, and saves nothing', async () => {
+      const a = await piece('33.33', '20');
+      const r = await rice();
+      const body = {
+        items: [
+          item(a.id, U.PCS, '3', { discount: '1' }),
+          item(r.id, U.G, '500'),
+          item(r.id, U.KG, '1.5'),
+        ],
+        billDiscount: '2.5',
+      };
+      const salesBefore = await ctx.prisma.sale.count({
+        where: { organizationId: shop.organizationId },
+      });
+      const movesBefore = await ctx.prisma.stockMovement.count({
+        where: { organizationId: shop.organizationId },
+      });
+
+      const p = (await A.post('/sales/preview', body, null).expect(200)).body.data;
+      expect(
+        p.lines.map((l: { unitCode: string; unitPrice: string; net: string }) => [
+          l.unitCode,
+          l.unitPrice,
+          l.net,
+        ]),
+      ).toHaveLength(3);
+      expect(await ctx.prisma.sale.count({ where: { organizationId: shop.organizationId } })).toBe(
+        salesBefore,
+      );
+      expect(
+        await ctx.prisma.stockMovement.count({ where: { organizationId: shop.organizationId } }),
+      ).toBe(movesBefore);
+
+      const s1 = await sold({ ...body, payments: [cash(p.total)] });
+      expect(p).toMatchObject({
+        subtotal: s1.subtotal,
+        discountTotal: s1.discountTotal,
+        roundOff: s1.roundOff,
+        total: s1.total,
+      });
+      expect(p.lines.map((l: { net: string }) => l.net)).toEqual(
+        s1.items.map((i: { lineTotal: string }) => i.lineTotal),
+      );
+      expect(p.lines.map((l: { unitPrice: string }) => l.unitPrice)).toEqual(
+        s1.items.map((i: { unitPrice: string }) => i.unitPrice),
+      );
+    });
+
+    it('with payments it splits paid and credit as checkout would, and refuses an overpayment', async () => {
+      const soap = await piece('100', '20');
+      const c = await customer({ creditLimit: '250' });
+      const base = { customerId: c.id, items: [item(soap.id, U.PCS, '3')] };
+      const part = (
+        await A.post('/sales/preview', { ...base, payments: [cash('100')] }, null).expect(200)
+      ).body.data;
+      expect(part).toMatchObject({ total: '300.00', paid: '100.00', credit: '200.00' });
+      expect(part.warnings.creditLimit).toBeNull(); // 200 is within 250
+      const over = (
+        await A.post('/sales/preview', { ...base, payments: [cash('10')] }, null).expect(200)
+      ).body.data;
+      expect(over.warnings.creditLimit).toMatchObject({
+        creditLimit: '250.00',
+        balance: '0.00',
+        available: '250.00',
+      });
+      expect(
+        errCode(
+          await A.post('/sales/preview', { ...base, payments: [cash('301')] }, null).expect(422),
+        ),
+      ).toBe('PAYMENT_EXCEEDS_TOTAL');
+      const none = (await A.post('/sales/preview', base, null).expect(200)).body.data;
+      expect(none).toMatchObject({ paid: '0.00', credit: '300.00' });
+    });
+
+    it('warns about stock before the customer pays, without refusing', async () => {
+      const p = await piece('10', '3');
+      const res = (
+        await A.post(
+          '/sales/preview',
+          { items: [item(p.id, U.PCS, '2'), item(p.id, U.PCS, '2')] },
+          null,
+        ).expect(200)
+      ).body.data;
+      expect(res.warnings.stock).toEqual([
+        { productId: p.id, requestedBaseQuantity: '4.000', availableBaseQuantity: '3.000' },
+      ]);
+      expect(res.total).toBe('40.00');
+    });
+
+    it('applies the same permission rules as checkout', async () => {
+      const p = await piece('100', '20');
+      const cashier = api(await hire(shop, 'Cashier'), shop.branchId);
+      const over = await cashier
+        .post('/sales/preview', { items: [item(p.id, U.PCS, '1', { discount: '6' })] }, null)
+        .expect(403);
+      expect(errCode(over)).toBe('DISCOUNT_LIMIT_EXCEEDED');
+      await cashier
+        .post('/sales/preview', { items: [item(p.id, U.PCS, '1', { unitPrice: '80' })] }, null)
+        .expect(403);
+      await cashier
+        .post('/sales/preview', { items: [item(p.id, U.PCS, '1', { discount: '5' })] }, null)
+        .expect(200);
+      const agent = api(await hire(shop, 'Collection Agent'), shop.branchId);
+      await agent.post('/sales/preview', { items: [item(p.id, U.PCS, '1')] }, null).expect(403);
+      await api(shop.token)
+        .post('/sales/preview', { items: [item(p.id, U.PCS, '1')] }, null)
+        .expect(400); // needs the branch
+    });
+  });
+
   // ---------- F. held bills ----------
   describe('held bills', () => {
     it('park, list, change and discard a cart without touching stock; checkout closes it', async () => {

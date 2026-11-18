@@ -1,25 +1,54 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useAuth } from '@/auth/AuthProvider';
-import { Button } from '@/components/ui';
+import { Button, Card, Choice, KeyValue, ListRow, Screen, SectionTitle } from '@/components/ui';
 import { colors } from '@/theme/colors';
 
 export default function MoreScreen() {
-  const { profile, signOut } = useAuth();
+  const { profile, branch, switchBranch, signOut, can } = useAuth();
   const [busy, setBusy] = useState(false);
-  const branch = profile?.branches.find((b) => b.isDefault) ?? profile?.branches[0];
 
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.name}>{profile?.user.fullName}</Text>
-        <Text style={styles.meta}>{profile?.user.phone}</Text>
-        <Text style={styles.meta}>
-          {profile?.role.name} · {profile?.organization.name}
-          {branch ? ` · ${branch.name}` : ''}
+    <Screen>
+      <Card>
+        <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>
+          {profile?.user.fullName}
         </Text>
+        <KeyValue label="Mobile" value={profile?.user.phone ?? ''} />
+        <KeyValue label="Role" value={profile?.role.name ?? ''} />
+        <KeyValue label="Shop" value={profile?.organization.name ?? ''} />
+        <KeyValue label="Branch" value={branch?.name ?? ''} />
+      </Card>
+
+      {(profile?.branches.length ?? 0) > 1 ? (
+        <Choice
+          label="Working in branch"
+          options={profile!.branches.map((b) => ({ key: b.id, label: b.name }))}
+          value={branch?.id ?? ''}
+          onChange={switchBranch}
+        />
+      ) : null}
+
+      <SectionTitle>Buying</SectionTitle>
+      <View style={{ gap: 8 }}>
+        {can('supplier.read') ? (
+          <ListRow
+            title="Suppliers"
+            subtitle="Who you buy from, and what you owe them"
+            onPress={() => router.push('/suppliers')}
+          />
+        ) : null}
+        {can('purchase.read') ? (
+          <ListRow
+            title="Purchases"
+            subtitle="Goods bought and received"
+            onPress={() => router.push('/purchases')}
+          />
+        ) : null}
       </View>
-      <Text style={styles.note}>Purchases, suppliers, reports and settings arrive later.</Text>
+
+      <SectionTitle>Account</SectionTitle>
       <Button
         title="Sign out"
         variant="secondary"
@@ -29,20 +58,6 @@ export default function MoreScreen() {
           void signOut();
         }}
       />
-    </View>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: colors.background },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  name: { fontSize: 18, fontWeight: '600', color: colors.text },
-  meta: { fontSize: 14, color: colors.textMuted, marginTop: 4 },
-  note: { fontSize: 14, color: colors.textMuted, marginVertical: 16 },
-});
