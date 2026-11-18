@@ -111,17 +111,7 @@ export function allocateFefo(
   return { allocations, shortfall: Decimal.max(remaining, 0), expiredQuantity };
 }
 
-/** True only for a real calendar date written YYYY-MM-DD (so "2026-02-31" is refused, not passed to the database). */
-export function isRealIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const d = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
-}
-
-/** Today's date in India (YYYY-MM-DD); stock expiry is a shop-local calendar matter. */
-export function todayInIndia(now: Date = new Date()): string {
-  return new Date(now.getTime() + 5.5 * 3_600_000).toISOString().slice(0, 10);
-}
+export { isRealIsoDate, todayInIndia } from '../../../common/utils/dates';
 
 /** Stock value of a balance: only positive stock has value. Rounded half-up to paise. */
 export function stockValue(onHand: Decimal, averageCost: Decimal): Decimal {

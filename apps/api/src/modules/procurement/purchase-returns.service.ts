@@ -161,6 +161,15 @@ export class PurchaseReturnsService {
           });
         }
 
+        // The supplier's bill carried a round-off once the last goods arrived (see PurchasesService), so the credit
+        // for the LAST goods going back must carry it too. Then a purchase that is returned in full ends with
+        // exactly what was billed credited: nothing left owed, and never more credited than billed.
+        const givesEverythingBack =
+          locked.status === 'RECEIVED' &&
+          items.every((i) => returnedBase.get(i.id)!.equals(dec(i.receivedBaseQuantity)));
+        const roundOffCredit = givesEverythingBack ? dec(locked.roundOff) : new Decimal(0);
+        const totalCredit = credit.plus(roundOffCredit);
+
         for (const item of items) {
           if (returnedBase.get(item.id)!.equals(dec(item.returnedBaseQuantity))) continue;
           await tx.purchaseItem.update({
@@ -177,7 +186,7 @@ export class PurchaseReturnsService {
         });
         await tx.purchase.update({
           where: { id: dto.purchaseId },
-          data: { returnedTotal: dec(purchase.returnedTotal).plus(credit).toFixed(2) },
+          data: { returnedTotal: dec(purchase.returnedTotal).plus(totalCredit).toFixed(2) },
         });
 
         const number = await this.numbers.next(
@@ -195,7 +204,7 @@ export class PurchaseReturnsService {
             supplierId: locked.supplierId,
             returnNumber: number.number,
             reason: dto.reason,
-            total: credit.toFixed(2),
+            total: totalCredit.toFixed(2),
             createdById: t.userId,
             items: { create: rows },
           },
@@ -207,7 +216,7 @@ export class PurchaseReturnsService {
           supplierId: locked.supplierId,
           actorId: t.userId,
           type: 'PURCHASE_RETURN',
-          amount: credit.negated(),
+          amount: totalCredit.negated(),
           referenceType: 'PURCHASE_RETURN',
           referenceId: returnId,
           description: `Goods returned from ${locked.purchaseNumber} (${number.number})`,
@@ -223,7 +232,8 @@ export class PurchaseReturnsService {
           after: {
             number: number.number,
             purchaseId: dto.purchaseId,
-            credit: credit.toFixed(2),
+            credit: totalCredit.toFixed(2),
+            roundOffAdjustment: roundOffCredit.toFixed(2),
             lines: rows.length,
           },
           correlationId: meta.correlationId,
@@ -305,6 +315,10 @@ export class PurchaseReturnsService {
       supplier: r.supplier,
       reason: r.reason,
       total: m2(r.total),
+      /** Round-off carried by the bill, credited with the return that gives the last goods back (0.00 otherwise). */
+      roundOffAdjustment: dec(r.total)
+        .minus(r.items.reduce((a, i) => a.plus(dec(i.lineTotal)), new Decimal(0)))
+        .toFixed(2),
       createdAt: r.createdAt,
       items: r.items.map((i) => ({
         id: i.id,

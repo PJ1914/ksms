@@ -150,3 +150,11 @@ Money-writing routes need an `Idempotency-Key` header (see Phase 7) and `X-Branc
 | 422  | `PAYMENT_AMOUNT_INVALID`                                                                                                                         | A payment must be more than zero                                                       |
 | 422  | `ALLOCATION_NOT_PAYABLE`, `ALLOCATION_DUPLICATE`, `ALLOCATION_INVALID`, `ALLOCATION_EXCEEDS_OUTSTANDING`, `ALLOCATION_EXCEEDS_PAYMENT`           | Payment allocation rules                                                               |
 | 409  | `PAYMENT_ALREADY_REVERSED`                                                                                                                       | This payment was already reversed                                                      |
+
+## Added with the Phase 8 audit follow-ups (2026-11-19)
+
+| HTTP | code           | Meaning                                                                                                                                                 |
+| ---- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400  | `INVALID_DATE` | A `from` / `to` filter is not a real date (for example `2026-02-31`). Plain dates cover whole India-time days: `to=2026-11-18` includes the entire 18th |
+
+`POST /supplier-payments/:id/reverse` now requires `X-Branch-Id` and only finds payments made in that branch. A branch that has been switched off or deleted is refused (`BRANCH_FORBIDDEN`) even for people assigned to it.

@@ -172,3 +172,30 @@ Mutation checks (a rule is deliberately broken, a test must fail, then the code 
 Neon after the runs: the new migration is applied and `migrate diff` reports no difference from the schema; no leftover test schemas; the real tables hold only the shop and owner account created from the phone (1 organization, 1 user) and no purchases, suppliers or stock yet.
 
 Not verified: the screens. This phase is server-side only; the mobile screens for suppliers and purchases come in the UI phase.
+
+## Phase 8 audit follow-ups (2026-11-19)
+
+An external AI review of Phases 0 to 8 reported five defects and some documentation gaps. Each claim was checked against the code, and for every defect a test was written FIRST and run to see it fail before the fix.
+
+| Claim                                                                                                  | Verdict                                                                                                                                  | Evidence                                                        |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Returning a whole purchase with a negative round-off crashes; with a positive one it leaves money owed | **Confirmed, critical.** Server error (HTTP 500) from a database rule; fixed (TD-75)                                                     | 4 new tests; the first failed with `Received: 500`              |
+| Supplier payments create a second cash register ("Main Counter") beside "Main Register"                | **Confirmed.** Fixed (TD-76)                                                                                                             | New test (failed with 2 registers)                              |
+| Payment reversal is not branch-scoped                                                                  | **Confirmed, and worse than reported:** a manager of the first branch could reverse a payment made in another branch. Fixed (TD-77)      | New test (failed: got 201, expected 404)                        |
+| Stock-movement `to` filter drops same-day entries and ignores India time                               | **Confirmed.** Fixed for movements, ledger, payments and purchases; impossible dates are now a clean 400 (TD-78)                         | New tests (failed: 0 movements instead of 1); 12 new unit tests |
+| The tenant guard does not check that the branch is still active                                        | **Confirmed.** Fixed (TD-79)                                                                                                             | New test (failed: got 200, expected 403)                        |
+| Module-boundary rule promised in the architecture document was never added                             | **Confirmed.** Added as a test over the real imports (TD-80). It was proven by adding forbidden imports in 5 forms, all of which fail it | `architecture.spec.ts`, 11 tests                                |
+| Migrations log stops at Phase 6; schema document says register "Main"                                  | **Confirmed.** Both corrected                                                                                                            | docs                                                            |
+
+Mistakes of my own found while doing this: the first version of the boundary test could not fail (a stray invisible character had been written into its search pattern, so it matched no imports); it was found by deliberately adding a forbidden import and seeing the test still pass, then fixed and re-proved. Three older tests called the reversal route without a branch, which the fix now correctly refuses; they were updated.
+
+| Suite                                                                    | Result         |
+| ------------------------------------------------------------------------ | -------------- |
+| API unit tests (112: money rules, dates 12, module boundaries 11, stock) | 112 / 112 pass |
+| Other unit tests (validation 28, api-client 2, mobile 9)                 | 39 / 39 pass   |
+| API e2e, DB mocked                                                       | 37 / 37 pass   |
+| All six integration suites together, real PostgreSQL                     | 164 / 164 pass |
+
+Not verified by me: nothing new beyond the above. The review also noted that it could not run the end-to-end or integration suites in its own sandbox; both were run here.
+
+Design note (not a defect, flagged for the owner): suppliers belong to the whole shop, so the supplier statement and the supplier payment list show every branch's entries to anyone with `supplier.read`. Purchases, returns and payment reversal are branch-scoped.

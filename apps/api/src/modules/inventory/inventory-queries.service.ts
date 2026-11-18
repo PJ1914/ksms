@@ -3,6 +3,7 @@ import Decimal from 'decimal.js';
 import type { TenantContext } from '../../common/auth/auth.types';
 import { AppException } from '../../common/errors/app.exception';
 import { Paginated } from '../../common/pagination/paginated';
+import { timestampRange } from '../../common/utils/dates';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '../../generated/prisma/client';
 import { isExpired, stockValue, todayInIndia } from './domain/stock';
@@ -189,14 +190,7 @@ export class InventoryQueriesService {
       branchId,
       ...(q.productId ? { productId: q.productId } : {}),
       ...(q.type ? { type: q.type } : {}),
-      ...(q.from || q.to
-        ? {
-            occurredAt: {
-              ...(q.from ? { gte: new Date(q.from) } : {}),
-              ...(q.to ? { lte: new Date(q.to) } : {}),
-            },
-          }
-        : {}),
+      ...(q.from || q.to ? { occurredAt: timestampRange(q.from, q.to) } : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.stockMovement.findMany({

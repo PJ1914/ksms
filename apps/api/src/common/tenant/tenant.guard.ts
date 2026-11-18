@@ -13,7 +13,7 @@ const uuid = z.uuid();
  * Global guard #2 (runs after AuthGuard): builds the tenant context.
  * - The organization comes ONLY from the verified token, never from headers or body.
  * - The user must be an ACTIVE member of that organization.
- * - A requested branch (X-Branch-Id) must be one the member is assigned to.
+ * - A requested branch (X-Branch-Id) must be one the member is assigned to AND that is still active.
  */
 @Injectable()
 export class TenantGuard implements CanActivate {
@@ -37,7 +37,16 @@ export class TenantGuard implements CanActivate {
           userId: principal.userId,
         },
       },
-      select: { id: true, roleId: true, status: true, branches: { select: { branchId: true } } },
+      select: {
+        id: true,
+        roleId: true,
+        status: true,
+        // A branch that was switched off or deleted can no longer be worked in.
+        branches: {
+          where: { branch: { deletedAt: null, isActive: true } },
+          select: { branchId: true },
+        },
+      },
     });
     if (!member || member.status !== 'ACTIVE') {
       throw new AppException(

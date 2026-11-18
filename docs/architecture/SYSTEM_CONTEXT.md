@@ -107,7 +107,7 @@ flowchart BT
   classDef l0 fill:#eee,stroke:#999
 ```
 
-(All modules also call Audit; edges omitted for readability. Enforced in Phase 3/4 with an ESLint import-boundary rule or `dependency-cruiser` in CI.)
+(All modules also call Audit; edges omitted for readability. **Enforced** by `apps/api/src/architecture.spec.ts`, which runs in `pnpm check` and CI: it reads the real imports and fails on any import a module is not allowed to make, on `common/` importing from feature modules, and on cycles. When a module is added or starts using another, update the map in that test and this diagram.)
 
 ### Responsibilities
 

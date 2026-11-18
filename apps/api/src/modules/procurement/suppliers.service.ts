@@ -3,6 +3,7 @@ import Decimal from 'decimal.js';
 import type { TenantContext } from '../../common/auth/auth.types';
 import { AppException } from '../../common/errors/app.exception';
 import { Paginated } from '../../common/pagination/paginated';
+import { timestampRange } from '../../common/utils/dates';
 import type { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -243,16 +244,7 @@ export class SuppliersService {
     const where: Prisma.SupplierLedgerEntryWhereInput = {
       organizationId,
       supplierId: id,
-      ...(q.from || q.to
-        ? {
-            occurredAt: {
-              ...(q.from ? { gte: new Date(`${q.from}T00:00:00+05:30`) } : {}),
-              ...(q.to
-                ? { lt: new Date(new Date(`${q.to}T00:00:00+05:30`).getTime() + 86_400_000) }
-                : {}),
-            },
-          }
-        : {}),
+      ...(q.from || q.to ? { occurredAt: timestampRange(q.from, q.to) } : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.supplierLedgerEntry.findMany({

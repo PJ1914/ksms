@@ -63,13 +63,14 @@ Goods go out through the same inventory engine (type `PURCHASE_RETURN`), and the
 - Only received goods can be returned, and no more than was received minus what was already returned.
 - Goods that were already sold cannot be returned: the stock engine refuses (`INSUFFICIENT_STOCK`) and nothing changes.
 - Products tracked by batch or expiry must name the batch.
+- **Round-off:** the supplier's bill carries its round-off (up to 5 rupees either way) from the moment the last goods arrive. The return that gives the LAST goods back credits it too (shown as `roundOffAdjustment` on the return), so returning a whole purchase always ends with exactly what was billed credited: nothing left owed, never more credited than billed.
 
 ## Supplier payments
 
 - `POST /suppliers/:id/payments` with an amount, method (cash, UPI, card, bank transfer, other) and optional reference.
 - Leave out `allocations` to settle the **oldest unpaid purchases first**, or choose which purchases to pay. Whatever is not matched stays as an **advance** (the supplier balance goes negative) and is used by later purchases.
-- Writes in one transaction: payment (with a `PV/<year>/<number>` voucher number), allocations, a cashbook line on the branch's "Main Counter" register, and the ledger line.
-- A mistake is undone by **reversing** the payment: an opposite payment, cashbook line and ledger line. The original is marked reversed. Nothing is deleted or edited.
+- Writes in one transaction: payment (with a `PV/<year>/<number>` voucher number), allocations, a cashbook line on the branch's cash register (the one created with the branch, "Main Register"), and the ledger line.
+- A mistake is undone by **reversing** the payment: an opposite payment, cashbook line and ledger line. The original is marked reversed. Nothing is deleted or edited. A payment can be reversed only from the branch it was made in (`X-Branch-Id` required).
 
 ## The supplier ledger
 
@@ -120,22 +121,22 @@ The integration tests run this after every scenario.
 
 ## API
 
-| Route                                        | Permission             | Notes                                                         |
-| -------------------------------------------- | ---------------------- | ------------------------------------------------------------- |
-| `GET/POST /suppliers`                        | `supplier.read/manage` | Opening balance needs `X-Branch-Id`                           |
-| `GET/PATCH /suppliers/:id`                   | `supplier.read/manage` | `version` protects against two devices overwriting each other |
-| `POST /suppliers/:id/deactivate\|reactivate` | `supplier.manage`      | Inactive suppliers cannot receive new purchases               |
-| `GET /suppliers/:id/ledger`                  | `supplier.read`        | Statement with running balance                                |
-| `POST /suppliers/:id/payments`               | `supplier.payment`     | `Idempotency-Key` + `X-Branch-Id` required                    |
-| `GET /supplier-payments`                     | `supplier.read`        |                                                               |
-| `POST /supplier-payments/:id/reverse`        | `supplier.payment`     | `Idempotency-Key` required                                    |
-| `GET/POST /purchases`                        | `purchase.read/create` | `X-Branch-Id`; create needs `Idempotency-Key`                 |
-| `GET /purchases/:id`                         | `purchase.read`        | Items, received, payments, outstanding                        |
-| `PATCH /purchases/:id`                       | `purchase.create`      | Drafts only                                                   |
-| `POST /purchases/:id/confirm\|receive`       | `purchase.create`      | Receive needs `Idempotency-Key`                               |
-| `POST /purchases/:id/cancel`                 | `purchase.cancel`      | Only while nothing was received                               |
-| `GET/POST /purchase-returns`                 | `purchase.read/cancel` | Create needs `Idempotency-Key`                                |
-| `GET /procurement/reconciliation`            | `supplier.read`        |                                                               |
+| Route                                        | Permission             | Notes                                                                   |
+| -------------------------------------------- | ---------------------- | ----------------------------------------------------------------------- |
+| `GET/POST /suppliers`                        | `supplier.read/manage` | Opening balance needs `X-Branch-Id`                                     |
+| `GET/PATCH /suppliers/:id`                   | `supplier.read/manage` | `version` protects against two devices overwriting each other           |
+| `POST /suppliers/:id/deactivate\|reactivate` | `supplier.manage`      | Inactive suppliers cannot receive new purchases                         |
+| `GET /suppliers/:id/ledger`                  | `supplier.read`        | Statement with running balance                                          |
+| `POST /suppliers/:id/payments`               | `supplier.payment`     | `Idempotency-Key` + `X-Branch-Id` required                              |
+| `GET /supplier-payments`                     | `supplier.read`        |                                                                         |
+| `POST /supplier-payments/:id/reverse`        | `supplier.payment`     | `Idempotency-Key` and `X-Branch-Id` (the payment's own branch) required |
+| `GET/POST /purchases`                        | `purchase.read/create` | `X-Branch-Id`; create needs `Idempotency-Key`                           |
+| `GET /purchases/:id`                         | `purchase.read`        | Items, received, payments, outstanding                                  |
+| `PATCH /purchases/:id`                       | `purchase.create`      | Drafts only                                                             |
+| `POST /purchases/:id/confirm\|receive`       | `purchase.create`      | Receive needs `Idempotency-Key`                                         |
+| `POST /purchases/:id/cancel`                 | `purchase.cancel`      | Only while nothing was received                                         |
+| `GET/POST /purchase-returns`                 | `purchase.read/cancel` | Create needs `Idempotency-Key`                                          |
+| `GET /procurement/reconciliation`            | `supplier.read`        |                                                                         |
 
 ## Not in this phase
 

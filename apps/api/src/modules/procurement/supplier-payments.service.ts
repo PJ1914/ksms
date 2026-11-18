@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import Decimal from 'decimal.js';
+import { DEFAULT_CASH_REGISTER_NAME } from '@ksms/constants';
 import type { TenantContext } from '../../common/auth/auth.types';
 import { AppException } from '../../common/errors/app.exception';
 import { DomainError } from '../../common/errors/domain.error';
 import { IdempotencyService } from '../../common/idempotency/idempotency.service';
 import { DocumentNumberService } from '../../common/numbering/document-number.service';
 import { Paginated } from '../../common/pagination/paginated';
+import { timestampRange } from '../../common/utils/dates';
 import type { Db } from '../../database/db.types';
 import { PrismaService } from '../../database/prisma.service';
 import type { Prisma } from '../../generated/prisma/client';
@@ -23,7 +25,6 @@ interface Meta {
 
 const dec = (v: { toString(): string }) => new Decimal(v.toString());
 const m2 = (v: { toString(): string }) => dec(v).toFixed(2);
-const MAIN_REGISTER = 'Main Counter';
 
 interface Outstanding {
   id: string;
@@ -171,15 +172,18 @@ export class SupplierPaymentsService {
     dto: ReversePaymentDto,
     meta: Meta,
   ) {
+    // Like every other money action, a payment can be undone only from the branch it was made in.
+    const scopeBranchId = this.branch(t);
     return this.idempotency.execute(
       t.organizationId,
       key,
       'POST /supplier-payments/:id/reverse',
-      { paymentId, ...dto },
+      { branchId: scopeBranchId, paymentId, ...dto },
       async (tx) => {
         const rows = await tx.$queryRaw<{ id: string; supplier_id: string; branch_id: string }[]>`
           SELECT id, supplier_id, branch_id FROM payments
           WHERE id = ${paymentId}::uuid AND organization_id = ${t.organizationId}::uuid
+            AND branch_id = ${scopeBranchId}::uuid
             AND purpose = 'SUPPLIER_PAYMENT' AND direction = 'OUT' AND supplier_id IS NOT NULL
           FOR UPDATE`;
         const row = rows[0];
@@ -271,16 +275,7 @@ export class SupplierPaymentsService {
       organizationId: t.organizationId,
       purpose: 'SUPPLIER_PAYMENT',
       ...(q.supplierId ? { supplierId: q.supplierId } : {}),
-      ...(q.from || q.to
-        ? {
-            paidAt: {
-              ...(q.from ? { gte: new Date(`${q.from}T00:00:00+05:30`) } : {}),
-              ...(q.to
-                ? { lt: new Date(new Date(`${q.to}T00:00:00+05:30`).getTime() + 86_400_000) }
-                : {}),
-            },
-          }
-        : {}),
+      ...(q.from || q.to ? { paidAt: timestampRange(q.from, q.to) } : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.payment.findMany({
@@ -394,7 +389,7 @@ export class SupplierPaymentsService {
     return out;
   }
 
-  /** One cashbook line, on the branch's main register (created on first use). */
+  /** One cashbook line, on the branch's cash register. */
   private async cashbook(
     tx: Tx,
     t: TenantContext,
@@ -407,14 +402,23 @@ export class SupplierPaymentsService {
       description: string;
     },
   ) {
-    await tx.$executeRaw`
-      INSERT INTO cash_registers (id, organization_id, branch_id, name, is_active)
-      VALUES (gen_random_uuid(), ${t.organizationId}::uuid, ${branchId}::uuid, ${MAIN_REGISTER}, true)
-      ON CONFLICT (branch_id, name) DO NOTHING`;
-    const register = await tx.cashRegister.findFirstOrThrow({
-      where: { branchId, name: MAIN_REGISTER },
+    // Branches are created with their register (BranchService). Use the oldest active one, so supplier payments
+    // and the daily closing always agree; only create the default if the branch somehow has none.
+    let register = await tx.cashRegister.findFirst({
+      where: { branchId, isActive: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: { id: true },
     });
+    if (!register) {
+      await tx.$executeRaw`
+        INSERT INTO cash_registers (id, organization_id, branch_id, name, is_active)
+        VALUES (gen_random_uuid(), ${t.organizationId}::uuid, ${branchId}::uuid, ${DEFAULT_CASH_REGISTER_NAME}, true)
+        ON CONFLICT (branch_id, name) DO NOTHING`;
+      register = await tx.cashRegister.findFirstOrThrow({
+        where: { branchId, name: DEFAULT_CASH_REGISTER_NAME },
+        select: { id: true },
+      });
+    }
     await tx.cashbookEntry.create({
       data: {
         organizationId: t.organizationId,

@@ -3,6 +3,9 @@ export const CURRENCY = 'INR' as const;
 export const DEFAULT_TIMEZONE = 'Asia/Kolkata' as const;
 export const API_PREFIX = 'api/v1' as const;
 
+/** Every branch is created with this cash register; all cash movements of the branch go through it. */
+export const DEFAULT_CASH_REGISTER_NAME = 'Main Register' as const;
+
 export const ROLE_NAMES = ['Owner', 'Manager', 'Cashier', 'Collection Agent'] as const;
 export type RoleName = (typeof ROLE_NAMES)[number];
 

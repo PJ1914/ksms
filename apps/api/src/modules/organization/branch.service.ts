@@ -1,3 +1,4 @@
+import { DEFAULT_CASH_REGISTER_NAME } from '@ksms/constants';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { AppException } from '../../common/errors/app.exception';
@@ -59,7 +60,7 @@ export class BranchService {
       select: BRANCH_SELECT,
     });
     await db.cashRegister.create({
-      data: { organizationId, branchId: branch.id, name: 'Main Register' },
+      data: { organizationId, branchId: branch.id, name: DEFAULT_CASH_REGISTER_NAME },
     });
     const fy = financialYear(new Date());
     await db.documentSequence.createMany({

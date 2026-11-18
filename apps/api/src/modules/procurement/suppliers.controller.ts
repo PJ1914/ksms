@@ -145,6 +145,7 @@ export class SuppliersController {
   }
 
   @Post('supplier-payments/:id/reverse')
+  @RequireBranch()
   @HttpCode(201)
   @RequirePermission('supplier.payment')
   @ApiHeader(IDEMPOTENCY_DOC)

@@ -1015,16 +1015,12 @@ suite('Procurement (real database)', () => {
       expect(await supplierBalance(sup.id)).toBe('1000.00');
 
       expect(
-        errCode(
-          await api(shop.token)
-            .post(`/supplier-payments/${pay.id}/reverse`, { reason: 'x' })
-            .expect(400),
-        ),
+        errCode(await A.post(`/supplier-payments/${pay.id}/reverse`, { reason: 'x' }).expect(400)),
       ).toBe('VALIDATION_ERROR');
       const rev = (
-        await api(shop.token)
-          .post(`/supplier-payments/${pay.id}/reverse`, { reason: 'entered twice by mistake' })
-          .expect(201)
+        await A.post(`/supplier-payments/${pay.id}/reverse`, {
+          reason: 'entered twice by mistake',
+        }).expect(201)
       ).body.data;
       expect(rev).toMatchObject({
         reversedPaymentId: pay.id,
@@ -1047,18 +1043,16 @@ suite('Procurement (real database)', () => {
       // cannot be reversed twice, and a reversal cannot itself be reversed
       expect(
         errCode(
-          await api(shop.token)
-            .post(`/supplier-payments/${pay.id}/reverse`, { reason: 'again please' })
-            .expect(409),
+          await A.post(`/supplier-payments/${pay.id}/reverse`, { reason: 'again please' }).expect(
+            409,
+          ),
         ),
       ).toBe('PAYMENT_ALREADY_REVERSED');
       expect(
         errCode(
-          await api(shop.token)
-            .post(`/supplier-payments/${rev.reversalPaymentId}/reverse`, {
-              reason: 'reverse a reversal',
-            })
-            .expect(404),
+          await A.post(`/supplier-payments/${rev.reversalPaymentId}/reverse`, {
+            reason: 'reverse a reversal',
+          }).expect(404),
         ),
       ).toBe('PAYMENT_NOT_FOUND');
 
@@ -1242,6 +1236,206 @@ suite('Procurement (real database)', () => {
     });
   });
 
+  // ---------- F. follow-ups from the external audit (2026-11-19) ----------
+  describe('audit follow-ups', () => {
+    it('returning a whole purchase that carries a NEGATIVE round-off zeroes the supplier balance (was a 500)', async () => {
+      const r = await rice();
+      const sup = await supplier();
+      // 1 bag at 100.40 with round-off -0.40: the supplier bill is 100.00
+      const p = await buy(sup.id, [item(r.id, U.BAG, '1', '100.40')], {
+        roundOff: '-0.40',
+        receiveNow: true,
+      });
+      expect(p).toMatchObject({ total: '100.00', billedTotal: '100.00' });
+      const res = await A.post('/purchase-returns', {
+        purchaseId: p.id,
+        reason: 'wrong grade',
+        items: [{ purchaseItemId: p.items[0].id, quantity: '1' }],
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.data).toMatchObject({ total: '100.00', roundOffAdjustment: '-0.40' });
+      expect(await supplierBalance(sup.id)).toBe('0.00');
+      expect(await purchase(p.id)).toMatchObject({ returnedTotal: '100.00', outstanding: '0.00' });
+      await expectBooksAgree();
+    });
+
+    it('returning a whole purchase that carries a POSITIVE round-off leaves nothing owed', async () => {
+      const r = await rice();
+      const sup = await supplier();
+      const p = await buy(sup.id, [item(r.id, U.BAG, '1', '99.60')], {
+        roundOff: '0.40',
+        receiveNow: true,
+      });
+      expect(p.billedTotal).toBe('100.00');
+      const res = await A.post('/purchase-returns', {
+        purchaseId: p.id,
+        reason: 'wrong grade',
+        items: [{ purchaseItemId: p.items[0].id, quantity: '1' }],
+      }).expect(201);
+      expect(res.body.data).toMatchObject({ total: '100.00', roundOffAdjustment: '0.40' });
+      expect(await supplierBalance(sup.id)).toBe('0.00');
+      await expectBooksAgree();
+    });
+
+    it('round-off is credited exactly once: with the return that finishes giving everything back', async () => {
+      const r = await rice();
+      const sup = await supplier();
+      const p = await buy(sup.id, [item(r.id, U.BAG, '2', '50.20')], {
+        roundOff: '-0.40',
+        receiveNow: true,
+      }); // 100.40 - 0.40 = 100.00
+      const ret = (qty: string) =>
+        A.post('/purchase-returns', {
+          purchaseId: p.id,
+          reason: 'wrong grade',
+          items: [{ purchaseItemId: p.items[0].id, quantity: qty }],
+        });
+      const first = (await ret('1').expect(201)).body.data;
+      expect(first).toMatchObject({ total: '50.20', roundOffAdjustment: '0.00' }); // not finished yet
+      expect(await supplierBalance(sup.id)).toBe('49.80');
+      const last = (await ret('1').expect(201)).body.data;
+      expect(last).toMatchObject({ total: '49.80', roundOffAdjustment: '-0.40' });
+      expect(await supplierBalance(sup.id)).toBe('0.00');
+      await expectBooksAgree();
+    });
+
+    it('round-off is not credited while part of the order is still to arrive', async () => {
+      const r = await rice();
+      const sup = await supplier();
+      const p = await buy(sup.id, [item(r.id, U.BAG, '2', '50.20')], { roundOff: '-0.40' });
+      const itemId = p.items[0].id as string;
+      await A.post(`/purchases/${p.id}/receive`, { lines: [{ itemId, quantity: '1' }] }).expect(
+        201,
+      );
+      const ret = (
+        await A.post('/purchase-returns', {
+          purchaseId: p.id,
+          reason: 'wrong grade',
+          items: [{ purchaseItemId: itemId, quantity: '1' }],
+        }).expect(201)
+      ).body.data;
+      expect(ret).toMatchObject({ total: '50.20', roundOffAdjustment: '0.00' });
+      expect(await supplierBalance(sup.id)).toBe('0.00');
+      // the rest arrives later: its payable AND the round-off are billed then
+      await A.post(`/purchases/${p.id}/receive`, {}).expect(201);
+      expect(await supplierBalance(sup.id)).toBe('49.80');
+      await expectBooksAgree();
+    });
+
+    it("supplier payments use the branch's one cash register (no second register is created)", async () => {
+      const r = await rice();
+      const sup = await supplier();
+      await buy(sup.id, [item(r.id, U.BAG, '1', '1000')], { receiveNow: true });
+      const before = await ctx.prisma.cashRegister.findMany({ where: { branchId: shop.branchId } });
+      expect(before).toHaveLength(1);
+      await A.post(`/suppliers/${sup.id}/payments`, { amount: '100', method: 'CASH' }).expect(201);
+      const after = await ctx.prisma.cashRegister.findMany({ where: { branchId: shop.branchId } });
+      expect(after.map((c) => c.id)).toEqual(before.map((c) => c.id));
+      const entry = await ctx.prisma.cashbookEntry.findFirstOrThrow({
+        where: { branchId: shop.branchId, kind: 'SUPPLIER_PAYMENT' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(entry.registerId).toBe(before[0]!.id);
+    });
+
+    it('a payment can be reversed only from the branch it was made in', async () => {
+      const second = (
+        await api(shop.token)
+          .post('/branches', { code: `R${++n}`, name: 'Reversal branch' }, null)
+          .expect(201)
+      ).body.data;
+      const B = api(shop.token, second.id);
+      const r = await rice();
+      const sup = await supplier();
+      await B.post('/purchases', {
+        supplierId: sup.id,
+        items: [item(r.id, U.BAG, '1', '1000')],
+        receiveNow: true,
+      }).expect(201);
+      const pay = (
+        await B.post(`/suppliers/${sup.id}/payments`, { amount: '300', method: 'CASH' }).expect(201)
+      ).body.data;
+      const body = { reason: 'entered by mistake' };
+
+      // a manager who works in the first branch only
+      const managerToken = await hire(shop, 'Manager');
+      const fromFirstBranch = api(managerToken, shop.branchId);
+      const noBranch = api(managerToken);
+      const fromSecondBranch = api(managerToken, second.id);
+      expect(
+        errCode(
+          await fromFirstBranch.post(`/supplier-payments/${pay.id}/reverse`, body).expect(404),
+        ),
+      ).toBe('PAYMENT_NOT_FOUND');
+      expect(
+        errCode(await noBranch.post(`/supplier-payments/${pay.id}/reverse`, body).expect(400)),
+      ).toBe('BRANCH_REQUIRED');
+      expect(
+        errCode(
+          await fromSecondBranch.post(`/supplier-payments/${pay.id}/reverse`, body).expect(403),
+        ),
+      ).toBe('BRANCH_FORBIDDEN');
+      expect(await supplierBalance(sup.id)).toBe('700.00'); // untouched
+
+      // the owner, from the payment's own branch, can
+      await B.post(`/supplier-payments/${pay.id}/reverse`, body).expect(201);
+      expect(await supplierBalance(sup.id)).toBe('1000.00');
+      await expectBooksAgree();
+    });
+
+    it('a switched-off branch can no longer be worked in', async () => {
+      const second = (
+        await api(shop.token)
+          .post('/branches', { code: `Z${++n}`, name: 'Closing branch' }, null)
+          .expect(201)
+      ).body.data;
+      const B = api(shop.token, second.id);
+      await B.get('/purchases').expect(200);
+      await api(shop.token).patch(`/branches/${second.id}`, { isActive: false }).expect(200);
+      expect(errCode(await B.get('/purchases').expect(403))).toBe('BRANCH_FORBIDDEN');
+      await api(shop.token).patch(`/branches/${second.id}`, { isActive: true }).expect(200);
+      await B.get('/purchases').expect(200);
+    });
+
+    it('stock movements can be filtered by whole days in India time (the end day is included)', async () => {
+      const m = await soap();
+      await A.post('/inventory/opening-stock', {
+        productId: m.id,
+        unitId: U.PCS,
+        quantity: '5',
+        unitCost: '10',
+      }).expect(201);
+      const today = todayInIndia();
+      const total = async (qs: string) =>
+        (await A.get(`/inventory/movements?productId=${m.id}&${qs}`).expect(200)).body.meta
+          .total as number;
+      expect(await total(`from=${today}&to=${today}`)).toBe(1);
+      expect(await total(`to=${today}`)).toBe(1);
+      expect(await total(`from=${today}`)).toBe(1);
+      expect(await total(`to=${addDays(-1)}`)).toBe(0);
+      expect(await total(`from=${addDays(1)}`)).toBe(0);
+    });
+  });
+
+  describe('date filters', () => {
+    it('impossible dates in list filters are a clear 400, never a server error', async () => {
+      const sup = await supplier();
+      const bad = '2026-02-31';
+      for (const url of [
+        `/purchases?from=${bad}`,
+        `/purchases?to=${bad}`,
+        `/inventory/movements?from=${bad}`,
+        `/inventory/movements?to=${bad}`,
+        `/suppliers/${sup.id}/ledger?from=${bad}`,
+        `/supplier-payments?to=${bad}`,
+      ]) {
+        const res = await A.get(url);
+        expect([url, res.status]).toEqual([url, 400]);
+        expect(errCode(res)).toBe('INVALID_DATE');
+      }
+    });
+  });
+
   // ---------- A. access control and isolation ----------
   describe('access control and isolation', () => {
     it('cashiers cannot touch suppliers or purchases; managers can', async () => {
@@ -1317,9 +1511,7 @@ suite('Procurement (real database)', () => {
         reason: 'not mine',
         items: [{ purchaseItemId: p.items[0].id, quantity: '1' }],
       }).expect(404);
-      await api(other.token)
-        .post(`/supplier-payments/${pay.id}/reverse`, { reason: 'not yours' })
-        .expect(404);
+      await O.post(`/supplier-payments/${pay.id}/reverse`, { reason: 'not yours' }).expect(404);
       // buying from this shop's supplier, or buying this shop's product, is refused
       await O.post('/purchases', {
         supplierId: sup.id,
@@ -1457,9 +1649,9 @@ suite('Procurement (real database)', () => {
         reason: 'spoiled',
         items: [{ purchaseItemId: p.items[0].id, quantity: '1' }],
       }).expect(201);
-      await api(shop.token)
-        .post(`/supplier-payments/${pay.id}/reverse`, { reason: 'entered by mistake' })
-        .expect(201);
+      await A.post(`/supplier-payments/${pay.id}/reverse`, { reason: 'entered by mistake' }).expect(
+        201,
+      );
       await api(shop.token).post(`/suppliers/${sup.id}/deactivate`, {}, null).expect(200);
       const actions = (
         await ctx.prisma.auditLog.findMany({

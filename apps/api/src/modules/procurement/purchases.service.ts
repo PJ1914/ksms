@@ -6,6 +6,7 @@ import { DomainError } from '../../common/errors/domain.error';
 import { IdempotencyService } from '../../common/idempotency/idempotency.service';
 import { DocumentNumberService } from '../../common/numbering/document-number.service';
 import { Paginated } from '../../common/pagination/paginated';
+import { dateOnly } from '../../common/utils/dates';
 import type { Db } from '../../database/db.types';
 import { PrismaService } from '../../database/prisma.service';
 import type { Prisma } from '../../generated/prisma/client';
@@ -552,8 +553,8 @@ export class PurchasesService {
       ...(q.from || q.to
         ? {
             purchaseDate: {
-              ...(q.from ? { gte: new Date(q.from) } : {}),
-              ...(q.to ? { lte: new Date(q.to) } : {}),
+              ...(q.from ? { gte: dateOnly(q.from, 'from') } : {}),
+              ...(q.to ? { lte: dateOnly(q.to, 'to') } : {}),
             },
           }
         : {}),
