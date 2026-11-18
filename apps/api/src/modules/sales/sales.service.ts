@@ -11,7 +11,7 @@ import { timestampRange } from '../../common/utils/dates';
 import { uuidv7 } from '../../common/utils/ids';
 import type { Db } from '../../database/db.types';
 import { PrismaService } from '../../database/prisma.service';
-import type { Prisma } from '../../generated/prisma/client';
+import { Prisma } from '../../generated/prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { ProductsService } from '../catalog/products.service';
 import { CustomerLedgerService } from '../customers/customer-ledger.service';
@@ -32,6 +32,9 @@ export interface Permissions {
   isOwner: boolean;
   keys: ReadonlySet<string>;
 }
+/** Longest a checkout may take before it is rolled back (nothing is saved on a timeout). */
+const CHECKOUT_TIMEOUT_MS = 60_000;
+
 export const may = (p: Permissions, key: string) => p.isOwner || p.keys.has(key);
 
 /**
@@ -65,19 +68,38 @@ export class SalesService {
       'POST /sales',
       { branchId, ...dto },
       async (tx) => {
-        const org = await tx.organization.findUniqueOrThrow({
-          where: { id: t.organizationId },
-          select: { gstEnabled: true, defaultTaxMode: true, maxCashierDiscountPercent: true },
-        });
-        if (org.gstEnabled) {
-          throw new DomainError(
-            'GST_BILLING_NOT_READY',
-            'GST bills arrive with the GST billing update. Switch GST off in shop settings to sell now',
-          );
-        }
+        const [org, branch] = await Promise.all([
+          tx.organization.findUniqueOrThrow({
+            where: { id: t.organizationId },
+            select: {
+              name: true,
+              legalName: true,
+              pan: true,
+              phone: true,
+              gstEnabled: true,
+              defaultTaxMode: true,
+              maxCashierDiscountPercent: true,
+            },
+          }),
+          tx.branch.findUniqueOrThrow({
+            where: { id: branchId },
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              addressLine: true,
+              city: true,
+              state: true,
+              pincode: true,
+              stateCode: true,
+              gstin: true,
+              phone: true,
+            },
+          }),
+        ]);
 
-        const priced = await this.priceBill(tx, t, dto, perms, org);
-        const { customer, lines, figures, overrides } = priced;
+        const priced = await this.priceBill(tx, t, dto, perms, org, branch);
+        const { customer, lines, figures, overrides, placeOfSupplyStateCode, interState } = priced;
 
         // ---- how it is paid
         const payments = dto.payments.map((p) => ({ ...p, amount: new Decimal(p.amount) }));
@@ -125,12 +147,21 @@ export class SalesService {
           })),
         );
 
-        // ---- bill number, then the sale itself with its permanent snapshots
+        // ---- invoice & bill number (taken after stock, so refused bills waste no number)
+        const invoiceType = !org.gstEnabled
+          ? 'NORMAL'
+          : figures.taxTotal.gt(0)
+            ? 'GST'
+            : 'BILL_OF_SUPPLY';
+        const series = !org.gstEnabled ? 'B' : invoiceType === 'GST' ? 'INV' : 'BOS';
         const number = await this.numbers.next(
           tx,
           { organizationId: t.organizationId, branchId },
           'INVOICE',
-          'B',
+          series,
+          undefined,
+          // GST documents must fit the 16-character limit of Rule 46; plain retail bills keep the long form
+          org.gstEnabled ? 'compact' : 'full',
         );
         await tx.sale.create({
           data: {
@@ -142,12 +173,16 @@ export class SalesService {
             saleNumber: number.number,
             subtotal: figures.subtotal.toFixed(2),
             discountTotal: figures.discountTotal.toFixed(2),
-            taxableTotal: figures.exactTotal.toFixed(2),
+            taxableTotal: figures.taxableTotal.toFixed(2),
+            cgstTotal: figures.cgstTotal.toFixed(2),
+            sgstTotal: figures.sgstTotal.toFixed(2),
+            igstTotal: figures.igstTotal.toFixed(2),
             roundOff: figures.roundOff.toFixed(2),
             total: figures.total.toFixed(2),
             paidTotal: paid.toFixed(2),
             creditAmount: credit.toFixed(2),
             taxMode: org.defaultTaxMode,
+            placeOfSupplyStateCode,
             soldById: t.userId,
             items: {
               create: lines.map((l, i) => {
@@ -167,10 +202,89 @@ export class SalesService {
                   unitPrice: effectiveUnitPrice(f.gross, l.quantity).toFixed(2),
                   mrpSnapshot: l.price.mrp?.toFixed(2) ?? null,
                   discountAmount: f.discount.toFixed(2),
-                  taxRatePercent: '0',
-                  taxableValue: f.net.toFixed(2),
+                  taxRatePercent: f.taxRatePercent.toFixed(4),
+                  taxableValue: f.taxableValue.toFixed(2),
+                  cgstAmount: f.cgst.toFixed(2),
+                  sgstAmount: f.sgst.toFixed(2),
+                  igstAmount: f.igst.toFixed(2),
                   lineTotal: f.net.toFixed(2),
                   unitCostSnapshot: stock[i]!.averageCost,
+                };
+              }),
+            },
+          },
+        });
+
+        await tx.invoice.create({
+          data: {
+            id: uuidv7(),
+            organizationId: t.organizationId,
+            branchId,
+            saleId,
+            type: invoiceType,
+            status: 'ISSUED',
+            series: number.series,
+            sequenceNumber: number.sequence,
+            invoiceNumber: number.number,
+            sellerSnapshot: {
+              organizationName: org.name,
+              legalName: org.legalName,
+              branchName: branch.name,
+              branchCode: branch.code,
+              addressLine: branch.addressLine,
+              city: branch.city,
+              state: branch.state,
+              pincode: branch.pincode,
+              stateCode: branch.stateCode,
+              gstin: branch.gstin,
+              pan: org.pan,
+              phone: branch.phone ?? org.phone,
+            },
+            buyerSnapshot: customer
+              ? {
+                  id: customer.id,
+                  name: customer.name,
+                  phone: customer.phone,
+                  gstin: customer.gstin,
+                  stateCode: customer.stateCode,
+                  addressLine: customer.addressLine,
+                }
+              : Prisma.JsonNull,
+            totalsSnapshot: {
+              subtotal: figures.subtotal.toFixed(2),
+              discountTotal: figures.discountTotal.toFixed(2),
+              taxableTotal: figures.taxableTotal.toFixed(2),
+              cgstTotal: figures.cgstTotal.toFixed(2),
+              sgstTotal: figures.sgstTotal.toFixed(2),
+              igstTotal: figures.igstTotal.toFixed(2),
+              taxTotal: figures.taxTotal.toFixed(2),
+              roundOff: figures.roundOff.toFixed(2),
+              total: figures.total.toFixed(2),
+              paidTotal: paid.toFixed(2),
+              creditAmount: credit.toFixed(2),
+              taxMode: org.defaultTaxMode,
+              placeOfSupplyStateCode,
+              interState,
+              lines: lines.map((l, i) => {
+                const f = figures.lines[i]!;
+                return {
+                  saleItemId: itemIds[i]!,
+                  productId: l.price.productId,
+                  name: l.price.name,
+                  sku: l.price.sku,
+                  hsn: l.price.hsnCode,
+                  unitCode: l.price.unitCode,
+                  quantity: l.quantity.toFixed(3),
+                  unitPrice: effectiveUnitPrice(f.gross, l.quantity).toFixed(2),
+                  gross: f.gross.toFixed(2),
+                  discount: f.discount.toFixed(2),
+                  taxMode: f.taxMode,
+                  taxRatePercent: f.taxRatePercent.toFixed(4),
+                  taxableValue: f.taxableValue.toFixed(2),
+                  cgst: f.cgst.toFixed(2),
+                  sgst: f.sgst.toFixed(2),
+                  igst: f.igst.toFixed(2),
+                  lineTotal: f.net.toFixed(2),
                 };
               }),
             },
@@ -266,6 +380,8 @@ export class SalesService {
         });
         return this.view(tx, t.organizationId, saleId);
       },
+      // A bill is about 15 database calls per line, so a long bill on a slow link needs more than the usual 20 seconds.
+      { timeoutMs: CHECKOUT_TIMEOUT_MS },
     );
   }
 
@@ -277,17 +393,24 @@ export class SalesService {
   async preview(t: TenantContext, dto: PreviewSaleDto) {
     const branchId = branchOf(t);
     const perms = await this.rolePerms.get(t.roleId);
-    const org = await this.prisma.organization.findUniqueOrThrow({
-      where: { id: t.organizationId },
-      select: { gstEnabled: true, maxCashierDiscountPercent: true },
-    });
-    if (org.gstEnabled) {
-      throw new DomainError(
-        'GST_BILLING_NOT_READY',
-        'GST bills arrive with the GST billing update. Switch GST off in shop settings to sell now',
-      );
-    }
-    const { customer, lines, figures } = await this.priceBill(this.prisma, t, dto, perms, org);
+    const [org, branch] = await Promise.all([
+      this.prisma.organization.findUniqueOrThrow({
+        where: { id: t.organizationId },
+        select: { gstEnabled: true, defaultTaxMode: true, maxCashierDiscountPercent: true },
+      }),
+      this.prisma.branch.findUniqueOrThrow({
+        where: { id: branchId },
+        select: { stateCode: true, gstin: true },
+      }),
+    ]);
+    const { customer, lines, figures, placeOfSupplyStateCode, interState } = await this.priceBill(
+      this.prisma,
+      t,
+      dto,
+      perms,
+      org,
+      branch,
+    );
     const payments = (dto.payments ?? []).map((p) => ({ ...p, amount: new Decimal(p.amount) }));
     const { paid, credit } = settle(figures.total, payments);
 
@@ -349,35 +472,79 @@ export class SalesService {
           priceSource: l.price.priceSource,
           gross: f.gross.toFixed(2),
           discount: f.discount.toFixed(2),
+          taxRatePercent: f.taxRatePercent.toFixed(4),
+          taxableValue: f.taxableValue.toFixed(2),
+          cgst: f.cgst.toFixed(2),
+          sgst: f.sgst.toFixed(2),
+          igst: f.igst.toFixed(2),
+          tax: f.tax.toFixed(2),
           net: f.net.toFixed(2),
         };
       }),
       subtotal: figures.subtotal.toFixed(2),
       discountTotal: figures.discountTotal.toFixed(2),
+      taxableTotal: figures.taxableTotal.toFixed(2),
+      cgstTotal: figures.cgstTotal.toFixed(2),
+      sgstTotal: figures.sgstTotal.toFixed(2),
+      igstTotal: figures.igstTotal.toFixed(2),
+      taxTotal: figures.taxTotal.toFixed(2),
       roundOff: figures.roundOff.toFixed(2),
       total: figures.total.toFixed(2),
       paid: paid.toFixed(2),
       credit: credit.toFixed(2),
+      placeOfSupplyStateCode,
+      interState,
       warnings: { stock: stockWarnings, creditLimit: creditWarning },
     };
   }
 
   /**
    * Prices a bill exactly as checkout does: the customer, every line from the catalogue (or an allowed typed price),
-   * the discounts and their limits, and the rounded total. Read-only, so the preview can use it too.
+   * the discounts and their limits, GST (when enabled) and the rounded total. Read-only, so the preview can use it too.
    */
   private async priceBill(
     db: Db,
     t: TenantContext,
-    dto: { customerId?: string; items: SaleItemDto[]; billDiscount?: string },
+    dto: {
+      customerId?: string;
+      items: SaleItemDto[];
+      billDiscount?: string;
+      placeOfSupplyStateCode?: string;
+    },
     perms: Permissions,
-    org: { maxCashierDiscountPercent: { toString(): string } },
+    org: {
+      gstEnabled: boolean;
+      defaultTaxMode: 'INCLUSIVE' | 'EXCLUSIVE';
+      maxCashierDiscountPercent: { toString(): string };
+    },
+    branch: { stateCode: string | null; gstin: string | null },
   ) {
-    let customer: { id: string; name: string } | null = null;
+    if (org.gstEnabled && (!branch.gstin || !branch.stateCode)) {
+      throw new DomainError(
+        'BRANCH_GST_INCOMPLETE',
+        'Set the branch GSTIN and 2-digit state code before billing with GST enabled',
+      );
+    }
+
+    let customer: {
+      id: string;
+      name: string;
+      phone: string | null;
+      gstin: string | null;
+      stateCode: string | null;
+      addressLine: string | null;
+    } | null = null;
     if (dto.customerId) {
       customer = await db.customer.findFirst({
         where: { id: dto.customerId, organizationId: t.organizationId, deletedAt: null },
-        select: { id: true, name: true },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          gstin: true,
+          stateCode: true,
+          addressLine: true,
+        },
       });
       if (!customer) throw new AppException('CUSTOMER_NOT_FOUND', 'Customer not found', 404);
     }
@@ -408,14 +575,44 @@ export class SalesService {
           typed: gross.toFixed(2),
         });
       }
+      if (org.gstEnabled && price.isTaxable && price.gstRatePercent === null) {
+        // never bill a taxable product at 0% because its rate was left empty
+        throw new DomainError(
+          'PRODUCT_GST_RATE_MISSING',
+          `${price.name} is marked taxable but has no GST rate. Set its GST rate first`,
+          { line: index + 1, productId: price.productId },
+        );
+      }
+      const taxRatePercent =
+        org.gstEnabled && price.isTaxable
+          ? (price.gstRatePercent ?? new Decimal(0))
+          : new Decimal(0);
+      const taxMode = price.taxMode ?? org.defaultTaxMode;
       lines.push({
         item,
         quantity,
         price,
         gross,
         lineDiscount: new Decimal(item.discount ?? 0),
+        taxRatePercent,
+        taxMode,
       });
     }
+
+    // ---- place of supply & intra/inter-state GST
+    const customerStateFromGstin = customer?.gstin ? customer.gstin.slice(0, 2) : null;
+    const placeOfSupplyStateCode =
+      dto.placeOfSupplyStateCode ??
+      customer?.stateCode ??
+      customerStateFromGstin ??
+      branch.stateCode ??
+      null;
+    const interState = Boolean(
+      org.gstEnabled &&
+      branch.stateCode &&
+      placeOfSupplyStateCode &&
+      placeOfSupplyStateCode !== branch.stateCode,
+    );
 
     // ---- discounts and their limit
     const billDiscount = new Decimal(dto.billDiscount ?? 0);
@@ -426,8 +623,14 @@ export class SalesService {
       });
     }
     const figures = computeSale(
-      lines.map((l) => ({ gross: l.gross, lineDiscount: l.lineDiscount })),
+      lines.map((l) => ({
+        gross: l.gross,
+        lineDiscount: l.lineDiscount,
+        taxRatePercent: l.taxRatePercent,
+        taxMode: l.taxMode,
+      })),
       billDiscount,
+      { gstEnabled: org.gstEnabled, interState },
     );
     const limit = dec(org.maxCashierDiscountPercent);
     if (figures.discountPercent.gt(limit) && !may(perms, 'discount.override_limit')) {
@@ -445,7 +648,7 @@ export class SalesService {
       );
     }
 
-    return { customer, lines, figures, overrides };
+    return { customer, lines, figures, overrides, placeOfSupplyStateCode, interState };
   }
 
   async get(t: TenantContext, id: string) {
@@ -500,12 +703,27 @@ export class SalesService {
       where: { id, organizationId, ...(branchId ? { branchId } : {}) },
       include: {
         items: { orderBy: { id: 'asc' } },
-        customer: { select: { id: true, name: true, phone: true } },
+        customer: { select: { id: true, name: true, phone: true, gstin: true, stateCode: true } },
         soldBy: { select: { id: true, fullName: true } },
         payments: { include: { payment: true }, orderBy: { createdAt: 'asc' } },
+        invoice: {
+          select: {
+            id: true,
+            invoiceNumber: true,
+            type: true,
+            status: true,
+            series: true,
+            sequenceNumber: true,
+            issuedAt: true,
+          },
+        },
       },
     });
     if (!s) throw new AppException('SALE_NOT_FOUND', 'Sale not found', 404);
+    const cgstTotal = dec(s.cgstTotal);
+    const sgstTotal = dec(s.sgstTotal);
+    const igstTotal = dec(s.igstTotal);
+    const taxTotal = cgstTotal.plus(sgstTotal).plus(igstTotal);
     return {
       id: s.id,
       saleNumber: s.saleNumber,
@@ -513,8 +731,16 @@ export class SalesService {
       soldAt: s.soldAt,
       soldBy: s.soldBy,
       customer: s.customer,
+      invoice: s.invoice,
+      taxMode: s.taxMode,
+      placeOfSupplyStateCode: s.placeOfSupplyStateCode,
       subtotal: m2(s.subtotal),
       discountTotal: m2(s.discountTotal),
+      taxableTotal: m2(s.taxableTotal),
+      cgstTotal: cgstTotal.toFixed(2),
+      sgstTotal: sgstTotal.toFixed(2),
+      igstTotal: igstTotal.toFixed(2),
+      taxTotal: taxTotal.toFixed(2),
       roundOff: m2(s.roundOff),
       total: m2(s.total),
       paidTotal: m2(s.paidTotal),
@@ -528,6 +754,7 @@ export class SalesService {
         productId: i.productId,
         name: i.productNameSnapshot,
         sku: i.skuSnapshot,
+        hsn: i.hsnSnapshot,
         unitId: i.unitId,
         unitCode: i.unitCodeSnapshot,
         quantity: dec(i.quantity).toFixed(3),
@@ -535,6 +762,12 @@ export class SalesService {
         unitPrice: m2(i.unitPrice),
         mrp: i.mrpSnapshot === null ? null : m2(i.mrpSnapshot),
         discountAmount: m2(i.discountAmount),
+        taxRatePercent: dec(i.taxRatePercent).toFixed(4),
+        taxableValue: m2(i.taxableValue),
+        cgstAmount: m2(i.cgstAmount),
+        sgstAmount: m2(i.sgstAmount),
+        igstAmount: m2(i.igstAmount),
+        taxAmount: dec(i.cgstAmount).plus(dec(i.sgstAmount)).plus(dec(i.igstAmount)).toFixed(2),
         lineTotal: m2(i.lineTotal),
         returnedBaseQuantity: dec(i.returnedBaseQuantity).toFixed(3),
         returnedAmount: m2(i.returnedAmount),

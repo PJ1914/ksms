@@ -32,15 +32,15 @@ Built 2026-11-21 on top of the early slice (TD-61..64). Code: `apps/mobile/app/`
 | `purchases`, `purchase/[id]` | Purchases with filters (waiting for goods, unpaid); a purchase: receive goods, pay, send goods back, cancel                                                                 | `purchase.read`, `purchase.create`, `purchase.cancel`         |
 | `purchase/new`               | Choose supplier and items (unit, quantity, price, discount, batch and expiry), freight, "goods have arrived"                                                                | `purchase.create`                                             |
 | `purchase/return`            | Send goods back to the supplier, naming the batch for tracked products                                                                                                      | `purchase.cancel`                                             |
+| `gst-settings`               | Turn shop GST on or off, choose default price mode (tax inclusive/exclusive), and set branch GSTIN, 2-digit state code and address                                          | `organization.read`, `organization.manage`, `branch.manage`   |
 
 ## What the phone does NOT do yet
 
 - Receive payments from customers (collections, receipts, agents): Phase 11.
-- GST bills, tax and invoice PDF or sharing: Phase 10. A GST-registered shop is told "GST billing not ready yet".
 - Money totals, profit and reports on Home: Phase 13.
 - Working without internet (offline billing and sync): the sync phase.
 - Editing a product's prices and units, categories, expenses, cashbook and daily closing.
-- Printing.
+- Thermal Bluetooth printing (invoices can be shared via the Android share sheet on `sale/[id]`).
 
 ## Testing
 

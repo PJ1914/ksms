@@ -20,6 +20,7 @@ import type { AppRequest, TenantContext } from '../../common/auth/auth.types';
 import { RequireBranch, RequirePermission, Tenant } from '../../common/auth/decorators';
 import { IdempotencyService } from '../../common/idempotency/idempotency.service';
 import { HeldBillsService } from './held-bills.service';
+import { InvoicesService } from './invoices.service';
 import { SaleCancellationService } from './sale-cancellation.service';
 import { SaleReturnsService } from './sale-returns.service';
 import {
@@ -28,6 +29,7 @@ import {
   CreateSaleReturnDto,
   HeldBillDto,
   HeldBillsQuery,
+  InvoicesQuery,
   PreviewSaleDto,
   ReturnsQuery,
   SalesQuery,
@@ -54,6 +56,7 @@ export class SalesController {
     private readonly cancellations: SaleCancellationService,
     private readonly returns: SaleReturnsService,
     private readonly heldBills: HeldBillsService,
+    private readonly invoices: InvoicesService,
     private readonly reconciliation: SalesReconciliationService,
     private readonly idempotency: IdempotencyService,
   ) {}
@@ -207,5 +210,36 @@ export class SalesController {
   @ApiOperation({ summary: 'Discard a parked cart' })
   async removeHeld(@Tenant() t: TenantContext, @Param('id', uuid()) id: string): Promise<void> {
     await this.heldBills.remove(t, id);
+  }
+
+  // ----- invoices (immutable snapshots and PDF)
+
+  @Get('invoices')
+  @RequirePermission('sale.read')
+  @ApiOperation({ summary: 'Invoices of this branch, newest first' })
+  listInvoices(@Tenant() t: TenantContext, @Query() q: InvoicesQuery) {
+    return this.invoices.list(t, q);
+  }
+
+  @Get('invoices/:id')
+  @RequirePermission('sale.read')
+  @ApiOperation({ summary: 'One invoice with its immutable seller, buyer and tax snapshots' })
+  getInvoice(@Tenant() t: TenantContext, @Param('id', uuid()) id: string) {
+    return this.invoices.get(t, id);
+  }
+
+  @Get('invoices/:id/pdf')
+  @RequirePermission('sale.read')
+  @ApiOperation({ summary: 'Download the invoice PDF rendered from its immutable snapshots' })
+  async getInvoicePdf(
+    @Tenant() t: TenantContext,
+    @Param('id', uuid()) id: string,
+    @Res() res: Response,
+  ) {
+    const { filename, buffer } = await this.invoices.pdf(t, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Length', String(buffer.length));
+    res.end(buffer);
   }
 }

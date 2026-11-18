@@ -48,6 +48,17 @@ export default function MoreScreen() {
         ) : null}
       </View>
 
+      {can('organization.read') ? (
+        <>
+          <SectionTitle>Shop & GST</SectionTitle>
+          <ListRow
+            title="GST & billing settings"
+            subtitle="Turn GST on or off, set GSTIN, state code and tax mode"
+            onPress={() => router.push('/gst-settings')}
+          />
+        </>
+      ) : null}
+
       <SectionTitle>Account</SectionTitle>
       <Button
         title="Sign out"

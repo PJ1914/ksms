@@ -301,6 +301,19 @@ export default function NewBillScreen() {
                     tone="success"
                   />
                 ) : null}
+                {isPositive(preview.taxTotal) ? (
+                  <>
+                    <KeyValue label="Taxable value" value={formatINR(preview.taxableTotal)} />
+                    {preview.interState ? (
+                      <KeyValue label="IGST" value={formatINR(preview.igstTotal)} />
+                    ) : (
+                      <>
+                        <KeyValue label="CGST" value={formatINR(preview.cgstTotal)} />
+                        <KeyValue label="SGST" value={formatINR(preview.sgstTotal)} />
+                      </>
+                    )}
+                  </>
+                ) : null}
                 {!isZero(preview.roundOff) ? (
                   <KeyValue label="Round off" value={formatINR(preview.roundOff)} tone="muted" />
                 ) : null}

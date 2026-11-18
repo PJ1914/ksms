@@ -4,6 +4,7 @@ import { CustomersModule } from '../customers/customers.module';
 import { FinanceModule } from '../finance/finance.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { HeldBillsService } from './held-bills.service';
+import { InvoicesService } from './invoices.service';
 import { SaleCancellationService } from './sale-cancellation.service';
 import { SaleReturnsService } from './sale-returns.service';
 import { SalesController } from './sales.controller';
@@ -19,6 +20,7 @@ import { SalesService } from './sales.service';
     SaleCancellationService,
     SaleReturnsService,
     HeldBillsService,
+    InvoicesService,
     SalesReconciliationService,
   ],
 })

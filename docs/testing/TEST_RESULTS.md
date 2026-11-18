@@ -283,4 +283,32 @@ What the contract test replays, in the order the screens do it: opening, adding 
 
 **Not verified:** the screens themselves on a physical phone (layout, keyboard behaviour, camera permission, scanning). The build has no phone or emulator; the owner's walk-through in `docs/guides/PHONE_TESTING.md` is the check. Barcode scanning in particular is untested on a device.
 
-Known gaps of this pass: no offline billing, no customer payments (Phase 11), no GST bills (Phase 10), no product price editing on the phone, no printing.
+Known gaps of this pass: no offline billing, no customer payments (Phase 11), no product price editing on the phone, no printing.
+
+## Phase 10: Billing and GST (2026-11-19)
+
+| Suite                                                                                                                 | Result             |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Sale & GST tax engine unit tests (`sale-math.spec.ts`: inclusive, exclusive, intra-state CGST/SGST, inter-state IGST) | 26 / 26 pass       |
+| Sale & GST tax property/fuzz unit tests (`sale-math.property.spec.ts`: over 2,000 generated bills + worked examples)  | 12 / 12 pass       |
+| Invoice PDF 1.4 generator unit tests (`invoice-pdf.spec.ts`: line counts 1–150, page breaks, IST date, escaping)      | 17 / 17 pass       |
+| Exception filter unit tests (`all-exceptions.filter.spec.ts`: `422`, `409`, `503 SERVER_TOO_SLOW`, safe `500`)        | 7 / 7 pass         |
+| Shared form & payload builders (`@ksms/validation`: product GST/HSN, customer GSTIN/stateCode)                        | 84 / 84 pass       |
+| Shared API client unit tests (`@ksms/api-client`)                                                                     | 2 / 2 pass         |
+| All API unit tests (13 suites)                                                                                        | 180 / 180 pass     |
+| Mobile unit tests (4 suites)                                                                                          | 26 / 26 pass       |
+| API end-to-end tests (`test:e2e`: 2 suites)                                                                           | 37 / 37 pass       |
+| **All integration suites on real PostgreSQL** (`test:int`: 9 suites incl. `gst-audit.int-spec.ts` 9 probes)           | **218 / 218 pass** |
+| Mobile bundle export (`@ksms/mobile export:check`)                                                                    | 1,362 modules OK   |
+
+The Phase 10 tests and audit hardening cover:
+
+- **Tax engine (`computeSale`):** GST off (`0.00` tax regardless of product settings); GST on with `INCLUSIVE` pricing (`tax = round(afterDiscount * rate / (100 + rate))`, `taxable = afterDiscount - tax`); GST on with `EXCLUSIVE` pricing (`tax = round(afterDiscount * rate / 100)`, `net = taxable + tax`); intra-state split (`CGST = floor(tax / 2)` to 2 decimals, `SGST = tax - CGST`, never losing an odd paisa); inter-state `IGST`; line and bill discounts applied before tax; invalid tax rates (`< 0` or `> 100`) refused; `PRODUCT_GST_RATE_MISSING` enforced when a GST-registered shop bills a taxable product without an explicit GST rate.
+- **Branch GST completeness:** a GST-enabled shop without branch `gstin` and 2-digit `stateCode` is refused with `422 BRANCH_GST_INCOMPLETE`.
+- **Invoice numbering & types (16-char GST limit & DB rules):** atomic creation of an `invoices` row on every sale using `DocumentNumberService` and DB `CHECK` constraints (`20261121000000_gst_invoice_rules`):
+  - `NORMAL` invoice in series `B` (`B/2026-27/000001`) when `org.gstEnabled = false`;
+  - `GST` Tax Invoice in series `INV` (`INV/26-27/000001`, max 16 chars) when `org.gstEnabled = true` and `taxTotal > 0`;
+  - `BILL_OF_SUPPLY` in series `BOS` (`BOS/26-27/000001`, max 16 chars) when `org.gstEnabled = true` and all items are exempt (`taxTotal == 0`).
+- **Immutable snapshots & cancellation:** `sellerSnapshot`, `buyerSnapshot`, and `totalsSnapshot` are persisted at issue time and protected by the `ksms_invoice_snapshot_immutable` DB trigger; cancelling a sale marks its invoice `CANCELLED`.
+- **Invoice endpoints, multi-page PDF & resilience:** `GET /invoices`, `GET /invoices/:id`, and `GET /invoices/:id/pdf` (returns paginated `%PDF-1.4` binary with `application/pdf`, IST dates, line wrapping, and reverse-charge line), cross-branch/cross-organization isolation (`404`), and 60s checkout timeout (`503 SERVER_TOO_SLOW`).
+- **Reconciliation (`GET /sales/reconciliation`):** verifies every sale has an invoice with matching number and status, and every sale's `taxable_total`, `cgst_total`, `sgst_total`, and `igst_total` match the sum of its lines.

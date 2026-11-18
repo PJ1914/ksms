@@ -1,6 +1,6 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { Share, Text, View } from 'react-native';
 import { getData } from '@/api/client';
 import type { SaleDetail } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
@@ -23,7 +23,7 @@ import { formatDateTime, trimZeros, words } from '@/utils/format';
 
 export default function SaleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { can } = useAuth();
+  const { can, profile } = useAuth();
   const {
     data: s,
     loading,
@@ -51,6 +51,35 @@ export default function SaleScreen() {
     }
   }
 
+  async function shareInvoice() {
+    if (!s) return;
+    const invNo = s.invoice?.invoiceNumber ?? s.saleNumber;
+    const lines = s.items.map(
+      (i) =>
+        `• ${i.name}: ${trimZeros(i.quantity)} ${i.unitCode} × ${formatINR(i.unitPrice)} = ${formatINR(i.lineTotal)}`,
+    );
+    const parts = [
+      `${profile?.organization.name ?? 'KSMS'} — ${s.invoice?.type === 'GST' ? 'Tax Invoice' : s.invoice?.type === 'BILL_OF_SUPPLY' ? 'Bill of Supply' : 'Invoice'} ${invNo}`,
+      `Date: ${formatDateTime(s.soldAt)}`,
+      `Customer: ${s.customer?.name ?? 'Walk-in'}`,
+      '',
+      ...lines,
+      '',
+      ...(isPositive(s.discountTotal) ? [`Discount: -${formatINR(s.discountTotal)}`] : []),
+      ...(isPositive(s.taxTotal)
+        ? [
+            `Taxable: ${formatINR(s.taxableTotal)}`,
+            ...(isPositive(s.igstTotal)
+              ? [`IGST: ${formatINR(s.igstTotal)}`]
+              : [`CGST: ${formatINR(s.cgstTotal)} | SGST: ${formatINR(s.sgstTotal)}`]),
+          ]
+        : []),
+      `Total: ${formatINR(s.total)}`,
+      `Paid: ${formatINR(s.paidTotal)}${isPositive(s.creditAmount) ? ` | On Khata: ${formatINR(s.creditAmount)}` : ''}`,
+    ];
+    await Share.share({ title: `Invoice ${invNo}`, message: parts.join('\n') });
+  }
+
   return (
     <Screen onRefresh={() => void reload(true)} refreshing={refreshing}>
       <Stack.Screen options={{ title: s.saleNumber }} />
@@ -65,6 +94,12 @@ export default function SaleScreen() {
           <Badge text={cancelled ? 'Cancelled' : 'Completed'} tone={cancelled ? 'bad' : 'good'} />
         </View>
         <KeyValue label="When" value={formatDateTime(s.soldAt)} />
+        {s.invoice ? (
+          <KeyValue
+            label="Invoice"
+            value={`${s.invoice.invoiceNumber} (${words(s.invoice.type)})`}
+          />
+        ) : null}
         <KeyValue label="Customer" value={s.customer?.name ?? 'Walk-in'} />
         <KeyValue label="Sold by" value={s.soldBy.fullName} />
         {cancelled && s.cancelReason ? (
@@ -96,6 +131,19 @@ export default function SaleScreen() {
         {isPositive(s.discountTotal) ? (
           <KeyValue label="Discount" value={`- ${formatINR(s.discountTotal)}`} tone="success" />
         ) : null}
+        {isPositive(s.taxTotal) ? (
+          <>
+            <KeyValue label="Taxable value" value={formatINR(s.taxableTotal)} />
+            {isPositive(s.igstTotal) ? (
+              <KeyValue label="IGST" value={formatINR(s.igstTotal)} />
+            ) : (
+              <>
+                <KeyValue label="CGST" value={formatINR(s.cgstTotal)} />
+                <KeyValue label="SGST" value={formatINR(s.sgstTotal)} />
+              </>
+            )}
+          </>
+        ) : null}
         {!isZero(s.roundOff) ? (
           <KeyValue label="Round off" value={formatINR(s.roundOff)} tone="muted" />
         ) : null}
@@ -120,6 +168,8 @@ export default function SaleScreen() {
           <KeyValue label="Money given back" value={formatINR(s.refundedTotal)} tone="muted" />
         ) : null}
       </Card>
+
+      <Button title="Share invoice" variant="secondary" onPress={() => void shareInvoice()} />
 
       {!cancelled && can('sale.return') && returnable ? (
         <Button

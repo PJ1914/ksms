@@ -18,7 +18,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-// Money and quantities travel as decimal STRINGS, never JSON numbers.
+import { STATE_CODE_REGEX } from '../organization/organization.dto';
 const MONEY = /^\d{1,11}(\.\d{1,2})?$/;
 const QTY = /^\d{1,11}(\.\d{1,3})?$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -61,6 +61,10 @@ export class CreateSaleDto {
   items!: SaleItemDto[];
   /** Rupees off the whole bill, shared across the lines. Needs discount.apply. */
   @IsOptional() @Matches(MONEY, msg('billDiscount')) billDiscount?: string;
+  /** Optional 2-digit GST place of supply state code; defaults to customer stateCode or branch stateCode. */
+  @IsOptional()
+  @Matches(STATE_CODE_REGEX, { message: 'placeOfSupplyStateCode must be a 2-digit GST state code' })
+  placeOfSupplyStateCode?: string;
   /** How the bill is paid now. Whatever is not paid goes on the customer's account (credit). */
   @IsArray()
   @ArrayMaxSize(10)
@@ -83,6 +87,9 @@ export class PreviewSaleDto {
   @Type(() => SaleItemDto)
   items!: SaleItemDto[];
   @IsOptional() @Matches(MONEY, msg('billDiscount')) billDiscount?: string;
+  @IsOptional()
+  @Matches(STATE_CODE_REGEX, { message: 'placeOfSupplyStateCode must be a 2-digit GST state code' })
+  placeOfSupplyStateCode?: string;
   /** Optional: when given they are checked and split into paid and credit, as checkout would. */
   @IsOptional()
   @IsArray()
@@ -144,4 +151,17 @@ export class HeldBillDto {
 export class HeldBillsQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize?: number;
+}
+
+export class InvoicesQuery {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize?: number;
+  @IsOptional() @Matches(DATE) from?: string;
+  @IsOptional() @Matches(DATE) to?: string;
+  @IsOptional() @IsIn(['NORMAL', 'GST', 'BILL_OF_SUPPLY']) type?:
+    'NORMAL' | 'GST' | 'BILL_OF_SUPPLY';
+  @IsOptional() @IsIn(['ISSUED', 'CANCELLED']) status?: 'ISSUED' | 'CANCELLED';
+  @IsOptional() @IsUUID() saleId?: string;
+  /** Matches the invoice number. */
+  @IsOptional() @trim() @IsString() @MaxLength(40) q?: string;
 }

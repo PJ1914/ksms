@@ -86,6 +86,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message: 'A record with these values already exists',
       };
     }
+    // The database could not finish in time (transaction timeout, or no free connection): nothing was saved
+    if (this.isPrismaCode(exception, 'P2028') || this.isPrismaCode(exception, 'P2024')) {
+      return {
+        status: 503,
+        code: 'SERVER_TOO_SLOW',
+        message:
+          'The server was too slow to finish this. Nothing was saved. Try again; for a very large bill, split it in two',
+      };
+    }
     return { status: 500, code: 'INTERNAL_ERROR', message: 'Something went wrong on our side' };
   }
 

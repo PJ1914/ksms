@@ -18,6 +18,11 @@ export class DocumentNumberService {
     kind: DocumentKind,
     series: string,
     date: Date = new Date(),
+    /**
+     * 'full' gives B/2026-27/000001. 'compact' gives INV/26-27/000001: GST Rules 46 and 53 allow an invoice or credit
+     * note number at most 16 characters, so GST documents use the two-digit form (series up to 3 letters).
+     */
+    form: 'full' | 'compact' = 'full',
   ): Promise<{ number: string; sequence: number; series: string; financialYear: string }> {
     const fy = financialYear(date);
     await tx.$executeRaw`
@@ -32,7 +37,7 @@ export class DocumentNumberService {
       RETURNING next_number - 1 AS n`;
     const sequence = Number(rows[0]!.n);
     return {
-      number: `${series}/${fy}/${String(sequence).padStart(6, '0')}`,
+      number: `${series}/${form === 'compact' ? fy.slice(2) : fy}/${String(sequence).padStart(6, '0')}`,
       sequence,
       series,
       financialYear: fy,

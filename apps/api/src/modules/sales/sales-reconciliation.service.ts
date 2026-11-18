@@ -24,6 +24,8 @@ export class SalesReconciliationService {
       cancelledStock,
       paymentCashbook,
       refunds,
+      invoices,
+      taxTotals,
     ] = await Promise.all([
       // 1. A bill's total is its lines plus its round-off.
       this.prisma.$queryRaw<object[]>`
@@ -124,6 +126,29 @@ export class SalesReconciliationService {
                 + COALESCE((SELECT sum(-c.amount) FROM cashbook_entries c
                             WHERE c.reference_type = 'SALE_CANCELLATION' AND c.reference_id = s.id), 0)
         LIMIT 50`,
+      // 12. Every sale has an invoice with matching number and status (ISSUED for COMPLETED, CANCELLED for CANCELLED).
+      this.prisma.$queryRaw<object[]>`
+        SELECT s.id AS "saleId", s.sale_number AS "saleNumber", s.status::text AS "saleStatus",
+               inv.invoice_number AS "invoiceNumber", inv.status::text AS "invoiceStatus"
+        FROM sales s LEFT JOIN invoices inv ON inv.sale_id = s.id
+        WHERE s.organization_id = ${org}::uuid
+          AND (inv.id IS NULL
+            OR inv.invoice_number <> s.sale_number
+            OR (s.status = 'COMPLETED' AND inv.status <> 'ISSUED')
+            OR (s.status = 'CANCELLED' AND inv.status <> 'CANCELLED'))
+        LIMIT 50`,
+      // 13. Sale tax and taxable columns equal the sums of their line items, and taxable + tax = line_total on every line.
+      this.prisma.$queryRaw<object[]>`
+        SELECT s.id AS "saleId"
+        FROM sales s LEFT JOIN sale_items i ON i.sale_id = s.id
+        WHERE s.organization_id = ${org}::uuid
+        GROUP BY s.id
+        HAVING s.taxable_total <> COALESCE(sum(i.taxable_value), 0)
+            OR s.cgst_total <> COALESCE(sum(i.cgst_amount), 0)
+            OR s.sgst_total <> COALESCE(sum(i.sgst_amount), 0)
+            OR s.igst_total <> COALESCE(sum(i.igst_amount), 0)
+            OR bool_or(i.taxable_value + i.cgst_amount + i.sgst_amount + i.igst_amount <> i.line_total)
+        LIMIT 50`,
     ]);
     const result = {
       billTotals: totals,
@@ -137,6 +162,8 @@ export class SalesReconciliationService {
       cancelledBillsStockBack: cancelledStock,
       paymentsVsCashbook: paymentCashbook,
       refundsVsPayments: refunds,
+      invoicesVsSales: invoices,
+      taxTotalsVsLines: taxTotals,
     };
     return { consistent: Object.values(result).every((rows) => rows.length === 0), ...result };
   }

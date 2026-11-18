@@ -7,11 +7,22 @@ import { MAX_AMOUNT, allocateProportionally, money, sum } from '../../../common/
  * trusted. Money is rounded half-up to the paisa; the bill total is rounded half-up to the whole rupee.
  */
 
+export interface SaleTaxOptions {
+  /** Whether the shop is GST-registered. When false, no GST is charged regardless of product settings. */
+  gstEnabled?: boolean;
+  /** True when the buyer's state code differs from the branch's state code (IGST instead of CGST + SGST). */
+  interState?: boolean;
+}
+
 export interface SaleLineInput {
   /** Price of the line before any discount (quantity x price, from the catalogue or an allowed override). */
   gross: Decimal;
   /** Discount typed on this line, in rupees. */
   lineDiscount: Decimal;
+  /** Effective GST rate percent for this line (0 when non-taxable or shop is not GST-registered). */
+  taxRatePercent?: Decimal;
+  /** Effective tax mode for this line ('INCLUSIVE' or 'EXCLUSIVE'; defaults to 'INCLUSIVE'). */
+  taxMode?: 'INCLUSIVE' | 'EXCLUSIVE';
 }
 
 export interface SaleLineFigures {
@@ -21,7 +32,18 @@ export interface SaleLineFigures {
   billDiscountShare: Decimal;
   /** lineDiscount + billDiscountShare. */
   discount: Decimal;
-  /** What the customer pays for this line: gross - discount. */
+  /** Gross minus discount (before adding exclusive tax). */
+  afterDiscount: Decimal;
+  taxRatePercent: Decimal;
+  taxMode: 'INCLUSIVE' | 'EXCLUSIVE';
+  /** Taxable value before GST (equals afterDiscount when tax is 0 or EXCLUSIVE; extracted when INCLUSIVE). */
+  taxableValue: Decimal;
+  cgst: Decimal;
+  sgst: Decimal;
+  igst: Decimal;
+  /** cgst + sgst + igst. */
+  tax: Decimal;
+  /** What the customer pays for this line: taxableValue + tax. */
   net: Decimal;
 }
 
@@ -29,7 +51,12 @@ export interface SaleFigures {
   lines: SaleLineFigures[];
   subtotal: Decimal;
   discountTotal: Decimal;
-  /** Sum of the lines, before rounding to the rupee. */
+  taxableTotal: Decimal;
+  cgstTotal: Decimal;
+  sgstTotal: Decimal;
+  igstTotal: Decimal;
+  taxTotal: Decimal;
+  /** Sum of the lines (net), before rounding to the rupee. */
   exactTotal: Decimal;
   /** total - exactTotal, between -0.50 and +0.50. */
   roundOff: Decimal;
@@ -38,7 +65,11 @@ export interface SaleFigures {
   discountPercent: Decimal;
 }
 
-export function computeSale(inputs: SaleLineInput[], billDiscount: Decimal): SaleFigures {
+export function computeSale(
+  inputs: SaleLineInput[],
+  billDiscount: Decimal,
+  taxOpts: SaleTaxOptions = {},
+): SaleFigures {
   if (inputs.length === 0) throw new DomainError('SALE_EMPTY', 'Add at least one item');
   inputs.forEach((l, i) => {
     if (l.lineDiscount.lt(0))
@@ -49,6 +80,12 @@ export function computeSale(inputs: SaleLineInput[], billDiscount: Decimal): Sal
         'A discount cannot be more than the line amount',
         { line: i + 1 },
       );
+    }
+    const rate = l.taxRatePercent ?? new Decimal(0);
+    if (rate.lt(0) || rate.gt(100)) {
+      throw new DomainError('TAX_RATE_INVALID', 'GST rate must be between 0 and 100%', {
+        line: i + 1,
+      });
     }
   });
   if (billDiscount.lt(0))
@@ -70,19 +107,64 @@ export function computeSale(inputs: SaleLineInput[], billDiscount: Decimal): Sal
     message: 'There is nothing left on the bill to discount',
   });
 
-  const lines = inputs.map((l, i) => {
+  const gstOn = taxOpts.gstEnabled === true;
+  const interState = taxOpts.interState === true;
+
+  const lines: SaleLineFigures[] = inputs.map((l, i) => {
     const share = shares[i]!;
     const discount = l.lineDiscount.plus(share);
+    const afterDiscount = l.gross.minus(discount);
+    const taxMode: 'INCLUSIVE' | 'EXCLUSIVE' = l.taxMode ?? 'INCLUSIVE';
+    const taxRatePercent = gstOn ? (l.taxRatePercent ?? new Decimal(0)) : new Decimal(0);
+
+    let taxableValue = afterDiscount;
+    let tax = new Decimal(0);
+    if (taxRatePercent.gt(0) && afterDiscount.gt(0)) {
+      if (taxMode === 'INCLUSIVE') {
+        tax = money(afterDiscount.mul(taxRatePercent).div(new Decimal(100).plus(taxRatePercent)));
+        taxableValue = afterDiscount.minus(tax);
+      } else {
+        taxableValue = afterDiscount;
+        tax = money(taxableValue.mul(taxRatePercent).div(100));
+      }
+    }
+
+    let cgst = new Decimal(0);
+    let sgst = new Decimal(0);
+    let igst = new Decimal(0);
+    if (tax.gt(0)) {
+      if (interState) {
+        igst = tax;
+      } else {
+        cgst = tax.div(2).toDecimalPlaces(2, Decimal.ROUND_FLOOR);
+        sgst = tax.minus(cgst);
+      }
+    }
+
     return {
       gross: l.gross,
       lineDiscount: l.lineDiscount,
       billDiscountShare: share,
       discount,
-      net: l.gross.minus(discount),
+      afterDiscount,
+      taxRatePercent,
+      taxMode,
+      taxableValue,
+      cgst,
+      sgst,
+      igst,
+      tax,
+      net: taxableValue.plus(tax),
     };
   });
+
   const subtotal = sum(lines.map((l) => l.gross));
   const discountTotal = sum(lines.map((l) => l.discount));
+  const taxableTotal = sum(lines.map((l) => l.taxableValue));
+  const cgstTotal = sum(lines.map((l) => l.cgst));
+  const sgstTotal = sum(lines.map((l) => l.sgst));
+  const igstTotal = sum(lines.map((l) => l.igst));
+  const taxTotal = sum(lines.map((l) => l.tax));
   const exactTotal = sum(lines.map((l) => l.net));
   const total = exactTotal.toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
   if (total.gt(MAX_AMOUNT))
@@ -92,6 +174,11 @@ export function computeSale(inputs: SaleLineInput[], billDiscount: Decimal): Sal
     lines,
     subtotal,
     discountTotal,
+    taxableTotal,
+    cgstTotal,
+    sgstTotal,
+    igstTotal,
+    taxTotal,
     exactTotal,
     roundOff: total.minus(exactTotal),
     total,

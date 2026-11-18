@@ -76,9 +76,18 @@ Where this section differs from the design above, **this section is correct**. C
 
 Lock order everywhere in Sales: **sale -> stock -> document number -> customer**.
 
-### GST
+### GST & Invoices (Phase 10)
 
-This phase sells for shops with GST switched off; that is the default. A GST-registered shop gets `422 GST_BILLING_NOT_READY` instead of a bill with wrong tax. Tax, GST invoices, invoice numbers and the PDF arrive in Phase 10.
+- **Shop GST Off (`gstEnabled = false`, default):** Tax is `0` on every line. Checkout issues a `NORMAL` invoice in series `B` (`B/2026-27/000001`).
+- **Shop GST On (`gstEnabled = true`):**
+  - Requires branch `gstin` and 2-digit `stateCode` (`422 BRANCH_GST_INCOMPLETE` if missing).
+  - Each line resolves `taxRatePercent = product.isTaxable ? (product.gstRatePercent ?? 0) : 0` and `taxMode = product.taxMode ?? org.defaultTaxMode`.
+  - **Place of supply:** `dto.placeOfSupplyStateCode ?? customer.stateCode ?? customer.gstin?.slice(0,2) ?? branch.stateCode`.
+  - **Intra-state** (`placeOfSupplyStateCode === branch.stateCode`): tax splits into `CGST` (`floor(tax/2)` to 2 decimals) and `SGST` (`tax - cgst`).
+  - **Inter-state** (`placeOfSupplyStateCode !== branch.stateCode`): full tax goes to `IGST`.
+  - **Invoice type & series:** if `taxTotal > 0`, issues a `GST` Tax Invoice in series `INV` (`INV/26-27/000001`, 16 characters); if `taxTotal == 0` (all items exempt/zero-rated), issues a `BILL_OF_SUPPLY` in series `BOS` (`BOS/26-27/000001`, 16 characters).
+- **Immutable Invoice Snapshot:** Every sale atomically creates an `invoices` row (`sellerSnapshot`, `buyerSnapshot`, `totalsSnapshot`) protected by the `invoices_snapshot_immutable` DB trigger. Cancelling a sale marks its invoice `CANCELLED`.
+- **Invoice PDF:** `GET /invoices/:id/pdf` renders an A4 PDF 1.4 document directly from the immutable snapshots.
 
 ### Held bills
 
@@ -131,6 +140,7 @@ A held bill is a cart parked at the counter, stored per branch (at most 64 KB). 
 | `POST /sale-returns`                                                            | `sale.return`                             |
 | `GET /sale-returns[/:id]`                                                       | `sale.read`                               |
 | `GET/POST/PUT/DELETE /held-bills`                                               | `sale.create`                             |
+| `GET /invoices`, `GET /invoices/:id`, `GET /invoices/:id/pdf`                   | `sale.read`                               |
 | `GET /sales/reconciliation`                                                     | `report.sales`                            |
 | `GET/POST/PATCH /customers[/:id]`, `POST /customers/:id/deactivate\|reactivate` | `customer.read/manage` (no branch needed) |
 | `GET /customers/:id/ledger`                                                     | `ledger.read`                             |

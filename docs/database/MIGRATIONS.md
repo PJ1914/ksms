@@ -66,3 +66,13 @@ Rollback: drop the triggers (`purchases_no_delete`, `purchase_items_delete_guard
 | `20261120000000_sales_support` | `sales.returned_total`, `sales.refunded_total`, `sale_items.returned_amount`, `sale_return_items.batch_id`; CHECK constraints (never more returned than the bill, never more refunded than paid, round-off within one rupee, line refunds within the line); one live customer per mobile number (partial unique index); delete protection for sale returns, their lines, sale payment allocations and customers |
 
 Rollback: drop the triggers `sale_returns_no_delete`, `sale_return_items_no_delete`, `sale_payments_no_delete`, `customers_no_delete`, the index `customers_org_phone_unique`, the constraints `sales_returns_valid`, `sale_items_returns_valid`, `sale_returns_valid`, then the added columns. Risk: additive only; defaults keep existing rows valid.
+
+## Phase 10 audit migration (2026-11-19)
+
+| Migration                          | Content                                                                                                                                                                                                                                                                                                 |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `20261121000000_gst_invoice_rules` | `invoices.invoice_number` and `sale_returns.return_number` must match `^[A-Za-z0-9/-]{1,16}$` (constraints added `NOT VALID`, so they apply to new rows only); the invoice trigger now also protects `type`, `issued_at`, `organization_id` and `branch_id`, and a cancelled invoice cannot be reopened |
+
+Rollback: drop the constraints `invoices_number_rule` and `sale_returns_number_rule`, then restore `ksms_invoice_snapshot_immutable()` from `20261117000100_integrity_constraints`. Risk: none for existing rows.
+
+(Phase 10 itself needed no migration: the invoice and tax columns already existed.)

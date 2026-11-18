@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { api } from '@/auth/session';
-import { Button, ErrorText, Field } from '@/components/ui';
+import { Button, Choice, ErrorText, Field } from '@/components/ui';
 import { colors } from '@/theme/colors';
 import { friendlyError } from '@/utils/errors';
 import {
@@ -13,10 +13,20 @@ import {
   validateProductForm,
 } from '@ksms/validation';
 
+const GST_RATES = [
+  { key: 'NONE', label: 'No GST' },
+  { key: '5', label: '5%' },
+  { key: '12', label: '12%' },
+  { key: '18', label: '18%' },
+  { key: '28', label: '28%' },
+] as const;
+
 export default function NewProductScreen() {
   const [name, setName] = useState('');
   const [sellBy, setSellBy] = useState<SellBy>('KG');
   const [price, setPrice] = useState('');
+  const [gstRate, setGstRate] = useState<string>('NONE');
+  const [hsnCode, setHsnCode] = useState('');
   const [units, setUnits] = useState<UnitRow[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +41,14 @@ export default function NewProductScreen() {
   const unitLabel = sellBy === 'KG' ? '1 kg' : sellBy === 'L' ? '1 litre' : '1 piece';
 
   async function save() {
-    const input = { name, sellBy, price };
+    const input = {
+      name,
+      sellBy,
+      price,
+      isTaxable: gstRate !== 'NONE',
+      gstRatePercent: gstRate !== 'NONE' ? gstRate : '',
+      hsnCode,
+    };
     const problem = validateProductForm(input);
     if (problem) return setError(problem);
     if (!units) return setError('Still loading units. Please wait a moment.');
@@ -88,8 +105,24 @@ export default function NewProductScreen() {
         placeholder="e.g. 52.50"
       />
 
+      <Choice
+        label="GST rate (when shop GST is on)"
+        options={GST_RATES}
+        value={gstRate}
+        onChange={setGstRate}
+      />
+
+      <Field
+        label="HSN code (optional, 4-8 digits)"
+        value={hsnCode}
+        onChangeText={setHsnCode}
+        keyboardType="number-pad"
+        placeholder="e.g. 1006"
+        maxLength={8}
+      />
+
       <Text style={styles.note}>
-        Bags, cartons, barcodes and GST can be added later from the full product screen.
+        Bags, cartons and barcodes can be added later from the full product screen.
       </Text>
       <ErrorText message={error} />
       <Button title="Save product" onPress={save} busy={busy} />

@@ -21,12 +21,17 @@ export function isRealDate(value: string): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
 }
 
+const GSTIN_RE = /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/;
+const STATE_CODE_RE = /^\d{2}$/;
+
 // ---------------------------------------------------------------- customers
 
 export interface CustomerForm {
   name: string;
   phone: string;
   creditLimit: string;
+  gstin?: string;
+  stateCode?: string;
 }
 
 export function validateCustomerForm(f: CustomerForm): string | null {
@@ -35,14 +40,23 @@ export function validateCustomerForm(f: CustomerForm): string | null {
     return 'Enter a valid 10-digit mobile number, or leave it empty.';
   if (trim(f.creditLimit) && !isMoney(f.creditLimit))
     return 'Enter the credit limit in rupees, like 5000, or leave it empty.';
+  const gstin = trim(f.gstin ?? '').toUpperCase();
+  if (gstin && !GSTIN_RE.test(gstin)) return 'Enter a valid 15-character GSTIN, or leave it empty.';
+  const sc = trim(f.stateCode ?? '');
+  if (sc && !STATE_CODE_RE.test(sc))
+    return 'Enter the 2-digit GST state code, like 36, or leave it empty.';
   return null;
 }
 
 export function buildCustomerPayload(f: CustomerForm) {
+  const gstin = trim(f.gstin ?? '').toUpperCase();
+  const sc = trim(f.stateCode ?? '') || (gstin ? gstin.slice(0, 2) : '');
   return {
     name: trim(f.name),
     ...(trim(f.phone) ? { phone: normalizeIndianPhone(f.phone)! } : {}),
     ...(trim(f.creditLimit) ? { creditLimit: trim(f.creditLimit) } : {}),
+    ...(gstin ? { gstin } : {}),
+    ...(sc ? { stateCode: sc } : {}),
   };
 }
 

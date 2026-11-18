@@ -162,6 +162,10 @@ export class SaleCancellationService {
             refundedTotal: refunded.toFixed(2),
           },
         });
+        await tx.invoice.updateMany({
+          where: { saleId, organizationId: t.organizationId, branchId },
+          data: { status: 'CANCELLED' },
+        });
 
         // ---- credit comes off the customer's account (customer lock last)
         if (sale.customerId && dec(sale.creditAmount).gt(0)) {

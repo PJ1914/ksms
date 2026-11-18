@@ -9,11 +9,12 @@ export default function NewCustomerScreen() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [creditLimit, setCreditLimit] = useState('');
+  const [gstin, setGstin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
-    const form = { name, phone, creditLimit };
+    const form = { name, phone, creditLimit, gstin };
     const problem = validateCustomerForm(form);
     if (problem) return setError(problem);
     setBusy(true);
@@ -51,6 +52,14 @@ export default function NewCustomerScreen() {
         keyboardType="decimal-pad"
         placeholder="e.g. 5000"
         hint="The most this customer may owe on khata. Leave empty for no limit."
+      />
+      <Field
+        label="Customer GSTIN (optional)"
+        value={gstin}
+        onChangeText={setGstin}
+        autoCapitalize="characters"
+        placeholder="15-character GSTIN for B2B GST bills"
+        maxLength={15}
       />
       <ErrorText message={error} />
     </Screen>

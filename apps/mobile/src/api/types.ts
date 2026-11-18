@@ -18,6 +18,10 @@ export interface ProductDetail extends ProductRow {
   type: 'WEIGHT' | 'VOLUME' | 'COUNT';
   mrp: string | null;
   minStockLevel: string;
+  isTaxable: boolean;
+  hsnCode: string | null;
+  gstRatePercent: string | null;
+  taxMode: 'INCLUSIVE' | 'EXCLUSIVE' | null;
   version: number;
   conversions: {
     unitId: string;
@@ -88,6 +92,8 @@ export interface CustomerRow {
   id: string;
   name: string;
   phone: string | null;
+  gstin?: string | null;
+  stateCode?: string | null;
   creditLimit: string | null;
   balance: string;
   isActive: boolean;
@@ -174,10 +180,32 @@ export interface SaleDetail {
   saleNumber: string;
   status: 'COMPLETED' | 'CANCELLED';
   soldAt: string;
-  customer: { id: string; name: string; phone: string | null } | null;
+  customer: {
+    id: string;
+    name: string;
+    phone: string | null;
+    gstin?: string | null;
+    stateCode?: string | null;
+  } | null;
   soldBy: { id: string; fullName: string };
+  invoice: {
+    id: string;
+    invoiceNumber: string;
+    type: 'NORMAL' | 'GST' | 'BILL_OF_SUPPLY';
+    status: 'ISSUED' | 'CANCELLED';
+    series: string;
+    sequenceNumber: number;
+    issuedAt: string;
+  } | null;
+  taxMode?: 'INCLUSIVE' | 'EXCLUSIVE';
+  placeOfSupplyStateCode?: string | null;
   subtotal: string;
   discountTotal: string;
+  taxableTotal: string;
+  cgstTotal: string;
+  sgstTotal: string;
+  igstTotal: string;
+  taxTotal: string;
   roundOff: string;
   total: string;
   paidTotal: string;
@@ -188,10 +216,14 @@ export interface SaleDetail {
   items: {
     id: string;
     name: string;
+    hsn?: string | null;
     unitCode: string;
     quantity: string;
     unitPrice: string;
     discountAmount: string;
+    taxRatePercent?: string;
+    taxableValue?: string;
+    taxAmount?: string;
     lineTotal: string;
     baseQuantity: string;
     returnedBaseQuantity: string;
@@ -208,18 +240,58 @@ export interface SalePreview {
     unitPrice: string;
     gross: string;
     discount: string;
+    taxRatePercent?: string;
+    taxableValue?: string;
+    cgst?: string;
+    sgst?: string;
+    igst?: string;
+    tax?: string;
     net: string;
   }[];
   subtotal: string;
   discountTotal: string;
+  taxableTotal: string;
+  cgstTotal: string;
+  sgstTotal: string;
+  igstTotal: string;
+  taxTotal: string;
   roundOff: string;
   total: string;
   paid: string;
   credit: string;
+  placeOfSupplyStateCode?: string | null;
+  interState?: boolean;
   warnings: {
     stock: { productId: string; requestedBaseQuantity: string; availableBaseQuantity: string }[];
     creditLimit: { creditLimit: string; balance: string; available: string } | null;
   };
+}
+
+export interface OrganizationSettings {
+  id: string;
+  name: string;
+  legalName: string | null;
+  pan: string | null;
+  phone: string | null;
+  email: string | null;
+  gstEnabled: boolean;
+  defaultTaxMode: 'INCLUSIVE' | 'EXCLUSIVE';
+  allowNegativeStock: boolean;
+  maxCashierDiscountPercent: string;
+}
+
+export interface BranchDetail {
+  id: string;
+  code: string;
+  name: string;
+  addressLine: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
+  stateCode: string | null;
+  gstin: string | null;
+  phone: string | null;
+  isActive: boolean;
 }
 
 export interface HeldBill {

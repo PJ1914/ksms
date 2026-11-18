@@ -930,7 +930,7 @@ suite('Sales and POS (real database)', () => {
         });
 
       const one = (await ret('1').expect(201)).body.data;
-      expect(one.returnNumber).toMatch(/^SR\/\d{4}-\d{2}\/\d{6}$/);
+      expect(one.returnNumber).toMatch(/^CN\/\d{2}-\d{2}\/\d{6}$/);
       expect(one).toMatchObject({ total: '33.33', roundOff: '0.00' });
       expect((await stockOf(p.id)).quantityOnHand).toBe('18.000'); // 20 - 3 + 1
 
@@ -1137,30 +1137,183 @@ suite('Sales and POS (real database)', () => {
       expect(errCode(await api(shop.token).get('/sales').expect(400))).toBe('BRANCH_REQUIRED');
     });
 
-    it('a GST-registered shop is told GST billing is not ready yet instead of getting wrong tax', async () => {
+    it('a GST-registered shop requires branch GSTIN & stateCode, issues GST / Bill of Supply invoices, and renders PDFs', async () => {
       const g = await newShop();
+      const GA = api(g.token, g.branchId);
       await ctx.prisma.organization.update({
         where: { id: g.organizationId },
-        data: { gstEnabled: true },
+        data: { gstEnabled: true, legalName: 'Sri Lakshmi Traders' },
       });
       const units = (await api(g.token).get('/units').expect(200)).body.data as {
         id: string;
         code: string;
       }[];
       const pcs = units.find((u) => u.code === 'PCS')!.id;
-      const p = await product(
+      const taxed = await product(
         {
-          name: 'GST item',
+          name: 'Taxed Soap',
           type: 'COUNT',
           baseUnitId: pcs,
-          prices: [{ unitId: pcs, price: '10' }],
+          isTaxable: true,
+          gstRatePercent: '5',
+          hsnCode: '3401',
+          prices: [{ unitId: pcs, price: '105' }],
         },
         g,
       );
-      const res = await api(g.token, g.branchId)
-        .post('/sales', { items: [item(p.id, pcs, '1')], payments: [cash('10')] })
-        .expect(422);
-      expect(errCode(res)).toBe('GST_BILLING_NOT_READY');
+      const exempt = await product(
+        {
+          name: 'Exempt Salt',
+          type: 'COUNT',
+          baseUnitId: pcs,
+          isTaxable: false,
+          hsnCode: '2501',
+          prices: [{ unitId: pcs, price: '20' }],
+        },
+        g,
+      );
+      await GA.post('/inventory/opening-stock', {
+        productId: taxed.id,
+        unitId: pcs,
+        quantity: '20',
+        unitCost: '70',
+      }).expect(201);
+      await GA.post('/inventory/opening-stock', {
+        productId: exempt.id,
+        unitId: pcs,
+        quantity: '20',
+        unitCost: '12',
+      }).expect(201);
+
+      // 1. Without branch GSTIN & stateCode: refused with BRANCH_GST_INCOMPLETE
+      const missingBranchGst = await GA.post('/sales', {
+        items: [item(taxed.id, pcs, '1')],
+        payments: [cash('105')],
+      }).expect(422);
+      expect(errCode(missingBranchGst)).toBe('BRANCH_GST_INCOMPLETE');
+
+      // 2. Configure branch GSTIN and stateCode (36 = Telangana)
+      await api(g.token)
+        .patch(`/branches/${g.branchId}`, {
+          gstin: '36AABCU9603R1ZM',
+          stateCode: '36',
+          addressLine: 'MG Road, Hyderabad',
+        })
+        .expect(200);
+
+      // 3. Intra-state INCLUSIVE GST sale -> CGST 2.50 + SGST 2.50, series INV
+      const sIntra = (
+        await GA.post('/sales', {
+          items: [item(taxed.id, pcs, '1')],
+          payments: [cash('105')],
+        }).expect(201)
+      ).body.data;
+      expect(sIntra).toMatchObject({
+        taxableTotal: '100.00',
+        cgstTotal: '2.50',
+        sgstTotal: '2.50',
+        igstTotal: '0.00',
+        taxTotal: '5.00',
+        total: '105.00',
+        placeOfSupplyStateCode: '36',
+      });
+      expect(sIntra.saleNumber).toMatch(/^INV\/\d{2}-\d{2}\/\d{6}$/);
+      expect(sIntra.invoice).toMatchObject({
+        type: 'GST',
+        status: 'ISSUED',
+        series: 'INV',
+        invoiceNumber: sIntra.saleNumber,
+      });
+
+      // 4. Inter-state EXCLUSIVE GST sale (buyer stateCode 27 = Maharashtra) -> IGST 18.00
+      const exclusiveProd = await product(
+        {
+          name: 'Exclusive Ghee',
+          type: 'COUNT',
+          baseUnitId: pcs,
+          isTaxable: true,
+          gstRatePercent: '18',
+          taxMode: 'EXCLUSIVE',
+          hsnCode: '0405',
+          prices: [{ unitId: pcs, price: '100' }],
+        },
+        g,
+      );
+      await GA.post('/inventory/opening-stock', {
+        productId: exclusiveProd.id,
+        unitId: pcs,
+        quantity: '10',
+        unitCost: '70',
+      }).expect(201);
+      const mhBuyer = (
+        await api(g.token)
+          .post(
+            '/customers',
+            { name: 'Pune Mart', gstin: '27AABCU9603R1ZM', stateCode: '27' },
+            null,
+          )
+          .expect(201)
+      ).body.data;
+
+      const sInter = (
+        await GA.post('/sales', {
+          customerId: mhBuyer.id,
+          items: [item(exclusiveProd.id, pcs, '1')],
+          payments: [cash('118')],
+        }).expect(201)
+      ).body.data;
+      expect(sInter).toMatchObject({
+        taxableTotal: '100.00',
+        cgstTotal: '0.00',
+        sgstTotal: '0.00',
+        igstTotal: '18.00',
+        taxTotal: '18.00',
+        total: '118.00',
+        placeOfSupplyStateCode: '27',
+      });
+
+      // 5. Exempt-only sale in GST shop -> BILL_OF_SUPPLY (series BOS)
+      const sBos = (
+        await GA.post('/sales', {
+          items: [item(exempt.id, pcs, '1')],
+          payments: [cash('20')],
+        }).expect(201)
+      ).body.data;
+      expect(sBos.saleNumber).toMatch(/^BOS\/\d{2}-\d{2}\/\d{6}$/);
+      expect(sBos.invoice).toMatchObject({
+        type: 'BILL_OF_SUPPLY',
+        series: 'BOS',
+      });
+
+      // 6. Invoice list, detail, snapshot immutability & PDF download
+      const invList = (await GA.get('/invoices').expect(200)).body;
+      expect(invList.meta.total).toBe(3);
+      const invDetail = (await GA.get(`/invoices/${sIntra.invoice.id}`).expect(200)).body.data;
+      expect(invDetail.sellerSnapshot).toMatchObject({
+        legalName: 'Sri Lakshmi Traders',
+        gstin: '36AABCU9603R1ZM',
+        stateCode: '36',
+      });
+      await expect(
+        ctx.prisma.$executeRawUnsafe(
+          `UPDATE invoices SET seller_snapshot = '{}' WHERE id = '${sIntra.invoice.id}'`,
+        ),
+      ).rejects.toThrow(/immutable/);
+
+      const pdfRes = await GA.get(`/invoices/${sIntra.invoice.id}/pdf`).expect(200);
+      expect(pdfRes.headers['content-type']).toMatch(/application\/pdf/);
+      const pdfText = Buffer.isBuffer(pdfRes.body)
+        ? pdfRes.body.toString('ascii')
+        : String(pdfRes.text ?? '');
+      expect(pdfText.startsWith('%PDF-1.4')).toBe(true);
+      expect(pdfText).toContain(sIntra.saleNumber);
+      expect(pdfText).toContain('36AABCU9603R1ZM');
+
+      // 7. Cross-tenant isolation on /invoices and /invoices/:id/pdf
+      await A.get(`/invoices/${sIntra.invoice.id}`).expect(404);
+      await A.get(`/invoices/${sIntra.invoice.id}/pdf`).expect(404);
+
+      expect((await GA.get('/sales/reconciliation').expect(200)).body.data.consistent).toBe(true);
     });
   });
 

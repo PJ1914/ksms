@@ -50,6 +50,52 @@ describe('buildProductPayload', () => {
     });
   });
 
+  it('includes GST fields when taxable or HSN is provided', () => {
+    expect(
+      validateProductForm({
+        name: 'Rice',
+        sellBy: 'KG',
+        price: '55',
+        isTaxable: true,
+        gstRatePercent: '5',
+        hsnCode: '1006',
+      }),
+    ).toBeNull();
+    expect(
+      buildProductPayload(
+        {
+          name: 'Rice',
+          sellBy: 'KG',
+          price: '55',
+          isTaxable: true,
+          gstRatePercent: '5',
+          hsnCode: '1006',
+        },
+        units,
+      ),
+    ).toEqual({
+      name: 'Rice',
+      type: 'WEIGHT',
+      baseUnitId: 'u-kg',
+      prices: [{ unitId: 'u-kg', price: '55' }],
+      isTaxable: true,
+      gstRatePercent: '5',
+      hsnCode: '1006',
+    });
+    expect(validateProductForm({ name: 'Rice', sellBy: 'KG', price: '55', hsnCode: '12' })).toMatch(
+      /HSN/i,
+    );
+    expect(
+      validateProductForm({
+        name: 'Rice',
+        sellBy: 'KG',
+        price: '55',
+        isTaxable: true,
+        gstRatePercent: '',
+      }),
+    ).toMatch(/GST rate/i);
+  });
+
   it('fails clearly if the server has no such unit', () => {
     expect(() => buildProductPayload({ name: 'Oil', sellBy: 'L', price: '1' }, [])).toThrow(/L/);
   });

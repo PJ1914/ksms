@@ -6,7 +6,7 @@
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
 | A-01 | One organization, one branch, one cash register for launch; schema is multi-branch ready                                                   | Phase 2   |
 | A-02 | Stock valuation uses moving weighted average only                                                                                          | Phase 7   |
-| A-03 | Invoice series per branch per financial year (Apr–Mar), format e.g. `INV/2026-27/000123`                                                   | Phase 10  |
+| A-03 | Invoice series per branch per financial year (Apr–Mar), format e.g. `INV/26-27/000123` (GST allows at most 16 characters)                  | Phase 10  |
 | A-04 | Shop is GST-registered under regular scheme (not composition) when GST invoices are enabled; composition-scheme shops issue Bill of Supply | Phase 10  |
 | A-05 | Prices stored per unit; tax-inclusive vs exclusive is a shop-level default with per-product override                                       | Phase 10  |
 | A-06 | Discounts: line-level and bill-level; max discount % per role is configurable                                                              | Phase 9   |

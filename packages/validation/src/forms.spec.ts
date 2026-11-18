@@ -36,8 +36,25 @@ describe('customers and suppliers', () => {
     [{ name: 'Lakshmi', phone: '12345', creditLimit: '' }, /mobile/i],
     [{ name: 'Lakshmi', phone: '', creditLimit: '5k' }, /credit limit/i],
     [{ name: 'Lakshmi', phone: '', creditLimit: '10.555' }, /credit limit/i],
+    [{ name: 'Lakshmi', phone: '', creditLimit: '', gstin: 'BAD' }, /GSTIN/i],
+    [{ name: 'Lakshmi', phone: '', creditLimit: '', stateCode: '3' }, /state code/i],
   ])('refuses a bad customer form %j', (f, message) => {
     expect(validateCustomerForm(f)).toMatch(message);
+  });
+
+  it('derives customer stateCode from GSTIN when stateCode is omitted', () => {
+    const f = {
+      name: 'Lakshmi Traders',
+      phone: '',
+      creditLimit: '',
+      gstin: '36aabcu9603r1zm',
+    };
+    expect(validateCustomerForm(f)).toBeNull();
+    expect(buildCustomerPayload(f)).toEqual({
+      name: 'Lakshmi Traders',
+      gstin: '36AABCU9603R1ZM',
+      stateCode: '36',
+    });
   });
 
   it('suppliers: name, number and what is already owed', () => {

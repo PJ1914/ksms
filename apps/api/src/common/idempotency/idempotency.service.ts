@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Prisma } from '../../generated/prisma/client';
-import { PrismaService } from '../../database/prisma.service';
+import { PrismaService, TRANSACTION_OPTIONS } from '../../database/prisma.service';
 import { AppException } from '../errors/app.exception';
 
 const keySchema = z.uuid();
@@ -59,51 +59,56 @@ export class IdempotencyService {
     endpoint: string,
     payload: unknown,
     work: (tx: Prisma.TransactionClient) => Promise<T>,
+    /** Longest the whole request may take, in milliseconds (default: the standard transaction limit). */
+    options: { timeoutMs?: number } = {},
   ): Promise<IdempotentResult<T>> {
     const requestHash = createHash('sha256')
       .update(`${endpoint}\n${stableStringify(payload)}`)
       .digest('hex');
 
-    return this.prisma.$transaction(async (tx) => {
-      const claimed = await tx.$queryRaw<{ id: string }[]>`
+    return this.prisma.$transaction(
+      async (tx) => {
+        const claimed = await tx.$queryRaw<{ id: string }[]>`
         INSERT INTO idempotency_records (id, organization_id, key, endpoint, request_hash, status, expires_at)
         VALUES (gen_random_uuid(), ${organizationId}::uuid, ${key}, ${endpoint}, ${requestHash}, 'IN_PROGRESS', now() + interval '24 hours')
         ON CONFLICT (organization_id, key) DO NOTHING
         RETURNING id`;
 
-      if (claimed.length === 0) {
-        const existing = await tx.idempotencyRecord.findUnique({
-          where: { organizationId_key: { organizationId, key } },
-          select: { endpoint: true, requestHash: true, status: true, responseBody: true },
-        });
-        if (!existing || existing.endpoint !== endpoint || existing.requestHash !== requestHash) {
-          throw new AppException(
-            'IDEMPOTENCY_KEY_REUSED',
-            'This Idempotency-Key was already used for a different request',
-            422,
-          );
+        if (claimed.length === 0) {
+          const existing = await tx.idempotencyRecord.findUnique({
+            where: { organizationId_key: { organizationId, key } },
+            select: { endpoint: true, requestHash: true, status: true, responseBody: true },
+          });
+          if (!existing || existing.endpoint !== endpoint || existing.requestHash !== requestHash) {
+            throw new AppException(
+              'IDEMPOTENCY_KEY_REUSED',
+              'This Idempotency-Key was already used for a different request',
+              422,
+            );
+          }
+          if (existing.status !== 'COMPLETED') {
+            throw new AppException(
+              'IDEMPOTENCY_IN_PROGRESS',
+              'The original request is still being processed; retry shortly',
+              409,
+            );
+          }
+          return { result: existing.responseBody as T, replayed: true };
         }
-        if (existing.status !== 'COMPLETED') {
-          throw new AppException(
-            'IDEMPOTENCY_IN_PROGRESS',
-            'The original request is still being processed; retry shortly',
-            409,
-          );
-        }
-        return { result: existing.responseBody as T, replayed: true };
-      }
 
-      const result = await work(tx);
-      await tx.idempotencyRecord.update({
-        where: { id: claimed[0]!.id },
-        data: {
-          status: 'COMPLETED',
-          responseStatus: 201,
-          responseBody: JSON.parse(JSON.stringify(result ?? null)) as Prisma.InputJsonValue,
-          completedAt: new Date(),
-        },
-      });
-      return { result, replayed: false };
-    });
+        const result = await work(tx);
+        await tx.idempotencyRecord.update({
+          where: { id: claimed[0]!.id },
+          data: {
+            status: 'COMPLETED',
+            responseStatus: 201,
+            responseBody: JSON.parse(JSON.stringify(result ?? null)) as Prisma.InputJsonValue,
+            completedAt: new Date(),
+          },
+        });
+        return { result, replayed: false };
+      },
+      { ...TRANSACTION_OPTIONS, timeout: options.timeoutMs ?? TRANSACTION_OPTIONS.timeout },
+    );
   }
 }

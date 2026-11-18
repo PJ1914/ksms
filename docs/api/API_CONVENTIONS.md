@@ -183,3 +183,15 @@ Checkout, cancellation and returns need an `Idempotency-Key` header and `X-Branc
 | 400  | `HELD_BILL_TOO_LARGE`                                                                  | A held bill is limited to 64 KB                                                                                                                   |
 | 409  | `CUSTOMER_PHONE_IN_USE`                                                                | Another customer of the shop has this mobile number (`details.customerId`)                                                                        |
 | 409  | `VERSION_CONFLICT`                                                                     | The customer changed on another device                                                                                                            |
+
+## Error codes added with Phase 10 (GST billing and invoices)
+
+| HTTP | code                       | Meaning                                                                                       |
+| ---- | -------------------------- | --------------------------------------------------------------------------------------------- |
+| 422  | `BRANCH_GST_INCOMPLETE`    | GST is on but the branch has no GSTIN or state code                                           |
+| 422  | `PRODUCT_GST_RATE_MISSING` | A taxable product has no GST rate (`details.line`, `details.productId`)                       |
+| 422  | `TAX_RATE_INVALID`         | A GST rate outside 0 to 100%                                                                  |
+| 404  | `INVOICE_NOT_FOUND`        | No such invoice in this shop and branch                                                       |
+| 503  | `SERVER_TOO_SLOW`          | The database could not finish in time; nothing was saved. Try again (split a very large bill) |
+
+`GST_BILLING_NOT_READY` (Phase 9) is no longer returned: GST shops can bill.

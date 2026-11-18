@@ -46,6 +46,15 @@ export default function ProductScreen() {
         {p.category ? <KeyValue label="Category" value={p.category.name} /> : null}
         <KeyValue label="Sold by" value={p.baseUnit.code} />
         {p.mrp ? <KeyValue label="MRP (per unit)" value={formatINR(p.mrp)} /> : null}
+        <KeyValue
+          label="GST"
+          value={
+            p.isTaxable && p.gstRatePercent
+              ? `${trimZeros(p.gstRatePercent)}%${p.taxMode ? ` (${words(p.taxMode)})` : ''}`
+              : 'Exempt / 0%'
+          }
+        />
+        {p.hsnCode ? <KeyValue label="HSN" value={p.hsnCode} /> : null}
         {p.status !== 'ACTIVE' ? <Badge text={words(p.status)} tone="warn" /> : null}
       </Card>
 

@@ -141,6 +141,14 @@ export class SaleReturnsService {
           const target = cumulativeAmount(dec(item.lineTotal), nowReturned, dec(item.baseQuantity));
           const lineRefund = target.minus(returnedAmount.get(item.id)!);
           returnedAmount.set(item.id, target);
+          const itemTaxTotal = dec(item.cgstAmount)
+            .plus(dec(item.sgstAmount))
+            .plus(dec(item.igstAmount));
+          const lineTax = dec(item.lineTotal).gt(0)
+            ? cumulativeAmount(itemTaxTotal, nowReturned, dec(item.baseQuantity)).minus(
+                cumulativeAmount(itemTaxTotal, nowReturned.minus(base), dec(item.baseQuantity)),
+              )
+            : new Decimal(0);
 
           rows.push({
             saleItemId: item.id,
@@ -151,13 +159,14 @@ export class SaleReturnsService {
             baseQuantity: base.toFixed(3),
             disposition: line.disposition,
             unitPrice: m2(item.unitPrice),
-            taxAmount: '0',
+            taxAmount: lineTax.toFixed(2),
             lineTotal: lineRefund.toFixed(2),
             unitCostSnapshot: dec(item.unitCostSnapshot).toFixed(4),
           });
         }
 
         const linesRefund = sum(rows.map((r) => new Decimal(r.lineTotal as string)));
+        const taxRefund = sum(rows.map((r) => new Decimal(r.taxAmount as string)));
         const everythingBack = sale.items.every((i) =>
           returnedBase.get(i.id)!.equals(dec(i.baseQuantity)),
         );
@@ -209,7 +218,9 @@ export class SaleReturnsService {
           tx,
           { organizationId: t.organizationId, branchId },
           'SALE_RETURN',
-          'SR',
+          'CN',
+          undefined,
+          'compact', // a credit note number is also limited to 16 characters (GST Rule 53)
         );
         await tx.saleReturn.create({
           data: {
@@ -221,7 +232,7 @@ export class SaleReturnsService {
             reason: dto.reason,
             refundMethod,
             subtotal: linesRefund.toFixed(2),
-            taxTotal: '0',
+            taxTotal: taxRefund.toFixed(2),
             roundOff: roundOff.toFixed(2),
             total: total.toFixed(2),
             createdById: t.userId,
@@ -362,6 +373,7 @@ export class SaleReturnsService {
       reason: r.reason,
       refundTo: r.refundMethod ?? 'CUSTOMER_ACCOUNT',
       subtotal: m2(r.subtotal),
+      taxTotal: m2(r.taxTotal),
       roundOff: m2(r.roundOff),
       total: m2(r.total),
       createdAt: r.createdAt,
@@ -374,6 +386,7 @@ export class SaleReturnsService {
         baseQuantity: dec(i.baseQuantity).toFixed(3),
         disposition: i.disposition,
         unitPrice: m2(i.unitPrice),
+        taxAmount: m2(i.taxAmount),
         lineTotal: m2(i.lineTotal),
       })),
     };

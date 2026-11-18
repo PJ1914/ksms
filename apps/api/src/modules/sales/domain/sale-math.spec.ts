@@ -76,8 +76,93 @@ describe('computeSale', () => {
       () => computeSale([line('100000000000')], d(0)),
       'AMOUNT_TOO_LARGE',
     ],
+    [
+      'negative tax rate',
+      () => computeSale([{ ...line('10'), taxRatePercent: d('-1') }], d(0), { gstEnabled: true }),
+      'TAX_RATE_INVALID',
+    ],
+    [
+      'tax rate above 100%',
+      () => computeSale([{ ...line('10'), taxRatePercent: d('101') }], d(0), { gstEnabled: true }),
+      'TAX_RATE_INVALID',
+    ],
   ])('refuses: %s', (_n, fn, expected) => {
     expect(code(fn)).toBe(expected);
+  });
+
+  it('GST off: ignores product tax rates and keeps tax at 0', () => {
+    const s = computeSale(
+      [{ gross: d('105'), lineDiscount: d(0), taxRatePercent: d('5'), taxMode: 'INCLUSIVE' }],
+      d(0),
+      { gstEnabled: false },
+    );
+    expect([fx(s.taxableTotal), fx(s.taxTotal), fx(s.total)]).toEqual(['105.00', '0.00', '105.00']);
+  });
+
+  it('GST INCLUSIVE intra-state: extracts tax from discounted price and splits CGST + SGST evenly', () => {
+    // 105 inclusive of 5% GST -> taxable 100.00, tax 5.00 -> CGST 2.50, SGST 2.50, net 105.00
+    const s = computeSale(
+      [{ gross: d('105'), lineDiscount: d(0), taxRatePercent: d('5'), taxMode: 'INCLUSIVE' }],
+      d(0),
+      { gstEnabled: true, interState: false },
+    );
+    expect(s.lines[0]).toMatchObject({
+      taxableValue: d('100'),
+      cgst: d('2.5'),
+      sgst: d('2.5'),
+      igst: d('0'),
+      tax: d('5'),
+      net: d('105'),
+    });
+    expect([
+      fx(s.taxableTotal),
+      fx(s.cgstTotal),
+      fx(s.sgstTotal),
+      fx(s.igstTotal),
+      fx(s.total),
+    ]).toEqual(['100.00', '2.50', '2.50', '0.00', '105.00']);
+  });
+
+  it('GST EXCLUSIVE intra-state: adds tax on top of discounted price and rounds bill to the rupee', () => {
+    // 100 - 10 discount = 90 taxable; 18% GST = 16.20 (CGST 8.10 + SGST 8.10); net 106.20 -> rounded 106.00 (-0.20)
+    const s = computeSale(
+      [{ gross: d('100'), lineDiscount: d('10'), taxRatePercent: d('18'), taxMode: 'EXCLUSIVE' }],
+      d(0),
+      { gstEnabled: true, interState: false },
+    );
+    expect([
+      fx(s.taxableTotal),
+      fx(s.cgstTotal),
+      fx(s.sgstTotal),
+      fx(s.exactTotal),
+      fx(s.roundOff),
+      fx(s.total),
+    ]).toEqual(['90.00', '8.10', '8.10', '106.20', '-0.20', '106.00']);
+  });
+
+  it('GST inter-state: charges IGST instead of CGST + SGST', () => {
+    const s = computeSale(
+      [{ gross: d('100'), lineDiscount: d(0), taxRatePercent: d('12'), taxMode: 'EXCLUSIVE' }],
+      d(0),
+      { gstEnabled: true, interState: true },
+    );
+    expect([
+      fx(s.taxableTotal),
+      fx(s.cgstTotal),
+      fx(s.sgstTotal),
+      fx(s.igstTotal),
+      fx(s.total),
+    ]).toEqual(['100.00', '0.00', '0.00', '12.00', '112.00']);
+  });
+
+  it('odd-paisa intra-state tax splits without losing a paisa (CGST + SGST == tax)', () => {
+    // 1.00 at 5% exclusive -> tax 0.05 -> CGST 0.02 + SGST 0.03 = 0.05
+    const s = computeSale(
+      [{ gross: d('1.00'), lineDiscount: d(0), taxRatePercent: d('5'), taxMode: 'EXCLUSIVE' }],
+      d(0),
+      { gstEnabled: true, interState: false },
+    );
+    expect([fx(s.cgstTotal), fx(s.sgstTotal), fx(s.taxTotal)]).toEqual(['0.02', '0.03', '0.05']);
   });
 });
 
