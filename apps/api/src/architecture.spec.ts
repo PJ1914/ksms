@@ -19,6 +19,7 @@ const ALLOWED: Record<string, string[]> = {
   inventory: ['audit', 'organization', 'catalog'],
   finance: ['audit', 'organization'],
   customers: ['audit', 'organization'],
+  collections: ['audit', 'organization', 'customers', 'finance'],
   procurement: ['audit', 'organization', 'catalog', 'inventory', 'finance'],
   sales: ['audit', 'organization', 'catalog', 'inventory', 'customers', 'finance'],
   context: ['audit', 'organization', 'identity'],

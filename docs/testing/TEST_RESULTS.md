@@ -312,3 +312,37 @@ The Phase 10 tests and audit hardening cover:
 - **Immutable snapshots & cancellation:** `sellerSnapshot`, `buyerSnapshot`, and `totalsSnapshot` are persisted at issue time and protected by the `ksms_invoice_snapshot_immutable` DB trigger; cancelling a sale marks its invoice `CANCELLED`.
 - **Invoice endpoints, multi-page PDF & resilience:** `GET /invoices`, `GET /invoices/:id`, and `GET /invoices/:id/pdf` (returns paginated `%PDF-1.4` binary with `application/pdf`, IST dates, line wrapping, and reverse-charge line), cross-branch/cross-organization isolation (`404`), and 60s checkout timeout (`503 SERVER_TOO_SLOW`).
 - **Reconciliation (`GET /sales/reconciliation`):** verifies every sale has an invoice with matching number and status, and every sale's `taxable_total`, `cgst_total`, `sgst_total`, and `igst_total` match the sum of its lines.
+
+## Phase 11: Khata and Collections (2026-11-19)
+
+| Suite                                                                                     | Result           |
+| ----------------------------------------------------------------------------------------- | ---------------- |
+| Workspace checks (`pnpm check`: format, lint, typecheck, 293 unit tests across 23 suites) | 293 / 293 pass   |
+| API end-to-end tests (`test:e2e`: 2 suites)                                               | 37 / 37 pass     |
+| **Collections integration on real PostgreSQL** (`collections.int-spec.ts`)                | **5 / 5 pass**   |
+| Mobile bundle export (`@ksms/mobile export:check`)                                        | 1,365 modules OK |
+
+Only `collections.int-spec.ts` was re-run for Phase 11 (no shared code outside the new module changed); the other integration suites were last run in Phase 10 (218 / 218).
+
+The Phase 11 tests cover:
+
+- **Customer payments & khata reduction:** partial payments and overpayments (advance balance) via `POST /customers/:id/payments` and `POST /collections`, gap-free `RV/<FY>/<number>` receipt numbers, append-only `customer_ledger_entries`, `cashbook_entries` (`CUSTOMER_COLLECTION`), and `Idempotency-Key` replay safety.
+- **Concurrency:** 5 simultaneous collections against one customer get 5 distinct receipt numbers and reconcile to the exact balance.
+- **Agents, assignments & attribution:** agent create/read/update, assigning and reassigning customers (the previous active assignment ends; a duplicate gets `409 ASSIGNMENT_ALREADY_ACTIVE`), automatic attribution for a linked `Collection Agent` login, and the agent summary (assigned outstanding, count, total, by method).
+- **Reversals:** the original becomes `REVERSED`, an `OUT` payment, a `CANCELLATION_REVERSAL` ledger line and a `REVERSAL` cashbook line are written, agent totals exclude it, and a second reversal answers `409 PAYMENT_ALREADY_REVERSED`.
+- **Isolation & permissions:** another shop or another branch gets `404`; a `Cashier` gets `403`; `GET /collections/reconciliation` reports `consistent: true` after every scenario.
+
+### Phase 11 audit (found by reading the code, each fix proved by a test)
+
+| #   | Severity | Finding                                                                                                             | Fix (decision)                                                                                   |
+| --- | -------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| A1  | High     | A collector (`collection.create`) could **reverse any receipt**, including their own                                | Reversal needs `collection.assign` (TD-110)                                                      |
+| A2  | High     | A collector could record a collection **under another agent**, spoofing attribution                                 | `403 AGENT_ATTRIBUTION_FORBIDDEN` unless the caller has `collection.assign` (TD-112)             |
+| A3  | Medium   | The caller-chosen `collectedAt` picked the receipt numbering year and could be far in the future or far in the past | Numbered by the day of issue; the time must be within 7 days back and not in the future (TD-113) |
+| A4  | Medium   | Two simultaneous reversals of one receipt: the second answered a bare **500**                                       | Receipt row locked first; the second answers `409` (TD-111)                                      |
+| A5  | Medium   | Two simultaneous assignments of one customer could leave **two ACTIVE collectors**                                  | Customer row locked while assigning (TD-114)                                                     |
+| A6  | Low      | An impossible start date such as `2026-13-45` answered **500**                                                      | `422 START_DATE_INVALID`                                                                         |
+| A7  | Low      | The agent screen had no way to assign or remove customers; the agent picker showed for roles that do not need it    | Assign / remove UI on the agent screen; picker only for `collection.assign`                      |
+| A8  | Low      | Phase 11 had no workflow document, decisions or error codes                                                         | `COLLECTIONS_WORKFLOW.md`, TD-108 to TD-114, error table                                         |
+
+Left open (documented in `COLLECTIONS_WORKFLOW.md`): collectors see every receipt of the branch and may collect from any customer; deactivating an agent does not end their assignments; no printable receipt PDF.

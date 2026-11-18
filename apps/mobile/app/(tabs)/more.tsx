@@ -48,6 +48,24 @@ export default function MoreScreen() {
         ) : null}
       </View>
 
+      {can('collection.read') ? (
+        <>
+          <SectionTitle>Khata & Collections</SectionTitle>
+          <View style={{ gap: 8 }}>
+            <ListRow
+              title="Collections"
+              subtitle="Customer payment receipts and reversals"
+              onPress={() => router.push('/collections')}
+            />
+            <ListRow
+              title="Collection agents"
+              subtitle="Field collectors, assigned customers and totals"
+              onPress={() => router.push('/collection-agents')}
+            />
+          </View>
+        </>
+      ) : null}
+
       {can('organization.read') ? (
         <>
           <SectionTitle>Shop & GST</SectionTitle>

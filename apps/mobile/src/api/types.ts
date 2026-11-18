@@ -301,3 +301,61 @@ export interface HeldBill {
   payload: unknown;
   createdAt: string;
 }
+
+export interface CollectionAgentRow {
+  id: string;
+  name: string;
+  phone: string | null;
+  userId: string | null;
+  isActive: boolean;
+  activeAssignments: number;
+  completedCollections: number;
+  totalCollected: string;
+  createdAt: string;
+}
+
+export interface CollectionAgentDetail {
+  id: string;
+  name: string;
+  phone: string | null;
+  userId: string | null;
+  isActive: boolean;
+  createdAt: string;
+  assignments: {
+    id: string;
+    customerId: string;
+    customerName: string;
+    customerPhone: string | null;
+    customerBalance: string;
+    targetAmount: string | null;
+    startDate: string;
+    status: 'ACTIVE' | 'ENDED';
+  }[];
+  recentRecords: {
+    id: string;
+    paymentId: string;
+    receiptNumber: string;
+    customerId: string;
+    customerName: string;
+    amount: string;
+    method: string;
+    status: 'COMPLETED' | 'REVERSED';
+    referenceNo: string | null;
+    collectedAt: string;
+  }[];
+}
+
+export interface CollectionRow {
+  id: string;
+  receiptNumber: string | null;
+  amount: string;
+  method: string;
+  status: 'COMPLETED' | 'REVERSED';
+  referenceNo: string | null;
+  notes: string | null;
+  paidAt: string;
+  reversedAt: string | null;
+  customer: { id: string; name: string; phone: string | null } | null;
+  recordedBy: { id: string; fullName: string };
+  agent: { id: string; name: string } | null;
+}

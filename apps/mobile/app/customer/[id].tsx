@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
 import { moneyString } from '@ksms/validation';
@@ -125,9 +125,12 @@ export default function CustomerScreen() {
       ) : null}
       {limit === null ? <ErrorText message={problem} /> : null}
 
-      <Text style={{ color: colors.textMuted, marginVertical: 8 }}>
-        Receiving payments from customers (collections and receipts) arrives in the next update.
-      </Text>
+      {can('collection.create') ? (
+        <Button
+          title="Record payment"
+          onPress={() => router.push({ pathname: '/customer/pay', params: { customerId: id } })}
+        />
+      ) : null}
 
       {ledger ? (
         <>

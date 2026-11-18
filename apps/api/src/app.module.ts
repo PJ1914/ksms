@@ -15,6 +15,7 @@ import { CatalogModule } from './modules/catalog/catalog.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { ProcurementModule } from './modules/procurement/procurement.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { CollectionsModule } from './modules/collections/collections.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { SalesModule } from './modules/sales/sales.module';
 import { NumberingModule } from './common/numbering/numbering.module';
@@ -55,6 +56,7 @@ import { OrganizationModule } from './modules/organization/organization.module';
     ProcurementModule,
     FinanceModule,
     CustomersModule,
+    CollectionsModule,
     SalesModule,
   ],
   providers: [

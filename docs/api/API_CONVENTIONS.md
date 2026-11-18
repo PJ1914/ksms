@@ -195,3 +195,45 @@ Checkout, cancellation and returns need an `Idempotency-Key` header and `X-Branc
 | 503  | `SERVER_TOO_SLOW`          | The database could not finish in time; nothing was saved. Try again (split a very large bill) |
 
 `GST_BILLING_NOT_READY` (Phase 9) is no longer returned: GST shops can bill.
+
+## Error codes added with Phase 11 (khata and collections)
+
+| HTTP | code                          | Meaning                                                   |
+| ---- | ----------------------------- | --------------------------------------------------------- |
+| 422  | `PAYMENT_AMOUNT_INVALID`      | The payment must be more than zero                        |
+| 422  | `COLLECTED_AT_INVALID`        | The collection time is not a valid date                   |
+| 422  | `COLLECTED_AT_IN_FUTURE`      | The collection time cannot be in the future               |
+| 422  | `COLLECTED_AT_TOO_OLD`        | More than 7 days back                                     |
+| 422  | `START_DATE_INVALID`          | An assignment start date that is not a real calendar date |
+| 422  | `AGENT_INACTIVE`              | The collection agent is switched off                      |
+| 422  | `AGENT_USER_ALREADY_LINKED`   | That login already belongs to another agent               |
+| 403  | `AGENT_ATTRIBUTION_FORBIDDEN` | A collector tried to record under another agent           |
+| 404  | `COLLECTION_NOT_FOUND`        | No such collection receipt in this shop and branch        |
+| 404  | `COLLECTION_AGENT_NOT_FOUND`  | No such agent in this shop                                |
+| 404  | `ASSIGNMENT_NOT_FOUND`        | No such assignment for this agent                         |
+| 409  | `PAYMENT_ALREADY_REVERSED`    | The collection was already reversed                       |
+| 409  | `ASSIGNMENT_ALREADY_ACTIVE`   | The customer is already actively assigned to this agent   |
+| 409  | `ASSIGNMENT_ALREADY_ENDED`    | The assignment has already ended                          |
+
+Routes: `POST /customers/:id/payments`, `POST /collections` (both need `Idempotency-Key` and `collection.create`), `GET /collections`, `GET /collections/:id`, `GET /collections/reconciliation` (`collection.read`), `POST /collections/:id/reverse` (`collection.assign`), `GET|POST /collection-agents`, `GET|PATCH /collection-agents/:id`, `POST /collection-agents/:id/assignments`, `POST /collection-agents/:id/assignments/:assignmentId/end`, `GET /collection-agents/:id/summary`.
+
+## Error codes added with Phase 11 (khata and collections)
+
+| HTTP | code                          | Meaning                                                   |
+| ---- | ----------------------------- | --------------------------------------------------------- |
+| 422  | `PAYMENT_AMOUNT_INVALID`      | The payment must be more than zero                        |
+| 422  | `COLLECTED_AT_INVALID`        | The collection time is not a valid date                   |
+| 422  | `COLLECTED_AT_IN_FUTURE`      | The collection time cannot be in the future               |
+| 422  | `COLLECTED_AT_TOO_OLD`        | More than 7 days back                                     |
+| 422  | `START_DATE_INVALID`          | An assignment start date that is not a real calendar date |
+| 422  | `AGENT_INACTIVE`              | The collection agent is switched off                      |
+| 422  | `AGENT_USER_ALREADY_LINKED`   | That login already belongs to another agent               |
+| 403  | `AGENT_ATTRIBUTION_FORBIDDEN` | A collector tried to record under another agent           |
+| 404  | `COLLECTION_NOT_FOUND`        | No such collection receipt in this shop and branch        |
+| 404  | `COLLECTION_AGENT_NOT_FOUND`  | No such agent in this shop                                |
+| 404  | `ASSIGNMENT_NOT_FOUND`        | No such assignment for this agent                         |
+| 409  | `PAYMENT_ALREADY_REVERSED`    | The collection was already reversed                       |
+| 409  | `ASSIGNMENT_ALREADY_ACTIVE`   | The customer is already actively assigned to this agent   |
+| 409  | `ASSIGNMENT_ALREADY_ENDED`    | The assignment has already ended                          |
+
+Routes: `POST /customers/:id/payments`, `POST /collections` (both need `Idempotency-Key` and `collection.create`), `GET /collections`, `GET /collections/:id`, `GET /collections/reconciliation` (`collection.read`), `POST /collections/:id/reverse` (`collection.assign`), `GET|POST /collection-agents`, `GET|PATCH /collection-agents/:id`, `POST /collection-agents/:id/assignments`, `POST /collection-agents/:id/assignments/:assignmentId/end`, `GET /collection-agents/:id/summary`.

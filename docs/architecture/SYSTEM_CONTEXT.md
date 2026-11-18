@@ -88,6 +88,8 @@ flowchart BT
   CustAcc[Customer Accounts] --> Branch
   SuppAcc[Supplier Accounts] --> Branch
   Finance --> Branch
+  Collections --> CustAcc
+  Collections --> Finance
   Billing --> Catalog
   Inventory --> Catalog
   Payments --> CustAcc
