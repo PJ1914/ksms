@@ -161,8 +161,13 @@ export class SaleReturnsService {
         const everythingBack = sale.items.every((i) =>
           returnedBase.get(i.id)!.equals(dec(i.baseQuantity)),
         );
-        const roundOff = everythingBack ? dec(sale.roundOff) : new Decimal(0);
-        const total = linesRefund.plus(roundOff);
+        const cumulativeLines = sum(sale.items.map((i) => returnedAmount.get(i.id)!));
+        const desiredReturned = Decimal.min(
+          cumulativeLines.plus(everythingBack ? dec(sale.roundOff) : 0),
+          dec(sale.total),
+        );
+        const total = Decimal.max(desiredReturned.minus(dec(sale.returnedTotal)), 0);
+        const roundOff = total.minus(linesRefund);
 
         // ---- refund rules
         const refundMethod: PaymentMethodName | null =

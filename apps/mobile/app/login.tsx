@@ -4,11 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError } from '@ksms/api-client';
 import { normalizeIndianPhone } from '@ksms/validation';
 import { useAuth } from '@/auth/AuthProvider';
-import { Button, ErrorText, Field } from '@/components/ui';
+import { Button, Choice, ErrorText, Field } from '@/components/ui';
 import { colors } from '@/theme/colors';
 import { friendlyError } from '@/utils/errors';
 
 type Mode = 'signIn' | 'register';
+interface ShopChoice {
+  id: string;
+  name: string;
+}
 
 export default function LoginScreen() {
   const auth = useAuth();
@@ -17,6 +21,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [shopName, setShopName] = useState('');
+  const [shops, setShops] = useState<ShopChoice[]>([]);
+  const [organizationId, setOrganizationId] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,9 +47,19 @@ export default function LoginScreen() {
     setError(null);
     try {
       if (registering) await auth.register({ fullName, phone, password, shopName });
-      else await auth.signIn(phone, password);
+      else await auth.signIn(phone, password, organizationId);
       // On success the root layout switches to the tabs automatically.
     } catch (e) {
+      if (e instanceof ApiError && e.code === 'ORGANIZATION_REQUIRED') {
+        const list = (e.details as { organizations?: ShopChoice[] } | undefined)?.organizations;
+        const first = list?.[0];
+        if (list && first) {
+          setShops(list);
+          setOrganizationId(first.id);
+          setError('Choose which shop to sign in to, then tap Sign in.');
+          return;
+        }
+      }
       setError(
         e instanceof ApiError && e.code === 'CONFLICT'
           ? 'This mobile number already has an account. Sign in instead.'
@@ -86,7 +102,11 @@ export default function LoginScreen() {
             <Field
               label="Mobile number"
               value={phone}
-              onChangeText={setPhone}
+              onChangeText={(v) => {
+                setPhone(v);
+                setShops([]);
+                setOrganizationId(undefined);
+              }}
               keyboardType="phone-pad"
               autoComplete="tel"
               placeholder="10-digit mobile number"
@@ -102,6 +122,14 @@ export default function LoginScreen() {
               placeholder={registering ? 'At least 8 characters' : undefined}
               onSubmitEditing={submit}
             />
+            {!registering && shops.length > 0 && (
+              <Choice
+                label="Choose shop"
+                options={shops.map((s) => ({ key: s.id, label: s.name }))}
+                value={organizationId ?? shops[0]?.id ?? ''}
+                onChange={setOrganizationId}
+              />
+            )}
             <ErrorText message={error} />
             <Button title={registering ? 'Create shop' : 'Sign in'} onPress={submit} busy={busy} />
           </View>
@@ -111,6 +139,8 @@ export default function LoginScreen() {
             title={registering ? 'I already have an account' : 'New here? Create your shop'}
             onPress={() => {
               setMode(registering ? 'signIn' : 'register');
+              setShops([]);
+              setOrganizationId(undefined);
               setError(null);
             }}
           />

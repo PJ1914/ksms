@@ -43,21 +43,25 @@ export class ProcurementReconciliationService {
         LEFT JOIN supplier_ledger_entries l ON l.reference_type = 'PURCHASE' AND l.reference_id = p.id AND l.entry_type = 'PURCHASE'
         WHERE p.organization_id = ${org}::uuid
         GROUP BY p.id HAVING p.billed_total <> COALESCE(sum(l.amount), 0) LIMIT 50`,
-      // 4. A purchase's returned total equals its lines' returned amounts (+ round-off once everything is returned)
+      // 4. A purchase's returned total equals its lines' returned amounts (+ round-off once everything is returned, capped at billed total)
       //    and the totals of its return documents.
       this.prisma.$queryRaw<object[]>`
         SELECT p.id AS "purchaseId", p.returned_total::text AS "returnedTotal",
-               (COALESCE((SELECT sum(returned_amount) FROM purchase_items WHERE purchase_id = p.id), 0)
-                + CASE WHEN p.status = 'RECEIVED' AND NOT EXISTS (
-                    SELECT 1 FROM purchase_items i WHERE i.purchase_id = p.id AND i.returned_base_quantity <> i.received_base_quantity)
-                  THEN p.round_off ELSE 0 END)::text AS "expectedFromLines",
+               GREATEST(LEAST(
+                 COALESCE((SELECT sum(returned_amount) FROM purchase_items WHERE purchase_id = p.id), 0)
+                 + CASE WHEN p.status = 'RECEIVED' AND NOT EXISTS (
+                     SELECT 1 FROM purchase_items i WHERE i.purchase_id = p.id AND i.returned_base_quantity <> i.received_base_quantity)
+                   THEN p.round_off ELSE 0 END,
+                 p.billed_total), 0)::text AS "expectedFromLines",
                COALESCE((SELECT sum(total) FROM purchase_returns WHERE purchase_id = p.id), 0)::text AS "documentSum"
         FROM purchases p
         WHERE p.organization_id = ${org}::uuid
-          AND (p.returned_total <> COALESCE((SELECT sum(returned_amount) FROM purchase_items WHERE purchase_id = p.id), 0)
-                + CASE WHEN p.status = 'RECEIVED' AND NOT EXISTS (
-                    SELECT 1 FROM purchase_items i WHERE i.purchase_id = p.id AND i.returned_base_quantity <> i.received_base_quantity)
-                  THEN p.round_off ELSE 0 END
+          AND (p.returned_total <> GREATEST(LEAST(
+                 COALESCE((SELECT sum(returned_amount) FROM purchase_items WHERE purchase_id = p.id), 0)
+                 + CASE WHEN p.status = 'RECEIVED' AND NOT EXISTS (
+                     SELECT 1 FROM purchase_items i WHERE i.purchase_id = p.id AND i.returned_base_quantity <> i.received_base_quantity)
+                   THEN p.round_off ELSE 0 END,
+                 p.billed_total), 0)
             OR p.returned_total <> COALESCE((SELECT sum(total) FROM purchase_returns WHERE purchase_id = p.id), 0))
         LIMIT 50`,
       // 5. Each return document's credit is mirrored by a ledger line.

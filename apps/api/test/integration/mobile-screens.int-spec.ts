@@ -139,6 +139,8 @@ suite('Phone screens contract (real database)', () => {
 
     const stock = (await get(`/inventory/balances/${r.id}`).expect(200)).body.data;
     expect(stock.quantityOnHand).toBe('102.500'); // 100 + 5 - 2.5, applied once
+    expect(Array.isArray(stock.recentMovements)).toBe(true);
+    expect(stock.recentMovements).toHaveLength(3);
     expect((await get('/inventory/expiring?withinDays=30').expect(200)).body.data).toEqual([]);
   });
 

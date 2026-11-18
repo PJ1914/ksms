@@ -60,16 +60,18 @@ export class SalesReconciliationService {
         FROM customers c LEFT JOIN customer_ledger_entries l ON l.customer_id = c.id
         WHERE c.organization_id = ${org}::uuid
         GROUP BY c.id HAVING c.balance <> COALESCE(sum(l.amount), 0) LIMIT 50`,
-      // 6. Returned value agrees between the bill, its lines (+ round-off once everything is back) and the return documents.
+      // 6. Returned value agrees between the bill, its lines (+ round-off once everything is back, capped at bill total) and the return documents.
       this.prisma.$queryRaw<object[]>`
         SELECT s.id AS "saleId", s.returned_total::text AS "returnedTotal",
                COALESCE((SELECT sum(total) FROM sale_returns WHERE sale_id = s.id), 0)::text AS "documents"
         FROM sales s
         WHERE s.organization_id = ${org}::uuid
           AND (s.returned_total <> COALESCE((SELECT sum(total) FROM sale_returns WHERE sale_id = s.id), 0)
-            OR s.returned_total <> COALESCE((SELECT sum(returned_amount) FROM sale_items WHERE sale_id = s.id), 0)
-               + CASE WHEN NOT EXISTS (SELECT 1 FROM sale_items i WHERE i.sale_id = s.id AND i.returned_base_quantity <> i.base_quantity)
-                      THEN s.round_off ELSE 0 END)
+            OR s.returned_total <> GREATEST(LEAST(
+                 COALESCE((SELECT sum(returned_amount) FROM sale_items WHERE sale_id = s.id), 0)
+                 + CASE WHEN NOT EXISTS (SELECT 1 FROM sale_items i WHERE i.sale_id = s.id AND i.returned_base_quantity <> i.base_quantity)
+                        THEN s.round_off ELSE 0 END,
+                 s.total), 0))
         LIMIT 50`,
       // 7. Stock that left for each bill line equals the line's quantity.
       this.prisma.$queryRaw<object[]>`

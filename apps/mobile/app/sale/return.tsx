@@ -45,6 +45,8 @@ export default function SaleReturnScreen() {
   const refundOptions: { key: Refund; label: string }[] = [
     { key: 'CASH', label: 'Cash back' },
     { key: 'UPI', label: 'UPI back' },
+    { key: 'CARD', label: 'Card' },
+    { key: 'BANK_TRANSFER', label: 'Bank' },
     ...(s.customer ? [{ key: 'CUSTOMER_ACCOUNT' as const, label: 'Reduce khata' }] : []),
   ];
 

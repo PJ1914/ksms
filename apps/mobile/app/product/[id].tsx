@@ -129,7 +129,7 @@ export default function ProductScreen() {
           {can('stock.adjust') ? (
             <>
               <SectionTitle>Change stock</SectionTitle>
-              {stock.movements.length === 0 ? (
+              {stock.recentMovements.length === 0 ? (
                 <Button title="Set opening stock" onPress={() => goAdjust('OPENING')} />
               ) : null}
               <Button title="Add stock" variant="secondary" onPress={() => goAdjust('ADD')} />
@@ -143,10 +143,10 @@ export default function ProductScreen() {
 
           <SectionTitle>Recent movements</SectionTitle>
           <Card>
-            {stock.movements.length === 0 ? (
+            {stock.recentMovements.length === 0 ? (
               <EmptyState title="No stock movements yet" />
             ) : (
-              stock.movements
+              stock.recentMovements
                 .slice(0, 10)
                 .map((m) => (
                   <KeyValue

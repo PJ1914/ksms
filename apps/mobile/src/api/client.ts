@@ -1,5 +1,5 @@
-import * as Crypto from 'expo-crypto';
 import { api } from '@/auth/session';
+import { randomUuid } from '@/utils/uuid';
 
 /** A page of a list: `{ data: [...], meta: { page, pageSize, total, ... } }`. */
 export interface Page<T, M = Record<string, unknown>> {
@@ -26,7 +26,7 @@ export const deleteData = async (path: string): Promise<void> => {
   await api.delete(path);
 };
 
-export const newKey = (): string => Crypto.randomUUID();
+export const newKey = (): string => randomUuid();
 
 /** Builds `?a=1&b=2`, leaving out empty values. */
 export function query(

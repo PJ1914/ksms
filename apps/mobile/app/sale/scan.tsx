@@ -35,6 +35,7 @@ export default function ScanScreen() {
     lastCode.current = { code, at: now };
     try {
       const r = await getData<Lookup>(`/products/by-barcode/${encodeURIComponent(code)}`);
+      if (r.product.status !== 'ACTIVE') throw new Error('inactive');
       const sale = r.product.conversions.filter((c) => c.isSaleUnit);
       const unit =
         sale.find((c) => c.unitId === r.barcode.unitId) ?? sale.find((c) => c.isBase) ?? sale[0];
@@ -52,9 +53,11 @@ export default function ScanScreen() {
       setMessage({
         ok: false,
         text:
-          e instanceof Error && e.message === 'no sale unit'
-            ? 'This product cannot be sold in a unit.'
-            : friendlyError(e),
+          e instanceof Error && e.message === 'inactive'
+            ? 'This product is switched off and cannot be sold.'
+            : e instanceof Error && e.message === 'no sale unit'
+              ? 'This product cannot be sold in a unit.'
+              : friendlyError(e),
       });
     } finally {
       setTimeout(() => (busy.current = false), 800);

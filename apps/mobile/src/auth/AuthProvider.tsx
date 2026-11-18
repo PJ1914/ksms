@@ -16,7 +16,7 @@ type Status = 'loading' | 'signedOut' | 'signedIn' | 'offline';
 interface AuthState {
   status: Status;
   profile: Profile | null;
-  signIn: (identifier: string, password: string) => Promise<void>;
+  signIn: (identifier: string, password: string, organizationId?: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
   signOut: () => Promise<void>;
   /** Tries again to restore the saved session after a network problem at start-up. */
@@ -58,8 +58,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       status,
       profile,
-      signIn: async (identifier, password) => {
-        setProfile(await signIn(identifier, password));
+      signIn: async (identifier, password, organizationId) => {
+        setProfile(await signIn(identifier, password, organizationId));
         setBranchId(getActiveBranch());
         setStatus('signedIn');
       },

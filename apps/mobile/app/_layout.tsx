@@ -24,7 +24,7 @@ const SCREEN_OPTIONS = {
 };
 
 function RootStack() {
-  const { status, retry, profile } = useAuth();
+  const { status, retry, profile, branch } = useAuth();
 
   if (status === 'loading') {
     return (
@@ -49,8 +49,8 @@ function RootStack() {
 
   const signedIn = status === 'signedIn';
   return (
-    // a new cart for every sign-in: one person's unfinished bill never shows up for the next person
-    <CartProvider key={profile?.user.id ?? 'signed-out'}>
+    // a new cart for every sign-in and branch: an unfinished bill never crosses users or branches
+    <CartProvider key={`${profile?.user.id ?? 'signed-out'}:${branch?.id ?? 'no-branch'}`}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Protected guard={signedIn}>
           <Stack.Screen name="(tabs)" />

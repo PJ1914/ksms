@@ -942,6 +942,43 @@ suite('Sales and POS (real database)', () => {
       await booksAgree();
     });
 
+    it('partial returns on a tiny bill with negative round-off never refund more than the rounded bill total', async () => {
+      const a = await piece('1.20', '10');
+      const b = await piece('0.20', '10');
+      // 1.20 + 0.20 = 1.40, rounded to 1.00 (round-off -0.40)
+      const s = await sold({
+        items: [item(a.id, U.PCS, '1'), item(b.id, U.PCS, '1')],
+        payments: [cash('1.00')],
+      });
+      expect(s).toMatchObject({ subtotal: '1.40', roundOff: '-0.40', total: '1.00' });
+      const itemA = s.items.find((i: { productId: string }) => i.productId === a.id).id;
+      const itemB = s.items.find((i: { productId: string }) => i.productId === b.id).id;
+
+      // Returning the 1.20 item first caps the refund at the 1.00 bill total
+      const r1 = (
+        await A.post('/sale-returns', {
+          saleId: s.id,
+          reason: 'not needed',
+          refundTo: 'CASH',
+          items: [{ saleItemId: itemA, quantity: '1', disposition: 'SALEABLE' }],
+        }).expect(201)
+      ).body.data;
+      expect(r1).toMatchObject({ subtotal: '1.20', roundOff: '-0.20', total: '1.00' });
+
+      // Returning the 0.20 item next returns stock with 0.00 remaining refund
+      const r2 = (
+        await A.post('/sale-returns', {
+          saleId: s.id,
+          reason: 'not needed',
+          refundTo: 'CASH',
+          items: [{ saleItemId: itemB, quantity: '1', disposition: 'SALEABLE' }],
+        }).expect(201)
+      ).body.data;
+      expect(r2).toMatchObject({ subtotal: '0.20', roundOff: '-0.20', total: '0.00' });
+      expect(await sale(s.id)).toMatchObject({ returnedTotal: '1.00', refundedTotal: '1.00' });
+      await booksAgree();
+    });
+
     it('a credit bill is refunded to the customer account, never as cash that was not paid', async () => {
       const p = await piece('100', '20');
       const c = await customer();

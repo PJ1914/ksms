@@ -1,8 +1,8 @@
-import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { ApiError, createApiClient } from '@ksms/api-client';
 import { API_URL } from '@/config';
+import { randomUuid } from '@/utils/uuid';
 
 /** What the API returns about the signed-in person (GET /auth/me and every sign-in). */
 export interface Profile {
@@ -63,7 +63,7 @@ export function setSignedOutListener(fn: (() => void) | null): void {
 async function deviceInfo() {
   let uid = await SecureStore.getItemAsync(DEVICE_KEY);
   if (!uid) {
-    uid = Crypto.randomUUID();
+    uid = randomUuid();
     await SecureStore.setItemAsync(DEVICE_KEY, uid);
   }
   return {
@@ -93,10 +93,15 @@ async function clear(): Promise<void> {
   await SecureStore.deleteItemAsync(REFRESH_KEY);
 }
 
-export async function signIn(identifier: string, password: string): Promise<Profile> {
+export async function signIn(
+  identifier: string,
+  password: string,
+  organizationId?: string,
+): Promise<Profile> {
   const res = await publicApi.post<{ data: AuthResponse }>('/auth/login', {
     identifier: identifier.trim(),
     password,
+    ...(organizationId ? { organizationId } : {}),
     ...(await deviceInfo()),
   });
   return accept(res.data);

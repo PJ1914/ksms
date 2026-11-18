@@ -61,7 +61,10 @@ export default function PurchaseReturnScreen() {
       {p.items.map((i) => {
         const max = returnableIn(i);
         if (new Decimal(max).lte(0)) return null;
-        const batches = stock[i.productId]?.batches ?? [];
+        const prod = stock[i.productId];
+        const tracked = Boolean(prod?.trackBatch || prod?.trackExpiry);
+        const batches = prod?.batches ?? [];
+        const unit = i.unitCode ?? '';
         const line = lines[i.id];
         return (
           <Card key={i.id}>
@@ -69,10 +72,11 @@ export default function PurchaseReturnScreen() {
               {i.productName}
             </Text>
             <Text style={{ color: colors.textMuted, marginBottom: 8 }}>
-              Bought {trimZeros(i.quantity)} {i.unitCode} · up to {trimZeros(max)} can go back
+              Bought {trimZeros(i.quantity)}
+              {unit ? ` ${unit}` : ''} · up to {trimZeros(max)} can go back
             </Text>
             <Field
-              label={`How many (${i.unitCode})`}
+              label={unit ? `How many (${unit})` : 'How many'}
               value={line?.quantity ?? ''}
               onChangeText={(v) => set(i.id, { quantity: v })}
               keyboardType="decimal-pad"
@@ -87,6 +91,8 @@ export default function PurchaseReturnScreen() {
                 value={line.batchId ?? ''}
                 onChange={(batchId) => set(i.id, { batchId })}
               />
+            ) : line?.quantity && tracked ? (
+              <ErrorText message="No batch with stock is available to return." />
             ) : null}
           </Card>
         );

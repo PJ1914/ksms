@@ -1299,6 +1299,41 @@ suite('Procurement (real database)', () => {
       await expectBooksAgree();
     });
 
+    it('partial returns on a tiny purchase with negative round-off never credit more than the billed total', async () => {
+      const r = await rice();
+      const o = await oil();
+      const sup = await supplier();
+      const p = await buy(sup.id, [item(r.id, U.KG, '1', '1.20'), item(o.id, U.L, '1', '0.20')], {
+        roundOff: '-0.40',
+        receiveNow: true,
+      });
+      expect(p).toMatchObject({ total: '1.00', billedTotal: '1.00' });
+      const itemR = p.items.find((i: { productId: string }) => i.productId === r.id).id;
+      const itemO = p.items.find((i: { productId: string }) => i.productId === o.id).id;
+
+      const r1 = (
+        await A.post('/purchase-returns', {
+          purchaseId: p.id,
+          reason: 'damaged',
+          items: [{ purchaseItemId: itemR, quantity: '1' }],
+        }).expect(201)
+      ).body.data;
+      expect(r1).toMatchObject({ total: '1.00', roundOffAdjustment: '-0.20' });
+      expect(await supplierBalance(sup.id)).toBe('0.00');
+
+      const r2 = (
+        await A.post('/purchase-returns', {
+          purchaseId: p.id,
+          reason: 'damaged',
+          items: [{ purchaseItemId: itemO, quantity: '1' }],
+        }).expect(201)
+      ).body.data;
+      expect(r2).toMatchObject({ total: '0.00', roundOffAdjustment: '-0.20' });
+      expect(await supplierBalance(sup.id)).toBe('0.00');
+      expect(await purchase(p.id)).toMatchObject({ returnedTotal: '1.00', outstanding: '0.00' });
+      await expectBooksAgree();
+    });
+
     it('round-off is not credited while part of the order is still to arrive', async () => {
       const r = await rice();
       const sup = await supplier();

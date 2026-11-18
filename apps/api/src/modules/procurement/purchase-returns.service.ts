@@ -167,8 +167,20 @@ export class PurchaseReturnsService {
         const givesEverythingBack =
           locked.status === 'RECEIVED' &&
           items.every((i) => returnedBase.get(i.id)!.equals(dec(i.receivedBaseQuantity)));
-        const roundOffCredit = givesEverythingBack ? dec(locked.roundOff) : new Decimal(0);
-        const totalCredit = credit.plus(roundOffCredit);
+        const purchase = await tx.purchase.findUniqueOrThrow({
+          where: { id: dto.purchaseId },
+          select: { returnedTotal: true, billedTotal: true },
+        });
+        const cumulativeLines = items.reduce(
+          (a, i) => a.plus(returnedAmount.get(i.id)!),
+          new Decimal(0),
+        );
+        const desiredReturned = Decimal.min(
+          cumulativeLines.plus(givesEverythingBack ? dec(locked.roundOff) : 0),
+          dec(purchase.billedTotal),
+        );
+        const totalCredit = Decimal.max(desiredReturned.minus(dec(purchase.returnedTotal)), 0);
+        const roundOffCredit = totalCredit.minus(credit);
 
         for (const item of items) {
           if (returnedBase.get(item.id)!.equals(dec(item.returnedBaseQuantity))) continue;
@@ -180,10 +192,6 @@ export class PurchaseReturnsService {
             },
           });
         }
-        const purchase = await tx.purchase.findUniqueOrThrow({
-          where: { id: dto.purchaseId },
-          select: { returnedTotal: true },
-        });
         await tx.purchase.update({
           where: { id: dto.purchaseId },
           data: { returnedTotal: dec(purchase.returnedTotal).plus(totalCredit).toFixed(2) },
@@ -210,17 +218,19 @@ export class PurchaseReturnsService {
           },
         });
 
-        await this.ledger.post(tx, {
-          organizationId: t.organizationId,
-          branchId,
-          supplierId: locked.supplierId,
-          actorId: t.userId,
-          type: 'PURCHASE_RETURN',
-          amount: totalCredit.negated(),
-          referenceType: 'PURCHASE_RETURN',
-          referenceId: returnId,
-          description: `Goods returned from ${locked.purchaseNumber} (${number.number})`,
-        });
+        if (totalCredit.gt(0)) {
+          await this.ledger.post(tx, {
+            organizationId: t.organizationId,
+            branchId,
+            supplierId: locked.supplierId,
+            actorId: t.userId,
+            type: 'PURCHASE_RETURN',
+            amount: totalCredit.negated(),
+            referenceType: 'PURCHASE_RETURN',
+            referenceId: returnId,
+            description: `Goods returned from ${locked.purchaseNumber} (${number.number})`,
+          });
+        }
         await this.audit.record(tx, {
           organizationId: t.organizationId,
           branchId,

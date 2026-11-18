@@ -81,7 +81,7 @@ export default function CustomerScreen() {
         <Text
           style={{ fontSize: 26, fontWeight: '800', color: owes ? colors.danger : colors.text }}
         >
-          {formatINR(c.balance)}
+          {formatINR(isNegative(c.balance) ? absMoney(c.balance) : c.balance)}
         </Text>
         <Text style={{ color: colors.textMuted, marginBottom: 8 }}>
           {owes ? 'owes you' : isNegative(c.balance) ? 'advance with you' : 'nothing owed'}

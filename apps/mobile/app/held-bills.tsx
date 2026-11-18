@@ -16,6 +16,7 @@ export default function HeldBillsScreen() {
   const list = usePagedList<HeldBill>('/held-bills');
   const { cart, load } = useCart();
   const [error, setError] = useState<string | null>(null);
+  const [discarding, setDiscarding] = useState<string | null>(null);
 
   function resume(h: HeldBill) {
     const parsed = parseHeldCart(h.payload);
@@ -37,11 +38,15 @@ export default function HeldBillsScreen() {
   }
 
   async function discard(h: HeldBill) {
+    if (discarding) return;
+    setDiscarding(h.id);
     try {
       await deleteData(`/held-bills/${h.id}`);
       void list.reload();
     } catch (e) {
       setError(friendlyError(e));
+    } finally {
+      setDiscarding(null);
     }
   }
 
@@ -74,7 +79,13 @@ export default function HeldBillsScreen() {
                 subtitle={`${c?.lines.length ?? 0} items · ${formatDateTime(item.createdAt)}`}
                 onPress={() => resume(item)}
               />
-              <Button title="Discard" variant="secondary" onPress={() => void discard(item)} />
+              <Button
+                title="Discard"
+                variant="secondary"
+                busy={discarding === item.id}
+                disabled={discarding !== null}
+                onPress={() => void discard(item)}
+              />
             </View>
           );
         }}

@@ -38,6 +38,9 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
     [run],
   );
 
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
+
   // First load, and again whenever the inputs change.
   useEffect(() => {
     setLoading(true);
@@ -51,8 +54,8 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
         first.current = false;
         return;
       }
-      void reload();
-    }, [reload]),
+      void reloadRef.current();
+    }, []),
   );
 
   return { data, error, loading, refreshing, reload };
@@ -63,7 +66,7 @@ export function usePagedList<T, M = Record<string, unknown>>(path: string | null
   const [items, setItems] = useState<T[]>([]);
   const [meta, setMeta] = useState<Page<T, M>['meta'] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(path !== null);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const latest = useRef(0);
@@ -80,7 +83,11 @@ export function usePagedList<T, M = Record<string, unknown>>(path: string | null
   const reload = useCallback(
     async (pull = false) => {
       const target = url(1);
-      if (target === null) return;
+      if (target === null) {
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
       const ticket = ++latest.current;
       if (pull) setRefreshing(true);
       try {
@@ -101,6 +108,9 @@ export function usePagedList<T, M = Record<string, unknown>>(path: string | null
     [url],
   );
 
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
+
   const loadMore = useCallback(async () => {
     if (!meta || loadingMore || items.length >= meta.total) return;
     const target = url(meta.page + 1);
@@ -120,10 +130,19 @@ export function usePagedList<T, M = Record<string, unknown>>(path: string | null
   }, [items.length, loadingMore, meta, url]);
 
   useEffect(() => {
+    if (path === null) {
+      ++latest.current;
+      setItems([]);
+      setMeta(null);
+      setError(null);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     setLoading(true);
     const t = setTimeout(() => void reload(), 250); // short pause while typing in a search box
     return () => clearTimeout(t);
-  }, [reload]);
+  }, [path, reload]);
 
   useFocusEffect(
     useCallback(() => {
@@ -131,8 +150,8 @@ export function usePagedList<T, M = Record<string, unknown>>(path: string | null
         first.current = false;
         return;
       }
-      void reload();
-    }, [reload]),
+      void reloadRef.current();
+    }, []),
   );
 
   return { items, meta, error, loading, refreshing, loadingMore, reload, loadMore };

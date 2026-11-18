@@ -64,7 +64,7 @@ export interface Batch {
 
 export interface StockDetail extends StockRow {
   batches: Batch[];
-  movements: {
+  recentMovements: {
     id: string;
     type: string;
     quantity: string;
