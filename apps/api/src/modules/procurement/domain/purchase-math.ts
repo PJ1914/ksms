@@ -1,5 +1,9 @@
 import Decimal from 'decimal.js';
 import { DomainError } from '../../../common/errors/domain.error';
+import {
+  allocateProportionally as allocateShares,
+  cumulativeAmount,
+} from '../../../common/utils/money';
 
 /**
  * Money rules for purchases. Pure functions: no database, no clock.
@@ -52,33 +56,12 @@ export interface PurchaseFigures {
   total: Decimal;
 }
 
-/**
- * Splits `total` across lines in proportion to `weights` to the paisa, so the shares always add up to
- * exactly `total` (largest-remainder method; ties go to the earlier line).
- */
+/** Freight is shared across lines in proportion to their value (shared helper; see common/utils/money.ts). */
 export function allocateProportionally(total: Decimal, weights: Decimal[]): Decimal[] {
-  if (total.isZero()) return weights.map(() => new Decimal(0));
-  const sum = weights.reduce((a, w) => a.plus(w), new Decimal(0));
-  if (sum.lte(0)) {
-    throw new DomainError(
-      'ADDITIONAL_COST_UNALLOCATABLE',
-      'Additional costs cannot be spread because every line is free',
-    );
-  }
-  const cents = total.mul(100).toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
-  const raw = weights.map((w) => cents.mul(w).div(sum));
-  const floors = raw.map((r) => r.floor());
-  let left = cents.minus(floors.reduce((a, f) => a.plus(f), new Decimal(0))).toNumber();
-  const order = raw
-    .map((r, i) => ({ i, frac: r.minus(floors[i]!) }))
-    .sort((a, b) => b.frac.comparedTo(a.frac) || a.i - b.i);
-  const shares = floors.map((f) => f);
-  for (const { i } of order) {
-    if (left <= 0) break;
-    shares[i] = shares[i]!.plus(1);
-    left -= 1;
-  }
-  return shares.map((c) => c.div(100));
+  return allocateShares(total, weights, {
+    code: 'ADDITIONAL_COST_UNALLOCATABLE',
+    message: 'Additional costs cannot be spread because every line is free',
+  });
 }
 
 /**
@@ -156,13 +139,4 @@ export function computePurchase(
   };
 }
 
-/**
- * The amount that should have been billed (or credited) once `done` of `ordered` base units have been
- * received (or returned): proportional, half-up to the paisa, and EXACTLY `payable` when everything is done.
- * Each receipt posts the difference to what was already posted, so partial receipts always add up to the total.
- */
-export function cumulativeAmount(payable: Decimal, done: Decimal, ordered: Decimal): Decimal {
-  if (done.gt(ordered)) throw new RangeError('done cannot exceed ordered');
-  if (done.equals(ordered)) return payable;
-  return money(payable.mul(done).div(ordered));
-}
+export { cumulativeAmount };

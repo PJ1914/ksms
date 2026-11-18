@@ -234,6 +234,54 @@ export class ProductsService {
     };
   }
 
+  /**
+   * Everything a sale line needs, inside the caller's transaction: the sellable quantity in base units, the
+   * catalogue price (same rules as `quote`), and the snapshot a sale line keeps forever (name, SKU, HSN, unit,
+   * conversion factor, MRP). Inactive products, units that are not for sale and invalid quantities are refused.
+   */
+  async priceForSale(
+    db: Db,
+    organizationId: string,
+    productId: string,
+    unitId: string,
+    quantity: Decimal,
+  ) {
+    const p = await this.findFull(db, organizationId, productId);
+    if (p.status !== 'ACTIVE') {
+      throw new DomainError('PRODUCT_NOT_ACTIVE', `${p.name} is not active and cannot be sold`);
+    }
+    const conv = p.conversions.find((c) => c.unitId === unitId);
+    if (!conv)
+      throw new DomainError('UNIT_NOT_CONFIGURED', `This unit is not set up for ${p.name}`);
+    if (!conv.isSaleUnit)
+      throw new DomainError(
+        'UNIT_NOT_SALE_ENABLED',
+        `${conv.unit.code} cannot be used to sell ${p.name}`,
+      );
+    const factor = dec(conv.factorToBase);
+    const baseQuantity = toBaseQuantity(quantity, factor);
+    assertSellableBaseQuantity(this.rulesOf(p), baseQuantity);
+    const factors = new Map(p.conversions.map((c) => [c.unitId, dec(c.factorToBase)]));
+    const points = p.prices
+      .filter((x) => x.isActive)
+      .map((x) => ({ unitId: x.unitId, quantity: dec(x.quantity), price: dec(x.price) }));
+    const quote = priceForQuantity(points, p.baseUnitId, factors, unitId, quantity);
+    return {
+      productId: p.id,
+      name: p.name,
+      sku: p.sku,
+      hsnCode: p.hsnCode,
+      mrp: p.mrp === null ? null : dec(p.mrp),
+      unitId,
+      unitCode: conv.unit.code,
+      factor,
+      baseQuantity,
+      /** Catalogue price for the whole line. */
+      amount: quote.amount,
+      priceSource: quote.source,
+    };
+  }
+
   // ---------- create ----------
 
   async create(organizationId: string, actorId: string, dto: CreateProductDto, meta: Meta) {

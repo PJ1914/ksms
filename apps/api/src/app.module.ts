@@ -14,6 +14,9 @@ import { AuditModule } from './modules/audit/audit.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { ProcurementModule } from './modules/procurement/procurement.module';
+import { CustomersModule } from './modules/customers/customers.module';
+import { FinanceModule } from './modules/finance/finance.module';
+import { SalesModule } from './modules/sales/sales.module';
 import { NumberingModule } from './common/numbering/numbering.module';
 import { IdempotencyModule } from './common/idempotency/idempotency.module';
 import { ContextModule } from './modules/context/context.module';
@@ -50,6 +53,9 @@ import { OrganizationModule } from './modules/organization/organization.module';
     NumberingModule,
     InventoryModule,
     ProcurementModule,
+    FinanceModule,
+    CustomersModule,
+    SalesModule,
   ],
   providers: [
     // Guard order matters: rate limit -> authenticate -> tenant context -> permission (default deny).

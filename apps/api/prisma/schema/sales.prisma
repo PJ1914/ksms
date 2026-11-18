@@ -78,6 +78,8 @@ model Sale {
   total                  Decimal    @db.Decimal(14, 2)
   paidTotal              Decimal    @default(0) @map("paid_total") @db.Decimal(14, 2)
   creditAmount           Decimal    @default(0) @map("credit_amount") @db.Decimal(14, 2) // total - paidTotal at sale time
+  returnedTotal          Decimal    @default(0) @map("returned_total") @db.Decimal(14, 2) // value given back through sale returns
+  refundedTotal          Decimal    @default(0) @map("refunded_total") @db.Decimal(14, 2) // money paid back out (never more than was paid)
   taxMode                TaxMode    @map("tax_mode")
   placeOfSupplyStateCode String?    @map("place_of_supply_state_code")
   soldById               String     @map("sold_by_id") @db.Uuid
@@ -128,6 +130,7 @@ model SaleItem {
   lineTotal                Decimal  @map("line_total") @db.Decimal(14, 2)
   unitCostSnapshot         Decimal  @map("unit_cost_snapshot") @db.Decimal(14, 4) // per base unit, for COGS / gross profit
   returnedBaseQuantity     Decimal  @default(0) @map("returned_base_quantity") @db.Decimal(14, 3)
+  returnedAmount           Decimal  @default(0) @map("returned_amount") @db.Decimal(14, 2) // value given back for this line so far
 
   returnItems SaleReturnItem[]
 
@@ -239,6 +242,7 @@ model SaleReturnItem {
   saleItemId       String            @map("sale_item_id") @db.Uuid
   saleItem         SaleItem          @relation(fields: [saleItemId], references: [id])
   productId        String            @map("product_id") @db.Uuid
+  batchId          String?           @map("batch_id") @db.Uuid // batch the goods went back into (saleable returns)
   unitId           String            @map("unit_id") @db.Uuid
   quantity         Decimal           @db.Decimal(14, 3)
   baseQuantity     Decimal           @map("base_quantity") @db.Decimal(14, 3)

@@ -58,3 +58,11 @@ Rollback: delete the seeded unit rows (only possible while no product uses them)
 Rollback: drop the triggers (`purchases_no_delete`, `purchase_items_delete_guard`, `purchase_returns_no_delete`, `purchase_return_items_no_delete`, `purchase_payments_no_delete`, `suppliers_no_delete`), the function `ksms_purchase_item_delete_guard`, the index `suppliers_org_name_unique`, the CHECK constraints named in the file, the foreign key `payments_supplier_id_fkey`, then the added columns. Risk: additive only; defaults keep existing rows valid.
 
 (Phase 7 needed no migration: it used the tables created in Phase 1.)
+
+## Phase 9 migration (2026-11-20)
+
+| Migration                      | Content                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `20261120000000_sales_support` | `sales.returned_total`, `sales.refunded_total`, `sale_items.returned_amount`, `sale_return_items.batch_id`; CHECK constraints (never more returned than the bill, never more refunded than paid, round-off within one rupee, line refunds within the line); one live customer per mobile number (partial unique index); delete protection for sale returns, their lines, sale payment allocations and customers |
+
+Rollback: drop the triggers `sale_returns_no_delete`, `sale_return_items_no_delete`, `sale_payments_no_delete`, `customers_no_delete`, the index `customers_org_phone_unique`, the constraints `sales_returns_valid`, `sale_items_returns_valid`, `sale_returns_valid`, then the added columns. Risk: additive only; defaults keep existing rows valid.

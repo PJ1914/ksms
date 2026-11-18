@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import Decimal from 'decimal.js';
-import { DEFAULT_CASH_REGISTER_NAME } from '@ksms/constants';
 import type { TenantContext } from '../../common/auth/auth.types';
 import { AppException } from '../../common/errors/app.exception';
 import { DomainError } from '../../common/errors/domain.error';
@@ -13,7 +12,7 @@ import type { Db } from '../../database/db.types';
 import { PrismaService } from '../../database/prisma.service';
 import type { Prisma } from '../../generated/prisma/client';
 import { AuditService } from '../audit/audit.service';
-import { todayInIndia } from '../inventory/domain/stock';
+import { CashbookService } from '../finance/cashbook.service';
 import type { PaymentsQuery, ReversePaymentDto, SupplierPaymentDto } from './procurement.dto';
 import { SupplierLedgerService } from './supplier-ledger.service';
 
@@ -45,6 +44,7 @@ export class SupplierPaymentsService {
     private readonly numbers: DocumentNumberService,
     private readonly idempotency: IdempotencyService,
     private readonly audit: AuditService,
+    private readonly cashbookLines: CashbookService,
   ) {}
 
   async pay(
@@ -389,7 +389,7 @@ export class SupplierPaymentsService {
     return out;
   }
 
-  /** One cashbook line, on the branch's cash register. */
+  /** One cashbook line on the branch's cash register (CashbookService is the only writer). */
   private async cashbook(
     tx: Tx,
     t: TenantContext,
@@ -402,38 +402,17 @@ export class SupplierPaymentsService {
       description: string;
     },
   ) {
-    // Branches are created with their register (BranchService). Use the oldest active one, so supplier payments
-    // and the daily closing always agree; only create the default if the branch somehow has none.
-    let register = await tx.cashRegister.findFirst({
-      where: { branchId, isActive: true },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: { id: true },
-    });
-    if (!register) {
-      await tx.$executeRaw`
-        INSERT INTO cash_registers (id, organization_id, branch_id, name, is_active)
-        VALUES (gen_random_uuid(), ${t.organizationId}::uuid, ${branchId}::uuid, ${DEFAULT_CASH_REGISTER_NAME}, true)
-        ON CONFLICT (branch_id, name) DO NOTHING`;
-      register = await tx.cashRegister.findFirstOrThrow({
-        where: { branchId, name: DEFAULT_CASH_REGISTER_NAME },
-        select: { id: true },
-      });
-    }
-    await tx.cashbookEntry.create({
-      data: {
-        organizationId: t.organizationId,
-        branchId,
-        registerId: register.id,
-        kind: e.kind,
-        method: e.method,
-        amount: e.amount.toFixed(2),
-        paymentId: e.paymentId,
-        referenceType: 'PAYMENT',
-        referenceId: e.paymentId,
-        description: e.description,
-        businessDate: new Date(todayInIndia()),
-        createdById: t.userId,
-      },
+    await this.cashbookLines.record(tx, {
+      organizationId: t.organizationId,
+      branchId,
+      actorId: t.userId,
+      kind: e.kind,
+      method: e.method,
+      amount: e.amount,
+      paymentId: e.paymentId,
+      referenceType: 'PAYMENT',
+      referenceId: e.paymentId,
+      description: e.description,
     });
   }
 

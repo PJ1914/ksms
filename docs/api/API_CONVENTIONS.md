@@ -158,3 +158,28 @@ Money-writing routes need an `Idempotency-Key` header (see Phase 7) and `X-Branc
 | 400  | `INVALID_DATE` | A `from` / `to` filter is not a real date (for example `2026-02-31`). Plain dates cover whole India-time days: `to=2026-11-18` includes the entire 18th |
 
 `POST /supplier-payments/:id/reverse` now requires `X-Branch-Id` and only finds payments made in that branch. A branch that has been switched off or deleted is refused (`BRANCH_FORBIDDEN`) even for people assigned to it.
+
+## Error codes added in Phase 9 (sales, returns, held bills, customers)
+
+Checkout, cancellation and returns need an `Idempotency-Key` header and `X-Branch-Id`.
+
+| HTTP | code                                                                                   | Meaning                                                                                                                                           |
+| ---- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 422  | `GST_BILLING_NOT_READY`                                                                | The shop has GST switched on; GST bills arrive in Phase 10                                                                                        |
+| 422  | `SALE_EMPTY`, `PRODUCT_NOT_ACTIVE`, `UNIT_NOT_CONFIGURED`, `UNIT_NOT_SALE_ENABLED`     | The bill or a line cannot be sold as entered                                                                                                      |
+| 409  | `INSUFFICIENT_STOCK`                                                                   | Not enough sellable stock (see Phase 7); nothing is saved and no bill number is used                                                              |
+| 422  | `DISCOUNT_INVALID`, `DISCOUNT_EXCEEDS_LINE`, `DISCOUNT_EXCEEDS_BILL`                   | Discount amounts that cannot apply                                                                                                                |
+| 403  | `DISCOUNT_LIMIT_EXCEEDED`                                                              | Discount above the shop's cashier limit (`details.limitPercent`, `details.requestedPercent`)                                                      |
+| 403  | `FORBIDDEN` (`details.required`)                                                       | A discount, typed price (`price.override`) or credit-limit override (`credit.override_limit`) the user may not give                               |
+| 422  | `PAYMENT_AMOUNT_INVALID`, `PAYMENT_EXCEEDS_TOTAL`                                      | A payment of zero, or payments adding up to more than the bill                                                                                    |
+| 422  | `CREDIT_NEEDS_CUSTOMER`                                                                | An unpaid amount needs a customer to put it on                                                                                                    |
+| 422  | `CREDIT_LIMIT_EXCEEDED`                                                                | Over the customer's credit limit (`details.creditLimit`, `balance`, `available`); send `overrideCreditLimit: true` with the permission to go over |
+| 422  | `CUSTOMER_INACTIVE`                                                                    | A switched-off customer gets no new credit                                                                                                        |
+| 404  | `SALE_NOT_FOUND`, `SALE_RETURN_NOT_FOUND`, `HELD_BILL_NOT_FOUND`, `CUSTOMER_NOT_FOUND` | Not found in this shop (and this branch, for bills, returns and held bills)                                                                       |
+| 409  | `SALE_ALREADY_CANCELLED`, `SALE_HAS_RETURNS`, `SALE_CANCELLED`                         | Wrong state for a cancellation or a return                                                                                                        |
+| 403  | `SALE_CANCEL_WINDOW_CLOSED`                                                            | Only the owner can cancel a bill from an earlier day (`details.soldOn`)                                                                           |
+| 422  | `ITEM_NOT_IN_SALE`, `RETURN_EXCEEDS_SOLD`                                              | A return line not on the bill, or more than is left to return (`details.returnableBaseQuantity`)                                                  |
+| 422  | `REFUND_EXCEEDS_PAID`, `REFUND_NEEDS_CUSTOMER`                                         | Cash refund above what was paid (`details.refundable`), or a walk-in bill refunded to an account                                                  |
+| 400  | `HELD_BILL_TOO_LARGE`                                                                  | A held bill is limited to 64 KB                                                                                                                   |
+| 409  | `CUSTOMER_PHONE_IN_USE`                                                                | Another customer of the shop has this mobile number (`details.customerId`)                                                                        |
+| 409  | `VERSION_CONFLICT`                                                                     | The customer changed on another device                                                                                                            |

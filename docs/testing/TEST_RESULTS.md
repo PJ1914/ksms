@@ -199,3 +199,69 @@ Mistakes of my own found while doing this: the first version of the boundary tes
 Not verified by me: nothing new beyond the above. The review also noted that it could not run the end-to-end or integration suites in its own sandbox; both were run here.
 
 Design note (not a defect, flagged for the owner): suppliers belong to the whole shop, so the supplier statement and the supplier payment list show every branch's entries to anyone with `supplier.read`. Purchases, returns and payment reversal are branch-scoped.
+
+## Phase 9: Sales and POS engine (2026-11-20)
+
+| Suite                                                                                          | Result             |
+| ---------------------------------------------------------------------------------------------- | ------------------ |
+| Sale money rules (discount sharing, rounding to the rupee, payments vs credit), pure functions | 19 / 19 pass       |
+| Time-ordered ids (bill lines keep the order they were rung up)                                 | 3 / 3 pass         |
+| All API unit tests                                                                             | 137 / 137 pass     |
+| Other unit tests (validation 28, api-client 2, mobile 9)                                       | 39 / 39 pass       |
+| API e2e, DB mocked                                                                             | 37 / 37 pass       |
+| **Sales integration on a real PostgreSQL schema** (all 5 migrations applied)                   | **32 / 32 pass**   |
+| **All seven integration suites together**                                                      | **196 / 196 pass** |
+
+Two real defects were found by the first run and fixed:
+
+1. **Bill lines came back in random order.** Line ids were random, and lines are listed by id. Ids are now time-ordered (UUID v7), so a bill always lists items in the order they were rung up.
+2. **The credit limit never stopped the owner.** The owner implicitly holds every permission, including "override credit limit", so the limit was silently bypassed on every owner sale. Going over a limit must now be asked for on the bill (`overrideCreditLimit: true`) **and** be allowed; the override is audited.
+
+The other two failures of that run were the same two defects seen from other tests.
+
+The suite covers:
+
+- **Checkout:** a walk-in cash bill (prices from the catalogue, stock out at average cost, one cashbook line, one register); the 500 g pack price and kilo price; rounding to the rupee; split payment; refused overpaid and unpaid walk-in bills (nothing saved); 7 refused line cases.
+- **Credit:** the credit limit, with rollback on refusal; part payments; the explicit and audited override (refused for everyone without asking, refused for a cashier who asks); switched-off customers.
+- **Discounts and prices:** the bill discount shared exactly; the 5% cashier limit, which a manager may exceed; the discount and price-override permissions, with the override audited.
+- **Stock:** never oversold, and a refused bill uses no bill number; FEFO and expired stock.
+- **Concurrency:**
+  - 20 counters selling the last 5 units (exactly 5 bills, numbers unique and consecutive);
+  - 5 double-taps (one bill, one movement, one payment);
+  - 10 credit bills at once for one customer;
+  - 10 credit bills for different products;
+  - **credit bills for one customer in five branches at once**.
+- **Held bills:** park, change, discard and close at checkout, with no stock effect.
+- **Cancellation:** stock goes back to its batch at its cost, payments are refunded and credit is removed; who may cancel, and the earlier-day rule.
+- **Returns:** exact partial refunds with round-off; damaged goods stay out of stock; credit bills are refunded to the account and never as unpaid cash; walk-in rules; goods go back into their batch; permissions and retries.
+- **Customers:** one per mobile number, versioned edits, search.
+- **Access and isolation:** another shop and another branch cannot see or touch bills; GST shops are refused.
+- **History:** database protection against edits and deletes, and the audit trail.
+
+After every money scenario, both the sales and the inventory reconciliations must report "consistent".
+
+Mutation checks (a rule is deliberately broken, a test must fail, then the code is restored byte-for-byte). All 15 were caught:
+
+| Broken rule                                         | Caught by                                   |
+| --------------------------------------------------- | ------------------------------------------- |
+| Credit limit never checked                          | credit limit tests                          |
+| Customer row lock removed                           | **five branches at once** (3 runs out of 3) |
+| Credit-limit override taken without being asked for | explicit override test                      |
+| Cashier discount limit not enforced                 | discount limit test                         |
+| Price override allowed without permission           | price override test                         |
+| Walk-in bill may be left unpaid                     | refused-bill test                           |
+| Payments may exceed the bill                        | refused-bill test                           |
+| Checkout ignores the idempotency key                | double-tap test                             |
+| Cash refund may exceed what was paid                | credit-bill refund test                     |
+| Round-off never settled on the last return          | exact partial returns test                  |
+| Damaged goods put back on sale                      | exact partial returns test                  |
+| Cancellation keeps the credit on the account        | cancellation test                           |
+| Anyone may cancel an old bill                       | earlier-day test                            |
+| Sale lookup ignores the branch                      | cross-branch test                           |
+| Bill view ignores the shop (cross-tenant leak)      | cross-shop test                             |
+
+Two of my own test gaps were found this way and closed. First, removing the customer lock was NOT caught at first: the bills in my concurrency test also queued on the same product's stock lock, and then on the branch's bill counter, which hid the missing customer lock. A cross-branch test now proves the customer lock on its own. Second, one break attempt was invalid (it did not compile) and was redone.
+
+Neon after the runs: the new migration is applied and `migrate diff` reports no difference from the schema; there are no leftover test schemas, and the real tables hold only the owner's shop (no products, sales or customers yet).
+
+Not verified: the screens. This phase is server-side; the POS screens (with offline billing) come in the UI and sync phases.
