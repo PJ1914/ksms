@@ -453,4 +453,120 @@ suite('Khata and collections (real database)', () => {
     const recon = await a.get('/collections/reconciliation').expect(200);
     expect(recon.body.data.consistent).toBe(true);
   });
+
+  it('records manual khata debit/credit/opening entries with idempotency, credit limit check, and reconciliation', async () => {
+    const shop = await setupShop('Manual Khata Shop');
+    const a = api(shop.token, shop.branchId);
+    const c = await a
+      .post('/customers', { name: 'Laxmi', phone: uniquePhone(), creditLimit: '500.00' })
+      .expect(201);
+    const customerId = c.body.data.id as string;
+
+    const key = randomUUID();
+    const m1 = await a
+      .post(
+        `/customers/${customerId}/ledger/adjust`,
+        {
+          direction: 'DEBIT',
+          entryType: 'OPENING_BALANCE',
+          amount: '300.00',
+          description: 'Old register balance',
+        },
+        key,
+      )
+      .expect(201);
+    expect(m1.body.data.balanceAfter).toBe('300.00');
+
+    // Idempotent retry returns the same balance without doubling.
+    const m1Retry = await a
+      .post(
+        `/customers/${customerId}/ledger/adjust`,
+        {
+          direction: 'DEBIT',
+          entryType: 'OPENING_BALANCE',
+          amount: '300.00',
+          description: 'Old register balance',
+        },
+        key,
+      )
+      .expect(201);
+    expect(m1Retry.body.data.referenceId).toBe(m1.body.data.referenceId);
+
+    // Cashier cannot exceed customer creditLimit (300 + 250 = 550 > 500).
+    const cashier = await createStaffUser(shop, 'Cashier');
+    const cashierApi = api(cashier.token, shop.branchId);
+    await cashierApi
+      .post(
+        `/customers/${customerId}/ledger/adjust`,
+        {
+          direction: 'DEBIT',
+          amount: '250.00',
+          description: 'Rice taken without bill',
+        },
+        randomUUID(),
+      )
+      .expect(422);
+
+    // Cashier can add within limit (300 + 150 = 450 <= 500), and reduce via CREDIT.
+    const m2 = await cashierApi
+      .post(
+        `/customers/${customerId}/ledger/adjust`,
+        {
+          direction: 'DEBIT',
+          amount: '150.00',
+          description: 'Sugar taken without bill',
+        },
+        randomUUID(),
+      )
+      .expect(201);
+    expect(m2.body.data.balanceAfter).toBe('450.00');
+
+    // A cashier may not wipe dues without cash, nor set an opening balance.
+    for (const body of [
+      { direction: 'CREDIT', amount: '10.00', description: 'Cashier write-off' },
+      {
+        direction: 'DEBIT',
+        entryType: 'OPENING_BALANCE',
+        amount: '10.00',
+        description: 'Cashier opening',
+      },
+    ]) {
+      await cashierApi
+        .post(`/customers/${customerId}/ledger/adjust`, body, randomUUID())
+        .expect(403);
+    }
+    // An opening balance cannot be a credit, even for the owner.
+    await a
+      .post(
+        `/customers/${customerId}/ledger/adjust`,
+        { direction: 'CREDIT', entryType: 'OPENING_BALANCE', amount: '10.00', description: 'Odd' },
+        randomUUID(),
+      )
+      .expect(422);
+    // Another shop cannot touch this customer.
+    const other = await setupShop('Manual Khata Other Shop');
+    await api(other.token, other.branchId)
+      .post(
+        `/customers/${customerId}/ledger/adjust`,
+        { direction: 'DEBIT', amount: '10.00', description: 'Cross shop' },
+        randomUUID(),
+      )
+      .expect(404);
+
+    const m3 = await a
+      .post(
+        `/customers/${customerId}/ledger/adjust`,
+        {
+          direction: 'CREDIT',
+          amount: '50.00',
+          description: 'Rounding write-off',
+        },
+        randomUUID(),
+      )
+      .expect(201);
+    expect(m3.body.data.balanceAfter).toBe('400.00');
+
+    const recon = await a.get('/collections/reconciliation').expect(200);
+    expect(recon.body.data.consistent).toBe(true);
+  });
 });

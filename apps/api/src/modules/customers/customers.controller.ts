@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   Param,
   ParseUUIDPipe,
@@ -9,11 +10,18 @@ import {
   Post,
   Query,
   Req,
+  Res,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
+import { IDEMPOTENCY_HEADER } from '@ksms/constants';
 import type { AppRequest, TenantContext } from '../../common/auth/auth.types';
-import { RequirePermission, Tenant } from '../../common/auth/decorators';
+import { RequireBranch, RequirePermission, Tenant } from '../../common/auth/decorators';
+import { AppException } from '../../common/errors/app.exception';
+import { RolePermissionService } from '../../common/auth/role-permission.service';
+import { IdempotencyService } from '../../common/idempotency/idempotency.service';
 import {
+  AdjustCustomerLedgerDto,
   CreateCustomerDto,
   CustomerLedgerQuery,
   CustomersQuery,
@@ -29,7 +37,11 @@ const uuid = () => new ParseUUIDPipe();
 @ApiSecurity('branch')
 @Controller('customers')
 export class CustomersController {
-  constructor(private readonly customers: CustomersService) {}
+  constructor(
+    private readonly customers: CustomersService,
+    private readonly idempotency: IdempotencyService,
+    private readonly rolePerms: RolePermissionService,
+  ) {}
 
   @Get()
   @RequirePermission('customer.read')
@@ -96,5 +108,50 @@ export class CustomersController {
     @Query() q: CustomerLedgerQuery,
   ) {
     return this.customers.statement(t.organizationId, id, q);
+  }
+
+  @Post(':id/ledger/adjust')
+  @RequireBranch()
+  @RequirePermission('customer.manage')
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: true,
+    description: 'UUID generated once per manual khata entry; retries reuse it',
+  })
+  @ApiOperation({
+    summary: 'Record a manual khata entry (debit without a bill, opening balance, or adjustment)',
+  })
+  async adjustLedger(
+    @Tenant() t: TenantContext,
+    @Param('id', uuid()) id: string,
+    @Headers(IDEMPOTENCY_HEADER) rawKey: string | undefined,
+    @Body() dto: AdjustCustomerLedgerDto,
+    @Req() req: AppRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const key = this.idempotency.requireKey(rawKey);
+    const perms = await this.rolePerms.get(t.roleId);
+    const mayExceed = perms.isOwner || perms.keys.has('credit.override_limit');
+    // Lowering what a customer owes without cash, or setting an opening balance, is how dues get wiped out by
+    // mistake or on purpose: it needs its own permission (a cashier may only add debit within the limit).
+    const needsAdjust = dto.direction === 'CREDIT' || dto.entryType === 'OPENING_BALANCE';
+    if (needsAdjust && !(perms.isOwner || perms.keys.has('khata.adjust'))) {
+      throw new AppException(
+        'FORBIDDEN',
+        'You may not reduce a khata balance or set an opening balance',
+        403,
+        { required: ['khata.adjust'] },
+      );
+    }
+    const { result, replayed } = await this.customers.adjustLedger(
+      t,
+      id,
+      key,
+      dto,
+      meta(req),
+      mayExceed,
+    );
+    if (replayed) res.setHeader('Idempotent-Replayed', 'true');
+    return result;
   }
 }

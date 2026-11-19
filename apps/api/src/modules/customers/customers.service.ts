@@ -1,13 +1,18 @@
 import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import Decimal from 'decimal.js';
 import type { TenantContext } from '../../common/auth/auth.types';
 import { AppException } from '../../common/errors/app.exception';
+import { DomainError } from '../../common/errors/domain.error';
+import { IdempotencyService } from '../../common/idempotency/idempotency.service';
 import { Paginated } from '../../common/pagination/paginated';
 import { timestampRange } from '../../common/utils/dates';
 import { PrismaService } from '../../database/prisma.service';
 import type { Prisma } from '../../generated/prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { CustomerLedgerService } from './customer-ledger.service';
 import type {
+  AdjustCustomerLedgerDto,
   CreateCustomerDto,
   CustomerLedgerQuery,
   CustomersQuery,
@@ -48,6 +53,8 @@ export function customerView(c: Prisma.CustomerGetPayload<object>) {
 export class CustomersService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly ledger: CustomerLedgerService,
+    private readonly idempotency: IdempotencyService,
     private readonly audit: AuditService,
   ) {}
 
@@ -220,6 +227,84 @@ export class CustomersService {
         occurredAt: e.occurredAt,
       })),
       { page, pageSize, total, customer: { id: c.id, name: c.name, balance: m2(c.balance) } },
+    );
+  }
+
+  /** Manual khata entry (debit without a bill, opening balance, or manual credit adjustment). */
+  async adjustLedger(
+    t: TenantContext,
+    customerId: string,
+    key: string,
+    dto: AdjustCustomerLedgerDto,
+    meta: Meta,
+    mayExceedLimit: boolean,
+  ) {
+    if (!t.branchId) {
+      throw new DomainError('BRANCH_REQUIRED', 'Choose a branch first');
+    }
+    const branchId = t.branchId;
+    return this.idempotency.execute(
+      t.organizationId,
+      key,
+      'POST /customers/:id/ledger/adjust',
+      { branchId, customerId, ...dto },
+      async (tx) => {
+        const amount = new Decimal(dto.amount);
+        if (amount.lte(0)) {
+          throw new DomainError('LEDGER_AMOUNT_INVALID', 'Amount must be more than zero');
+        }
+        const entryType = dto.entryType ?? 'ADJUSTMENT';
+        if (entryType === 'OPENING_BALANCE' && dto.direction !== 'DEBIT') {
+          throw new DomainError(
+            'LEDGER_ENTRY_INVALID',
+            'An opening balance is an amount the customer already owes',
+          );
+        }
+        const signed = dto.direction === 'DEBIT' ? amount : amount.negated();
+        const refId = randomUUID();
+
+        const posted = await this.ledger.post(tx, {
+          organizationId: t.organizationId,
+          branchId,
+          customerId,
+          actorId: t.userId,
+          type: entryType,
+          amount: signed,
+          referenceType: 'MANUAL_KHATA',
+          referenceId: refId,
+          description: dto.description,
+          ...(dto.direction === 'DEBIT' ? { creditCheck: { mayExceedLimit } } : {}),
+        });
+
+        await this.audit.record(tx, {
+          organizationId: t.organizationId,
+          branchId,
+          actorId: t.userId,
+          action: 'customer.ledger_adjusted',
+          entityType: 'customer',
+          entityId: customerId,
+          after: {
+            referenceId: refId,
+            entryType,
+            direction: dto.direction,
+            amount: amount.toFixed(2),
+            balanceAfter: posted.balanceAfter.toFixed(2),
+            description: dto.description,
+          },
+          correlationId: meta.correlationId,
+          ipAddress: meta.ipAddress,
+        });
+
+        return {
+          customerId,
+          referenceId: refId,
+          entryType,
+          direction: dto.direction,
+          amount: amount.toFixed(2),
+          balanceAfter: posted.balanceAfter.toFixed(2),
+          description: dto.description,
+        };
+      },
     );
   }
 

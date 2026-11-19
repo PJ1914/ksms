@@ -91,3 +91,20 @@ export class CustomerLedgerQuery {
   @IsOptional() @Matches(DATE) from?: string;
   @IsOptional() @Matches(DATE) to?: string;
 }
+
+export class AdjustCustomerLedgerDto {
+  @IsIn(['DEBIT', 'CREDIT'])
+  direction!: 'DEBIT' | 'CREDIT';
+
+  @IsOptional()
+  @IsIn(['ADJUSTMENT', 'OPENING_BALANCE'])
+  entryType?: 'ADJUSTMENT' | 'OPENING_BALANCE';
+
+  @Matches(MONEY, { message: 'amount must be a decimal string like "250.00"' })
+  amount!: string;
+
+  @trim()
+  @IsString()
+  @Length(2, 300)
+  description!: string;
+}

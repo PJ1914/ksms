@@ -51,11 +51,12 @@ Built 2026-11-21 on top of the early slice (TD-61..64). Code: `apps/mobile/app/`
 
 ## Screens added with Phases 11 and 12
 
-| Screen                  | File                    | What it does                                                                                                          |
-| ----------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Collect from a customer | `customer/pay.tsx`      | Record a khata payment, choose the mode and the collecting agent, see the receipt number and remaining due or advance |
-| Collections             | `collections.tsx`       | List and search receipts, reverse a receipt (owner / manager)                                                         |
-| Collection agents       | `collection-agents.tsx` | Agents, their customers and totals                                                                                    |
-| Expenses                | `expenses.tsx`          | List, add, cancel expenses and categories                                                                             |
-| Cash book               | `cashbook.tsx`          | Cash in/out lines with totals, manual cash in / out                                                                   |
-| Daily closing           | `daily-closing.tsx`     | Expected cash, count and close the day (asks for confirmation first, it cannot be undone)                             |
+| Screen                  | File                    | What it does                                                                                                                                                           |
+| ----------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Collect from a customer | `customer/pay.tsx`      | Record a khata payment, choose the mode and the collecting agent, see the receipt number and remaining due or advance                                                  |
+| Add a khata entry       | `customer/adjust.tsx`   | Add what a customer took without a bill, an opening balance or a reduction (reduction and opening balance need `khata.adjust`; the button shows for `customer.manage`) |
+| Collections             | `collections.tsx`       | List and search receipts, reverse a receipt (owner / manager)                                                                                                          |
+| Collection agents       | `collection-agents.tsx` | Agents, their customers and totals                                                                                                                                     |
+| Expenses                | `expenses.tsx`          | List, add, cancel expenses and categories                                                                                                                              |
+| Cash book               | `cashbook.tsx`          | Cash in/out lines with totals, manual cash in / out                                                                                                                    |
+| Daily closing           | `daily-closing.tsx`     | Expected cash, count and close the day (asks for confirmation first, it cannot be undone)                                                                              |

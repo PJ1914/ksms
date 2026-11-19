@@ -28,6 +28,7 @@ export const PERMISSIONS = {
   // customers & collections
   'customer.read': 'View customers',
   'customer.manage': 'Create and edit customers',
+  'khata.adjust': 'Reduce a customer khata or set an opening balance by hand (no cash received)',
   'credit.override_limit': 'Sell on credit beyond the customer credit limit',
   'ledger.read': 'View customer ledgers',
   'collection.read': 'View collections',

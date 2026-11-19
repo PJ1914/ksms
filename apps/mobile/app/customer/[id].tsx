@@ -131,6 +131,13 @@ export default function CustomerScreen() {
           onPress={() => router.push({ pathname: '/customer/pay', params: { customerId: id } })}
         />
       ) : null}
+      {can('customer.manage') ? (
+        <Button
+          title="Add khata entry"
+          variant="secondary"
+          onPress={() => router.push({ pathname: '/customer/adjust', params: { customerId: id } })}
+        />
+      ) : null}
 
       {ledger ? (
         <>
@@ -142,7 +149,7 @@ export default function CustomerScreen() {
               ledger.data.map((e) => (
                 <KeyValue
                   key={e.id}
-                  label={`${words(e.type)} · ${formatDateTime(e.occurredAt)}`}
+                  label={`${e.description ? `${e.description} · ` : ''}${words(e.type)} · ${formatDateTime(e.occurredAt)}`}
                   value={`${isPositive(e.amount) ? '+' : '−'}${formatINR(absMoney(e.amount))}`}
                   tone={isPositive(e.amount) ? 'danger' : 'success'}
                 />

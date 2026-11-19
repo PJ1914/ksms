@@ -81,6 +81,10 @@ function RootStack() {
             name="customer/pay"
             options={{ ...SCREEN_OPTIONS, title: 'Collect payment' }}
           />
+          <Stack.Screen
+            name="customer/adjust"
+            options={{ ...SCREEN_OPTIONS, title: 'Add khata entry' }}
+          />
           <Stack.Screen name="collections" options={{ ...SCREEN_OPTIONS, title: 'Collections' }} />
           <Stack.Screen
             name="collection-agents"
