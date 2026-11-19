@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import { CartProvider } from '@/cart/CartProvider';
+import { API_URL } from '@/config';
 import { colors } from '@/theme/colors';
 
 export default function RootLayout() {
@@ -40,6 +41,7 @@ function RootStack() {
         <Text style={styles.note}>
           Check the API is running on the PC and this phone is on the same Wi-Fi.
         </Text>
+        <Text style={styles.note}>{API_URL}</Text>
         <Pressable style={styles.button} onPress={retry}>
           <Text style={styles.buttonText}>Try again</Text>
         </Pressable>
@@ -75,6 +77,25 @@ function RootStack() {
             options={{ ...SCREEN_OPTIONS, title: 'Add customer', presentation: 'modal' }}
           />
           <Stack.Screen name="customer/[id]" options={{ ...SCREEN_OPTIONS, title: 'Customer' }} />
+          <Stack.Screen
+            name="customer/pay"
+            options={{ ...SCREEN_OPTIONS, title: 'Collect payment' }}
+          />
+          <Stack.Screen name="collections" options={{ ...SCREEN_OPTIONS, title: 'Collections' }} />
+          <Stack.Screen
+            name="collection-agents"
+            options={{ ...SCREEN_OPTIONS, title: 'Collection agents' }}
+          />
+          <Stack.Screen name="expenses" options={{ ...SCREEN_OPTIONS, title: 'Expenses' }} />
+          <Stack.Screen name="cashbook" options={{ ...SCREEN_OPTIONS, title: 'Cashbook' }} />
+          <Stack.Screen
+            name="daily-closing"
+            options={{ ...SCREEN_OPTIONS, title: 'Daily closing' }}
+          />
+          <Stack.Screen
+            name="gst-settings"
+            options={{ ...SCREEN_OPTIONS, title: 'GST & billing settings' }}
+          />
           <Stack.Screen name="suppliers" options={{ ...SCREEN_OPTIONS, title: 'Suppliers' }} />
           <Stack.Screen
             name="supplier-new"

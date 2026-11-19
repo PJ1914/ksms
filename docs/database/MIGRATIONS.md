@@ -76,3 +76,12 @@ Rollback: drop the triggers `sale_returns_no_delete`, `sale_return_items_no_dele
 Rollback: drop the constraints `invoices_number_rule` and `sale_returns_number_rule`, then restore `ksms_invoice_snapshot_immutable()` from `20261117000100_integrity_constraints`. Risk: none for existing rows.
 
 (Phase 10 itself needed no migration: the invoice and tax columns already existed.)
+
+## Phase 11 and 12 audit migrations (2026-11-19)
+
+| Migration                          | Content                                                                                                                                                                            |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `20261122000000_closing_guards`    | A CLOSED `daily_closings` row cannot be updated or deleted (trigger); a cash line cannot be inserted on a closed (register, day) and the insert share-locks the register (trigger) |
+| `20261122000100_collection_guards` | Partial unique indexes: one non-deleted collection agent per login; one ACTIVE collector per customer                                                                              |
+
+Rollback: drop the triggers `daily_closings_closed_immutable`, `daily_closings_no_truncate`, `cashbook_entries_closed_day` and the functions `ksms_closed_day_immutable()`, `ksms_cashbook_closed_day()`; drop the indexes `collection_agents_one_per_user`, `collection_assignments_one_active_per_customer`. Risk: the index migration fails (changing nothing) if existing data already breaks a rule.

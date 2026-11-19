@@ -36,10 +36,10 @@ Built 2026-11-21 on top of the early slice (TD-61..64). Code: `apps/mobile/app/`
 
 ## What the phone does NOT do yet
 
-- Receive payments from customers (collections, receipts, agents): Phase 11.
 - Money totals, profit and reports on Home: Phase 13.
 - Working without internet (offline billing and sync): the sync phase.
-- Editing a product's prices and units, categories, expenses, cashbook and daily closing.
+- Editing a product's prices and units, and categories.
+- Printable receipts for customer collections (the receipt number and amounts show on screen).
 - Thermal Bluetooth printing (invoices can be shared via the Android share sheet on `sale/[id]`).
 
 ## Testing
@@ -48,3 +48,14 @@ Built 2026-11-21 on top of the early slice (TD-61..64). Code: `apps/mobile/app/`
 - `apps/api/test/integration/mobile-screens.int-spec.ts` replays the requests of every screen, built by the app's own code, against a real database.
 - The Android bundle is built in CI (`expo export`).
 - **The screens themselves have not been exercised on a physical phone by the build.** That check belongs to the owner (see `docs/guides/PHONE_TESTING.md`).
+
+## Screens added with Phases 11 and 12
+
+| Screen                  | File                    | What it does                                                                                                          |
+| ----------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Collect from a customer | `customer/pay.tsx`      | Record a khata payment, choose the mode and the collecting agent, see the receipt number and remaining due or advance |
+| Collections             | `collections.tsx`       | List and search receipts, reverse a receipt (owner / manager)                                                         |
+| Collection agents       | `collection-agents.tsx` | Agents, their customers and totals                                                                                    |
+| Expenses                | `expenses.tsx`          | List, add, cancel expenses and categories                                                                             |
+| Cash book               | `cashbook.tsx`          | Cash in/out lines with totals, manual cash in / out                                                                   |
+| Daily closing           | `daily-closing.tsx`     | Expected cash, count and close the day (asks for confirmation first, it cannot be undone)                             |

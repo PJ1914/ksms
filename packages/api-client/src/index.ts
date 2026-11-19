@@ -17,9 +17,15 @@ export interface ApiClientOptions {
   baseUrl: string;
   getAccessToken: () => Promise<string | null>;
   getBranchId?: () => string | null;
+  /** Request timeout in milliseconds (default 15s so unreachable LAN IPs fail fast instead of hanging). */
+  timeoutMs?: number;
 }
 
+const DEFAULT_TIMEOUT_MS = 15_000;
+
 export function createApiClient(opts: ApiClientOptions) {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
   async function request<T>(
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     path: string,
@@ -33,11 +39,19 @@ export function createApiClient(opts: ApiClientOptions) {
     if (branch) headers['x-branch-id'] = branch;
     if (idempotencyKey) headers['idempotency-key'] = idempotencyKey;
 
-    const res = await fetch(`${opts.baseUrl}${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    const controller = typeof AbortController === 'function' ? new AbortController() : undefined;
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+    let res: Response;
+    try {
+      res = await fetch(`${opts.baseUrl}${path}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: controller?.signal,
+      });
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
     const json: unknown = await res.json().catch(() => undefined);
     if (!res.ok) {
       const err = (json as ApiErrorBody | undefined)?.error;

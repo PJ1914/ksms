@@ -346,3 +346,32 @@ The Phase 11 tests cover:
 | A8  | Low      | Phase 11 had no workflow document, decisions or error codes                                                         | `COLLECTIONS_WORKFLOW.md`, TD-108 to TD-114, error table                                         |
 
 Left open (documented in `COLLECTIONS_WORKFLOW.md`): collectors see every receipt of the branch and may collect from any customer; deactivating an agent does not end their assignments; no printable receipt PDF.
+
+## Phase 12: Supplier Ledger and Finance (2026-11-19)
+
+| Suite                                                                                      | Result           |
+| ------------------------------------------------------------------------------------------ | ---------------- |
+| Workspace checks (`pnpm check`: format, lint, typecheck, 297 unit tests across 4 packages) | 297 / 297 pass   |
+| **Finance integration on real PostgreSQL** (`finance.int-spec.ts`)                         | **3 / 3 pass**   |
+| Mobile bundle export (`@ksms/mobile export:check`)                                         | 1,368 modules OK |
+
+The Phase 12 tests cover:
+
+- **Closing math (`closing-math.spec.ts`):** `expectedCash = openingCash + netCashMovements`, `difference = actualCash - expectedCash` (exact, excess, and short).
+- **Expense categories & expenses:** `GET/POST/PATCH /expense-categories` (duplicate name `409 EXPENSE_CATEGORY_EXISTS`), `GET/POST /expenses` and `POST /expenses/:id/cancel` with `Idempotency-Key` replay safety, append-only `cashbook_entries` (`EXPENSE` and `REVERSAL`), and `409 EXPENSE_ALREADY_CANCELLED` on duplicate cancellation.
+- **Cashbook & manual entries:** `GET /cashbook` (with `totalIn`, `totalOut`, `net`, `cashNet` summary) and `POST /cashbook/entries` (`CASH_IN` / `CASH_OUT`).
+- **Daily closing & closed-day lock:** `GET /closings/preview` carries over the prior closed day's `actualCash` as `openingCash`; `POST /closings` locks the register so 3 simultaneous close attempts yield 1 `201` and 2 `409 DAY_ALREADY_CLOSED`; closed days refuse further cashbook entries (`409 DAY_ALREADY_CLOSED`).
+- **Isolation & permissions:** cross-org and cross-branch requests return `404`; `Cashier` returns `403`; `GET /finance/reconciliation` reports `consistent: true`.
+
+### Phase 11 and 12 audit (2026-11-19)
+
+Full report: `docs/audits/PHASE_11_12_AUDIT.md`. Nine probes on a real database, each run before the fix (all failed) and after (all pass).
+
+| Suite                                                                | Result                                                           |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Workspace checks (`pnpm check`: format, lint, typecheck, unit tests) | 297 / 297 pass (api 184, validation 84, mobile 26, api-client 3) |
+| **All integration suites on real PostgreSQL** (13 suites)            | **235 / 235 pass**                                               |
+| End-to-end tests (`test:e2e`)                                        | 37 / 37 pass                                                     |
+| Mobile bundle export                                                 | 1,368 modules OK                                                 |
+| New: `finance-audit.int-spec.ts`                                     | 7 / 7 pass                                                       |
+| New: `collections-audit.int-spec.ts`                                 | 2 / 2 pass                                                       |

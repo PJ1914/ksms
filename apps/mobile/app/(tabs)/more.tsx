@@ -66,6 +66,35 @@ export default function MoreScreen() {
         </>
       ) : null}
 
+      {can('expense.read') || can('cashbook.read') || can('closing.manage') ? (
+        <>
+          <SectionTitle>Finance</SectionTitle>
+          <View style={{ gap: 8 }}>
+            {can('expense.read') ? (
+              <ListRow
+                title="Expenses"
+                subtitle="Shop expenses, categories and cancellations"
+                onPress={() => router.push('/expenses')}
+              />
+            ) : null}
+            {can('cashbook.read') ? (
+              <ListRow
+                title="Cashbook"
+                subtitle="Money in and out of the branch register"
+                onPress={() => router.push('/cashbook')}
+              />
+            ) : null}
+            {can('cashbook.read') || can('closing.manage') ? (
+              <ListRow
+                title="Daily closing"
+                subtitle="Expected vs actual cash count for the day"
+                onPress={() => router.push('/daily-closing')}
+              />
+            ) : null}
+          </View>
+        </>
+      ) : null}
+
       {can('organization.read') ? (
         <>
           <SectionTitle>Shop & GST</SectionTitle>

@@ -35,4 +35,19 @@ describe('api client', () => {
     });
     await expect(client.get('/x')).rejects.toBeInstanceOf(ApiError);
   });
+
+  it('aborts a stalled request after timeoutMs', async () => {
+    global.fetch = jest.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        }),
+    ) as unknown as typeof fetch;
+    const client = createApiClient({
+      baseUrl: 'http://x',
+      getAccessToken: async () => null,
+      timeoutMs: 25,
+    });
+    await expect(client.get('/slow')).rejects.toThrow('aborted');
+  });
 });

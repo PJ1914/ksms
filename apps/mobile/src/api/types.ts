@@ -359,3 +359,66 @@ export interface CollectionRow {
   recordedBy: { id: string; fullName: string };
   agent: { id: string; name: string } | null;
 }
+
+export interface ExpenseCategoryRow {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
+export interface ExpenseRow {
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  amount: string;
+  method: string;
+  description: string | null;
+  referenceNo: string | null;
+  expenseDate: string;
+  cancelledAt: string | null;
+  createdAt: string;
+}
+
+export interface CashbookEntryRow {
+  id: string;
+  kind: string;
+  method: string;
+  amount: string;
+  description: string | null;
+  referenceType: string;
+  referenceId: string;
+  businessDate: string;
+  occurredAt: string;
+}
+
+export interface DailyClosingPreview {
+  businessDate: string;
+  registerId: string;
+  openingCash: string;
+  cashIn: string;
+  cashOut: string;
+  netCashMovements: string;
+  expectedCash: string;
+  entryCount: number;
+  byMethod: Record<string, string>;
+  closing: {
+    id: string;
+    status: 'OPEN' | 'CLOSED';
+    actualCash: string | null;
+    difference: string | null;
+    notes: string | null;
+    closedAt: string | null;
+  } | null;
+}
+
+export interface DailyClosingRow {
+  id: string;
+  businessDate: string;
+  openingCash: string;
+  expectedCash: string;
+  actualCash: string | null;
+  difference: string | null;
+  status: 'OPEN' | 'CLOSED';
+  notes: string | null;
+  closedAt: string | null;
+}

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { DEFAULT_CASH_REGISTER_NAME } from '@ksms/constants';
+import { AppException } from '../../common/errors/app.exception';
 import { todayInIndia } from '../../common/utils/dates';
 import type { Prisma } from '../../generated/prisma/client';
 
@@ -31,6 +32,7 @@ export interface CashbookLine {
   referenceType: string;
   referenceId: string;
   description: string;
+  businessDate?: string;
 }
 
 /**
@@ -42,6 +44,35 @@ export class CashbookService {
   async record(tx: Tx, line: CashbookLine): Promise<void> {
     if (line.amount.isZero()) return;
     const registerId = await this.registerOf(tx, line.organizationId, line.branchId);
+    // Share-lock the register: a daily closing (which holds it exclusively) and a cash line then queue up, so a
+    // line can never slip into a day after that day's figures were taken.
+    await tx.$queryRaw`SELECT id FROM cash_registers WHERE id = ${registerId}::uuid FOR SHARE`;
+
+    // A line that names its day (a manual entry, an expense date) must land on that day, or be refused if the day
+    // is closed. A line made "now" (a sale, a collection, a refund) goes on today, or on the next business day when
+    // today has already been closed: the shop can keep trading after the evening close.
+    const explicit = line.businessDate !== undefined;
+    let businessDateStr = line.businessDate ?? todayInIndia();
+    const isClosed = async (day: string) =>
+      (await tx.dailyClosing.findFirst({
+        where: { registerId, businessDate: new Date(day), status: 'CLOSED' },
+        select: { id: true },
+      })) !== null;
+
+    if (await isClosed(businessDateStr)) {
+      if (explicit) {
+        throw new AppException(
+          'DAY_ALREADY_CLOSED',
+          `Cash register is already closed for ${businessDateStr}`,
+          409,
+        );
+      }
+      const next = new Date(`${businessDateStr}T00:00:00Z`);
+      next.setUTCDate(next.getUTCDate() + 1);
+      businessDateStr = next.toISOString().slice(0, 10); // a future day can never be closed
+    }
+    const businessDate = new Date(businessDateStr);
+
     await tx.cashbookEntry.create({
       data: {
         organizationId: line.organizationId,
@@ -54,7 +85,7 @@ export class CashbookService {
         referenceType: line.referenceType,
         referenceId: line.referenceId,
         description: line.description,
-        businessDate: new Date(todayInIndia()),
+        businessDate,
         createdById: line.actorId,
       },
     });

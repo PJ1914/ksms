@@ -237,3 +237,49 @@ Routes: `POST /customers/:id/payments`, `POST /collections` (both need `Idempote
 | 409  | `ASSIGNMENT_ALREADY_ENDED`    | The assignment has already ended                          |
 
 Routes: `POST /customers/:id/payments`, `POST /collections` (both need `Idempotency-Key` and `collection.create`), `GET /collections`, `GET /collections/:id`, `GET /collections/reconciliation` (`collection.read`), `POST /collections/:id/reverse` (`collection.assign`), `GET|POST /collection-agents`, `GET|PATCH /collection-agents/:id`, `POST /collection-agents/:id/assignments`, `POST /collection-agents/:id/assignments/:assignmentId/end`, `GET /collection-agents/:id/summary`.
+
+## Error codes added with Phase 12 (finance, expenses and daily closing)
+
+| HTTP | code                         | Meaning                                                  |
+| ---- | ---------------------------- | -------------------------------------------------------- |
+| 409  | `EXPENSE_CATEGORY_EXISTS`    | An expense category with that name already exists        |
+| 404  | `EXPENSE_CATEGORY_NOT_FOUND` | No such expense category in this shop                    |
+| 422  | `EXPENSE_CATEGORY_INACTIVE`  | The expense category is switched off                     |
+| 422  | `EXPENSE_AMOUNT_INVALID`     | Expense amount must be more than zero                    |
+| 422  | `EXPENSE_DATE_INVALID`       | Expense date is not a real calendar date                 |
+| 422  | `EXPENSE_DATE_IN_FUTURE`     | Expense date cannot be in the future                     |
+| 422  | `EXPENSE_DATE_TOO_OLD`       | Expense date can be at most 30 days back                 |
+| 404  | `EXPENSE_NOT_FOUND`          | No such expense in this shop and branch                  |
+| 409  | `EXPENSE_ALREADY_CANCELLED`  | The expense was already cancelled                        |
+| 422  | `CASHBOOK_AMOUNT_INVALID`    | Manual cashbook entry amount must be more than zero      |
+| 422  | `BUSINESS_DATE_INVALID`      | Business date is not a real calendar date                |
+| 422  | `BUSINESS_DATE_IN_FUTURE`    | Business/closing date cannot be in the future            |
+| 422  | `BUSINESS_DATE_TOO_OLD`      | Manual cashbook entries can be dated at most 7 days back |
+| 409  | `DAY_ALREADY_CLOSED`         | The branch cash register is already closed for that date |
+
+## Error codes added with Phase 12 (finance, expenses and daily closing)
+
+| HTTP | code                         | Meaning                                                  |
+| ---- | ---------------------------- | -------------------------------------------------------- |
+| 409  | `EXPENSE_CATEGORY_EXISTS`    | An expense category with that name already exists        |
+| 404  | `EXPENSE_CATEGORY_NOT_FOUND` | No such expense category in this shop                    |
+| 422  | `EXPENSE_CATEGORY_INACTIVE`  | The expense category is switched off                     |
+| 422  | `EXPENSE_AMOUNT_INVALID`     | Expense amount must be more than zero                    |
+| 422  | `EXPENSE_DATE_INVALID`       | Expense date is not a real calendar date                 |
+| 422  | `EXPENSE_DATE_IN_FUTURE`     | Expense date cannot be in the future                     |
+| 422  | `EXPENSE_DATE_TOO_OLD`       | Expense date can be at most 30 days back                 |
+| 404  | `EXPENSE_NOT_FOUND`          | No such expense in this shop and branch                  |
+| 409  | `EXPENSE_ALREADY_CANCELLED`  | The expense was already cancelled                        |
+| 422  | `CASHBOOK_AMOUNT_INVALID`    | Manual cashbook entry amount must be more than zero      |
+| 422  | `BUSINESS_DATE_INVALID`      | Business date is not a real calendar date                |
+| 422  | `BUSINESS_DATE_IN_FUTURE`    | Business/closing date cannot be in the future            |
+| 422  | `BUSINESS_DATE_TOO_OLD`      | Manual cashbook entries can be dated at most 7 days back |
+| 409  | `DAY_ALREADY_CLOSED`         | The branch cash register is already closed for that date |
+
+## Error codes added by the Phase 11 and 12 audit
+
+| HTTP | code                   | Meaning                                                                                                                                                   |
+| ---- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 409  | `CLOSING_OUT_OF_ORDER` | A newer day is already closed; days must be closed in order                                                                                               |
+| 400  | `INVALID_DATE`         | A `from` / `to` filter is not a real calendar date                                                                                                        |
+| 409  | `DAY_ALREADY_CLOSED`   | A cash line (manual entry, expense date) names a day that is closed. Sales and collections made "now" are never refused: they go on the next business day |
