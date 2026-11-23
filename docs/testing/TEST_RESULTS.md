@@ -375,3 +375,19 @@ Full report: `docs/audits/PHASE_11_12_AUDIT.md`. Nine probes on a real database,
 | Mobile bundle export                                                 | 1,368 modules OK                                                 |
 | New: `finance-audit.int-spec.ts`                                     | 7 / 7 pass                                                       |
 | New: `collections-audit.int-spec.ts`                                 | 2 / 2 pass                                                       |
+
+## Phase 13: Reporting and Dashboard (2026-11-23)
+
+| Suite                                                                            | Result                                                                                                     |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Workspace checks (`pnpm check`: format, lint, typecheck, unit tests)             | 311 / 311 pass (api 194, validation 84, mobile 30, api-client 3)                                           |
+| **All integration suites on real PostgreSQL** (14 suites)                        | **242 / 242 pass** (identity suite re-run alone after a transient `503` from the shared database: 42 / 42) |
+| End-to-end tests (`test:e2e`)                                                    | 37 / 37 pass                                                                                               |
+| Mobile bundle export                                                             | 1,380 modules OK (run once locally; from now on only CI and Expo cloud build the app)                      |
+| New: `report-math.spec.ts` (periods, rounding, percentages)                      | 10 / 10 pass                                                                                               |
+| New: `period.spec.ts` (phone report periods)                                     | 4 / 4 pass                                                                                                 |
+| New: `reporting.int-spec.ts` (reports reconcile to the books, plus audit probes) | 7 / 7 pass (re-run after the audit fixes; the other 13 suites are unchanged since the full run above)      |
+
+`reporting.int-spec.ts` builds one busy GST shop and checks each report against figures worked out by hand (revenue 400.00, cost 210.00, gross profit 190.00, net profit 140.00) and against independent SQL over the raw tables: summaries, series (day, week, month), product and category breakdowns, payment modes plus credit, profit, cash flow, purchases, stock value against `/inventory/valuation`, dues, collections, the day book, and the home screen against the reports. It also checks role limits (cashier 403, no profit columns without `report.profit`), isolation between shops and branches, a cancelled bill vanishing from every figure, and that bad requests are 400s.
+
+Speed (temporary probe, not kept): 50,000 bills over a year on the shared Neon database, slowest report 1.5 s including the network trip (see `docs/architecture/REPORTING.md`).

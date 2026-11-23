@@ -120,6 +120,33 @@ function RootStack() {
             name="purchase/return"
             options={{ ...SCREEN_OPTIONS, title: 'Send goods back' }}
           />
+          <Stack.Screen name="reports/index" options={{ ...SCREEN_OPTIONS, title: 'Reports' }} />
+          <Stack.Screen
+            name="reports/sales"
+            options={{ ...SCREEN_OPTIONS, title: 'Sales report' }}
+          />
+          <Stack.Screen
+            name="reports/profit"
+            options={{ ...SCREEN_OPTIONS, title: 'Profit and expenses' }}
+          />
+          <Stack.Screen name="reports/cash" options={{ ...SCREEN_OPTIONS, title: 'Cash flow' }} />
+          <Stack.Screen name="reports/dues" options={{ ...SCREEN_OPTIONS, title: 'Money owed' }} />
+          <Stack.Screen
+            name="reports/collections"
+            options={{ ...SCREEN_OPTIONS, title: 'Collections report' }}
+          />
+          <Stack.Screen
+            name="reports/day-book"
+            options={{ ...SCREEN_OPTIONS, title: 'Day book' }}
+          />
+          <Stack.Screen
+            name="reports/purchases"
+            options={{ ...SCREEN_OPTIONS, title: 'Purchases report' }}
+          />
+          <Stack.Screen
+            name="reports/stock"
+            options={{ ...SCREEN_OPTIONS, title: 'Stock report' }}
+          />
         </Stack.Protected>
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="login" />

@@ -36,7 +36,7 @@ Built 2026-11-21 on top of the early slice (TD-61..64). Code: `apps/mobile/app/`
 
 ## What the phone does NOT do yet
 
-- Money totals, profit and reports on Home: Phase 13.
+- Charts, and exporting a report as PDF or a spreadsheet.
 - Working without internet (offline billing and sync): the sync phase.
 - Editing a product's prices and units, and categories.
 - Printable receipts for customer collections (the receipt number and amounts show on screen).
@@ -51,12 +51,21 @@ Built 2026-11-21 on top of the early slice (TD-61..64). Code: `apps/mobile/app/`
 
 ## Screens added with Phases 11 and 12
 
-| Screen                  | File                    | What it does                                                                                                                                                           |
-| ----------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Collect from a customer | `customer/pay.tsx`      | Record a khata payment, choose the mode and the collecting agent, see the receipt number and remaining due or advance                                                  |
-| Add a khata entry       | `customer/adjust.tsx`   | Add what a customer took without a bill, an opening balance or a reduction (reduction and opening balance need `khata.adjust`; the button shows for `customer.manage`) |
-| Collections             | `collections.tsx`       | List and search receipts, reverse a receipt (owner / manager)                                                                                                          |
-| Collection agents       | `collection-agents.tsx` | Agents, their customers and totals                                                                                                                                     |
-| Expenses                | `expenses.tsx`          | List, add, cancel expenses and categories                                                                                                                              |
-| Cash book               | `cashbook.tsx`          | Cash in/out lines with totals, manual cash in / out                                                                                                                    |
-| Daily closing           | `daily-closing.tsx`     | Expected cash, count and close the day (asks for confirmation first, it cannot be undone)                                                                              |
+| Screen                  | File                      | What it does                                                                                                                                                           |
+| ----------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Collect from a customer | `customer/pay.tsx`        | Record a khata payment, choose the mode and the collecting agent, see the receipt number and remaining due or advance                                                  |
+| Add a khata entry       | `customer/adjust.tsx`     | Add what a customer took without a bill, an opening balance or a reduction (reduction and opening balance need `khata.adjust`; the button shows for `customer.manage`) |
+| Reports hub             | `reports/index.tsx`       | The reports this role may open                                                                                                                                         | the `report.*` permissions                       |
+| Sales                   | `reports/sales.tsx`       | Net sales, bills, GST, credit and returns for a period; by day, product, category, customer, payment mode or cashier                                                   | `report.sales` (profit columns: `report.profit`) |
+| Profit and expenses     | `reports/profit.tsx`      | Revenue, gross profit, expenses, stock written off and net profit (estimates)                                                                                          | `report.profit`                                  |
+| Cash flow               | `reports/cash.tsx`        | Money in and out by payment mode, daily closing differences                                                                                                            | `report.financial`                               |
+| Money owed              | `reports/dues.tsx`        | What customers owe and what the shop owes suppliers                                                                                                                    | `report.financial`                               |
+| Collections             | `reports/collections.tsx` | Khata collected by agent and by day                                                                                                                                    | `report.financial`                               |
+| Day book                | `reports/day-book.tsx`    | Everything that happened on a day, with earlier and later day buttons                                                                                                  | `report.financial`                               |
+| Purchases               | `reports/purchases.tsx`   | What was bought per day                                                                                                                                                | `report.purchases`                               |
+| Stock                   | `reports/stock.tsx`       | Stock value, expired and expiring stock, fast sellers and slow stock                                                                                                   | `report.inventory`                               |
+| Collections             | `collections.tsx`         | List and search receipts, reverse a receipt (owner / manager)                                                                                                          |
+| Collection agents       | `collection-agents.tsx`   | Agents, their customers and totals                                                                                                                                     |
+| Expenses                | `expenses.tsx`            | List, add, cancel expenses and categories                                                                                                                              |
+| Cash book               | `cashbook.tsx`            | Cash in/out lines with totals, manual cash in / out                                                                                                                    |
+| Daily closing           | `daily-closing.tsx`       | Expected cash, count and close the day (asks for confirmation first, it cannot be undone)                                                                              |

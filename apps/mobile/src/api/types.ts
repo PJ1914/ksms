@@ -422,3 +422,169 @@ export interface DailyClosingRow {
   notes: string | null;
   closedAt: string | null;
 }
+
+// ---------------------------------------------------------------- reports (Phase 13). All money is a decimal string.
+
+export interface SalesFigures {
+  bills: number;
+  billValue: string;
+  averageBill: string;
+  discount: string;
+  taxableValue: string;
+  gst: string;
+  creditGiven: string;
+  returnsCount: number;
+  returnsValue: string;
+  netSales: string;
+}
+
+export interface SalesSummary {
+  from: string;
+  to: string;
+  totals: SalesFigures;
+  series: (SalesFigures & { date: string })[];
+}
+
+export interface PurchasesSummary {
+  from: string;
+  to: string;
+  totals: { orders: number; billed: string; returned: string; net: string };
+  series: { date: string; orders: number; billed: string; returned: string; net: string }[];
+}
+
+export interface ProfitReport {
+  from: string;
+  to: string;
+  isEstimate: boolean;
+  revenue: string;
+  costOfGoodsSold: string;
+  grossProfit: string;
+  grossMarginPercent: string;
+  expenses: { total: string; byCategory: { categoryId: string; name: string; total: string }[] };
+  stockWrittenOff: string;
+  netProfit: string;
+  netMarginPercent: string;
+}
+
+export interface CashFlowReport {
+  from: string;
+  to: string;
+  totals: { moneyIn: string; moneyOut: string; net: string };
+  byMethod: { method: string; moneyIn: string; moneyOut: string; net: string }[];
+  closings: { daysClosed: number; cashDifference: string };
+}
+
+export interface InventorySummary {
+  asOf: string;
+  stockValue: string;
+  productsInStock: number;
+  productsOutOfStock: number;
+  lowStockProducts: number;
+  expired: { batches: number; value: string };
+  expiringSoon: { withinDays: number; batches: number; value: string };
+  byCategory: { categoryId: string | null; category: string; value: string }[];
+}
+
+export interface MoverRow {
+  productId: string;
+  sku: string;
+  name: string;
+  baseUnit: string;
+  soldQuantity: string;
+  quantityOnHand: string;
+  stockValue: string;
+}
+
+export interface DayBookRow {
+  kind: string;
+  at: string;
+  reference: string | null;
+  party: string | null;
+  amount: string;
+}
+
+export interface DuesRow {
+  id: string;
+  name: string;
+  phone: string | null;
+  due?: string;
+  payable?: string;
+  lastPaymentAt?: string | null;
+}
+
+export interface DuesMeta {
+  summary: {
+    customers: { owing: number; totalDue: string; advances: string };
+    suppliers: { owed: number; totalPayable: string; advances: string };
+  };
+}
+
+export interface BreakdownRow {
+  id?: string | null;
+  name?: string;
+  method?: string;
+  sku?: string;
+  baseUnit?: string;
+  quantity?: string;
+  bills?: number;
+  billValue?: string;
+  amount?: string;
+  netSales?: string;
+  grossProfit?: string;
+  marginPercent?: string;
+}
+
+export interface CollectionsMeta {
+  totals: { receipts: number; customers: number; collected: string };
+  daily: { date: string; receipts: number; collected: string }[];
+}
+
+export interface PurchaseSupplierRow {
+  supplierId: string;
+  name: string;
+  orders: number;
+  billed: string;
+  returned: string;
+  net: string;
+  owedNow: string;
+}
+
+export interface CollectionAgentRow {
+  /** null = payments taken at the shop counter with no agent. */
+  agentId: string | null;
+  name: string;
+  receipts: number;
+  customers: number;
+  collected: string;
+}
+
+export interface Dashboard {
+  date: string;
+  sales: {
+    bills: number;
+    billValue: string;
+    netSales: string;
+    returnsValue: string;
+    creditGiven: string;
+    monthToDate: { from: string; bills: number; netSales: string } | null;
+  } | null;
+  cashToday: { moneyIn: string; moneyOut: string; net: string };
+  owed: {
+    customersOwing: number;
+    customerDue: string;
+    suppliersOwed: number;
+    supplierPayable: string;
+  };
+  stock: {
+    stockValue: string;
+    lowStockProducts: number;
+    productsOutOfStock: number;
+    expiringSoon: { batches: number };
+    expired: { batches: number };
+  } | null;
+  profit: {
+    today: { grossProfit: string; netProfit: string };
+    monthToDate: { from: string; revenue: string; grossProfit: string; netProfit: string } | null;
+    isEstimate: boolean;
+  } | null;
+}

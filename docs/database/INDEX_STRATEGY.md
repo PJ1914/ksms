@@ -49,5 +49,5 @@ Phase 2. Principles: lead with `organization_id`; index what the screens and rep
 ## Deferred
 
 - `pg_trgm` GIN index for fuzzy product search — only if `ILIKE` over a few thousand SKUs proves slow (needs Prisma extension support check).
-- Reporting materialized views — Phase 13, only if aggregates are measurably slow.
+- Reporting materialized views — measured in Phase 13 (50,000 bills over a year: slowest report 1.5 s including the network trip), so none were added (TD-127). Revisit with real shop data.
 - Partitioning of `stock_movements`/ledgers — not needed at shop scale.

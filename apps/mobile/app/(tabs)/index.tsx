@@ -2,10 +2,11 @@ import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getData, getPage } from '@/api/client';
-import type { ExpiringRow } from '@/api/types';
+import type { Dashboard, ExpiringRow } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
 import { useCart } from '@/cart/CartProvider';
-import { Button, Card, Screen, SectionTitle } from '@/components/ui';
+import { Button, Card, KeyValue, Screen, SectionTitle } from '@/components/ui';
+import { formatINR, isNegative } from '@/utils/currency';
 import { useLoad } from '@/hooks/useLoad';
 import { colors } from '@/theme/colors';
 import { todayInIndia } from '@/utils/today';
@@ -18,7 +19,7 @@ interface Counts {
   suppliersOwed: number | null;
 }
 
-/** Home: today at a glance. Exact counts only; money totals and charts arrive with the reports update. */
+/** Home: today at a glance. Counts for everyone; money figures come from the reports and only for roles that may see them. */
 export default function HomeScreen() {
   const { profile, branch, can } = useAuth();
   const { cart } = useCart();
@@ -44,10 +45,23 @@ export default function HomeScreen() {
     return { billsToday, lowStock, expiring, customersOwing, suppliersOwed };
   }, [today, branch?.id]);
 
+  const money = useLoad<Dashboard | null>(
+    () =>
+      can('report.financial') ? getData<Dashboard>('/reports/dashboard') : Promise.resolve(null),
+    [today, branch?.id],
+  );
+  const d = money.data;
+
   const firstName = profile?.user.fullName.split(' ')[0] ?? '';
 
   return (
-    <Screen onRefresh={() => void reload(true)} refreshing={refreshing}>
+    <Screen
+      onRefresh={() => {
+        void reload(true);
+        void money.reload(true);
+      }}
+      refreshing={refreshing || money.refreshing}
+    >
       <Text style={{ fontSize: 24, fontWeight: '800', color: colors.text }}>
         Namaste, {firstName}
       </Text>
@@ -61,6 +75,55 @@ export default function HomeScreen() {
           title={cart.lines.length ? `Continue the bill (${cart.lines.length} items)` : 'New bill'}
           onPress={() => router.push('/sale/new')}
         />
+      ) : null}
+
+      {d ? (
+        <>
+          <SectionTitle>Today's money</SectionTitle>
+          <Card>
+            {d.sales ? (
+              <>
+                <KeyValue label="Net sales (before GST)" value={formatINR(d.sales.netSales)} bold />
+                <KeyValue label="Billed to customers" value={formatINR(d.sales.billValue)} />
+                <KeyValue label="Left on credit" value={formatINR(d.sales.creditGiven)} />
+              </>
+            ) : null}
+            <KeyValue
+              label="Cash book: money in"
+              value={formatINR(d.cashToday.moneyIn)}
+              tone="success"
+            />
+            <KeyValue
+              label="Cash book: money out"
+              value={formatINR(d.cashToday.moneyOut)}
+              tone="danger"
+            />
+            {d.profit ? (
+              <KeyValue
+                label="Net profit today (estimate)"
+                value={formatINR(d.profit.today.netProfit)}
+                bold
+                tone={isNegative(d.profit.today.netProfit) ? 'danger' : 'success'}
+              />
+            ) : null}
+          </Card>
+          <Card style={{ marginTop: 8 }}>
+            <KeyValue
+              label="Customers owe you"
+              value={formatINR(d.owed.customerDue)}
+              tone="danger"
+            />
+            <KeyValue
+              label="You owe suppliers"
+              value={formatINR(d.owed.supplierPayable)}
+              tone="danger"
+            />
+            {d.stock ? (
+              <KeyValue label="Stock value (at cost)" value={formatINR(d.stock.stockValue)} />
+            ) : null}
+          </Card>
+          <Button title="All reports" variant="secondary" onPress={() => router.push('/reports')} />
+        </>
       ) : null}
 
       <SectionTitle>Today</SectionTitle>
@@ -80,7 +143,7 @@ export default function HomeScreen() {
         />
         <Tile
           icon="time-outline"
-          label="Expiring in 30 days"
+          label="Expired or expiring in 30 days"
           value={data?.expiring}
           warn
           onPress={() => router.push('/(tabs)/stock')}
@@ -98,12 +161,6 @@ export default function HomeScreen() {
           onPress={() => router.push('/suppliers')}
         />
       </View>
-      <Card style={{ marginTop: 12 }}>
-        <Text style={{ color: colors.textMuted }}>
-          Sales totals, profit and reports arrive in a later update. Pull down to refresh these
-          counts.
-        </Text>
-      </Card>
     </Screen>
   );
 }

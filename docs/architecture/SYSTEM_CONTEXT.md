@@ -109,7 +109,7 @@ flowchart BT
   classDef l0 fill:#eee,stroke:#999
 ```
 
-(All modules also call Audit; edges omitted for readability. **Enforced** by `apps/api/src/architecture.spec.ts`, which runs in `pnpm check` and CI: it reads the real imports and fails on any import a module is not allowed to make, on `common/` importing from feature modules, and on cycles. When a module is added or starts using another, update the map in that test and this diagram.)
+(Reporting is SQL over the tables and imports no module, so its dotted edges are about data, not code. All modules also call Audit; edges omitted for readability. **Enforced** by `apps/api/src/architecture.spec.ts`, which runs in `pnpm check` and CI: it reads the real imports and fails on any import a module is not allowed to make, on `common/` importing from feature modules, and on cycles. When a module is added or starts using another, update the map in that test and this diagram.)
 
 ### Responsibilities
 

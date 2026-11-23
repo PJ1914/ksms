@@ -66,6 +66,23 @@ export default function MoreScreen() {
         </>
       ) : null}
 
+      {can('report.sales') ||
+      can('report.financial') ||
+      can('report.profit') ||
+      can('report.purchases') ||
+      can('report.inventory') ? (
+        <>
+          <SectionTitle>Reports</SectionTitle>
+          <View style={{ gap: 8 }}>
+            <ListRow
+              title="Reports"
+              subtitle="Sales, profit, cash flow, money owed, stock and the day book"
+              onPress={() => router.push('/reports')}
+            />
+          </View>
+        </>
+      ) : null}
+
       {can('expense.read') || can('cashbook.read') || can('closing.manage') ? (
         <>
           <SectionTitle>Finance</SectionTitle>

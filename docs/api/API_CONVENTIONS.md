@@ -282,4 +282,5 @@ Routes: `POST /customers/:id/payments`, `POST /collections` (both need `Idempote
 | ---- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 409  | `CLOSING_OUT_OF_ORDER` | A newer day is already closed; days must be closed in order                                                                                               |
 | 400  | `INVALID_DATE`         | A `from` / `to` filter is not a real calendar date                                                                                                        |
+| 400  | `INVALID_RANGE`        | A report period is reversed (`from` after `to`) or longer than 366 days                                                                                   |
 | 409  | `DAY_ALREADY_CLOSED`   | A cash line (manual entry, expense date) names a day that is closed. Sales and collections made "now" are never refused: they go on the next business day |
