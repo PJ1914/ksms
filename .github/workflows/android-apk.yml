@@ -3,6 +3,10 @@ name: Android APK
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'apps/api/**'
   workflow_dispatch:
 
 concurrency:
@@ -35,13 +39,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/app.json') }}
-          restore-keys: gradle-${{ runner.os }}-
+      - uses: gradle/actions/setup-gradle@v4
 
       - run: pnpm install --frozen-lockfile
 
@@ -60,7 +58,7 @@ jobs:
       # For Play Store you'd switch to your own keystore later.
       - name: Build release APK
         working-directory: apps/mobile/android
-        run: ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4g"
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --build-cache --no-daemon -Dorg.gradle.jvmargs="-Xmx4g"
 
       - name: Rename APK
         run: |
