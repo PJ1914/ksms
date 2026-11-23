@@ -1,6 +1,7 @@
 services:
   - type: web
-    name: ksms-api
+    name: ksms-api-sg
+    region: singapore
     runtime: docker
     plan: free
     healthCheckPath: /api/v1/health
