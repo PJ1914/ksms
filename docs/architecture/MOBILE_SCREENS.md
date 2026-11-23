@@ -37,10 +37,8 @@ Built 2026-11-21 on top of the early slice (TD-61..64). Code: `apps/mobile/app/`
 ## What the phone does NOT do yet
 
 - Charts, and exporting a report as PDF or a spreadsheet.
-- Working without internet (offline billing and sync): the sync phase.
-- Editing a product's prices and units, and categories.
-- Printable receipts for customer collections (the receipt number and amounts show on screen).
-- Thermal Bluetooth printing (invoices can be shared via the Android share sheet on `sale/[id]`).
+- Offline completed sales, collections, stock changes, or customer creation (online-first per TD-02; read cache, draft bills, and held-bill sync are live from Phase 14).
+- Thermal Bluetooth printing (invoices and collection receipts can be shared via the Android share sheet on `sale/[id]` and `customer/pay`).
 
 ## Testing
 
@@ -69,3 +67,24 @@ Built 2026-11-21 on top of the early slice (TD-61..64). Code: `apps/mobile/app/`
 | Expenses                | `expenses.tsx`            | List, add, cancel expenses and categories                                                                                                                              |
 | Cash book               | `cashbook.tsx`            | Cash in/out lines with totals, manual cash in / out                                                                                                                    |
 | Daily closing           | `daily-closing.tsx`       | Expected cash, count and close the day (asks for confirmation first, it cannot be undone)                                                                              |
+
+## Screens & offline support added with Phase 14
+
+| Screen / component   | File                            | What it does                                                                                                                                                                             |
+| -------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sync & offline cache | `sync.tsx`                      | Connection/sync status, last sync time, manual **Sync now**, cached counts (products, categories, units, customers), pending queue, and **Retry / Discard** for failed held-bill uploads |
+| Sync status banner   | `src/components/SyncBanner.tsx` | Live online/offline/syncing/pending/failed indicator on Home and Billing; taps through to `/sync`                                                                                        |
+
+- **SQLite read cache (`expo-sqlite`)**: products (with conversions, prices, barcodes), categories, units, and customers refresh via `/sync/*` and back offline fallback on `sale/add-item`, `sale/scan`, `sale/customer`, and `(tabs)/khata`.
+- **Draft & held bills**: the active cart persists in SQLite per `(org, user, branch)`; holding a bill saves locally and queues a `HELD_BILL_UPLOAD` outbox item uploaded idempotently (`Idempotency-Key`) with exponential backoff. Checkout remains strictly online-only (TD-02).
+- **Cache clearing**: all SQLite tables are wiped on sign-out and whenever another user or shop signs in on the device.
+
+## Screens added with Phase 15
+
+| Screen                   | File                                  | What it does                                                                                                                                       | Needs                          |
+| ------------------------ | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| Notifications            | `notifications.tsx`                   | In-app alerts (low stock, expiring batches), unread filter, mark read / read all, check branch alerts                                              | authenticated                  |
+| Edit product & price     | `product-edit.tsx`                    | Edit product name, local name, category, status, MRP, reorder level, GST config, base selling price, and attach/remove barcodes (with camera scan) | `product.manage`               |
+| Stock & Add product scan | `(tabs)/stock.tsx`, `product-new.tsx` | Camera barcode scan (`BarcodeScannerModal`) in Stock jumps to the product or opens Add product pre-filled with the scanned barcode + optional MRP  | `stock.read`, `product.manage` |
+| Categories               | `categories.tsx`                      | List, add, rename and delete empty product categories                                                                                              | `category.manage`              |
+| Collection receipt       | `customer/pay.tsx`                    | Added **Share receipt** via Android share sheet on the collection confirmation screen                                                              | `collection.create`            |

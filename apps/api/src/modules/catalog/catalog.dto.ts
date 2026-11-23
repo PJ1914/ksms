@@ -62,6 +62,8 @@ export class CreateProductDto {
   @IsIn(['WEIGHT', 'VOLUME', 'COUNT']) type!: 'WEIGHT' | 'VOLUME' | 'COUNT';
   @IsUUID() baseUnitId!: string;
   @IsOptional() @IsUUID() categoryId?: string;
+  /** When true and categoryId is omitted, infers and creates/links a matching category from the product name. */
+  @IsOptional() @IsBoolean() autoCategorize?: boolean;
   @IsOptional() @Matches(MONEY, msg('mrp')) mrp?: string;
   @IsOptional() @Matches(QTY, msg('minStockLevel')) minStockLevel?: string;
   @IsOptional() @Matches(QTY, msg('minSaleIncrement')) minSaleIncrement?: string;

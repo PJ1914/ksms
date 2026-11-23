@@ -182,8 +182,22 @@ export class SalesController {
 
   @Post('held-bills')
   @RequirePermission('sale.create')
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: false,
+    description:
+      'Optional UUID used by the mobile sync outbox so retrying a held-bill upload never creates duplicates',
+  })
   @ApiOperation({ summary: 'Park a cart (never touches stock or money)' })
-  hold(@Tenant() t: TenantContext, @Body() dto: HeldBillDto) {
+  hold(
+    @Tenant() t: TenantContext,
+    @Headers(IDEMPOTENCY_HEADER) rawKey: string | undefined,
+    @Body() dto: HeldBillDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (rawKey !== undefined && rawKey !== '') {
+      return this.idempotent(rawKey, res, (key) => this.heldBills.createIdempotent(t, key, dto));
+    }
     return this.heldBills.create(t, dto);
   }
 

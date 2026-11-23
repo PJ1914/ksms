@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useMemo, useReducer, useRef } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+} from 'react';
 import {
   type Cart,
   type CartLine,
@@ -11,6 +19,8 @@ import {
   updateLine,
 } from '@ksms/validation';
 import { newKey } from '@/api/client';
+import { clearDraftBill, loadDraftBill, saveDraftBill } from '@/sync/cache-store';
+import { useSync } from '@/sync/SyncProvider';
 
 type Action =
   | { type: 'add'; line: Parameters<typeof addToCart>[1] }
@@ -58,15 +68,49 @@ interface CartApi {
 
 const CartContext = createContext<CartApi | null>(null);
 
-/** The bill being rung up. Lives above the screens, so leaving the till and coming back keeps the cart. */
-export function CartProvider({ children }: { children: React.ReactNode }) {
+/** The bill being rung up. Persisted locally in SQLite as a draft bill per (org, user, branch). */
+export function CartProvider({
+  scopeKey,
+  children,
+}: {
+  scopeKey?: string | null;
+  children: React.ReactNode;
+}) {
+  const { db, ready } = useSync();
   const [cart, dispatch] = useReducer(reducer, undefined, emptyCart);
   const checkoutKey = useRef<IdempotencyHandle | null>(null);
+  const hydrated = useRef(false);
+
+  // Restore any unfinished draft bill for this (org, user, branch) once the local cache is ready.
+  useEffect(() => {
+    hydrated.current = false;
+    if (!ready || !db || !scopeKey) return;
+    let cancelled = false;
+    void loadDraftBill(db, scopeKey).then((saved) => {
+      if (cancelled) return;
+      hydrated.current = true;
+      if (saved && (saved.lines.length > 0 || saved.customerId !== null)) {
+        dispatch({ type: 'load', cart: saved });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, db, scopeKey]);
+
+  // Persist every cart edit as a local draft bill in SQLite.
+  useEffect(() => {
+    if (!ready || !db || !scopeKey || !hydrated.current) return;
+    void saveDraftBill(db, scopeKey, cart).catch(() => undefined);
+  }, [ready, db, scopeKey, cart]);
 
   const clear = useCallback(() => {
     checkoutKey.current = null;
     dispatch({ type: 'clear' });
-  }, []);
+    if (db && scopeKey) {
+      void clearDraftBill(db, scopeKey).catch(() => undefined);
+    }
+  }, [db, scopeKey]);
 
   const value = useMemo<CartApi>(
     () => ({

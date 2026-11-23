@@ -6,15 +6,20 @@ import type { CustomerRow } from '@/api/types';
 import { useCart } from '@/cart/CartProvider';
 import { Badge, Button, EmptyState, ErrorText, ListRow, Loading, SearchBox } from '@/components/ui';
 import { usePagedList } from '@/hooks/useLoad';
+import { searchCachedCustomers } from '@/sync/cache-store';
+import { useSync } from '@/sync/SyncProvider';
 import { colors } from '@/theme/colors';
 import { formatINR, isPositive } from '@/utils/currency';
 
 /** Choose who the bill is for. Walk-in customers must pay in full; a named customer can take credit (khata). */
 export default function ChooseCustomerScreen() {
   const { setCustomer, cart } = useCart();
+  const { db } = useSync();
   const [search, setSearch] = useState('');
   const list = usePagedList<CustomerRow>(
     `/customers${query({ q: search.trim(), isActive: true })}`,
+    30,
+    db ? () => searchCachedCustomers(db, { q: search, activeOnly: true }) : undefined,
   );
 
   return (
@@ -39,6 +44,11 @@ export default function ChooseCustomerScreen() {
         <Loading />
       ) : (
         <>
+          {list.fromCache ? (
+            <Text style={{ color: colors.warning, fontSize: 13, marginTop: 6 }}>
+              Offline — showing saved customers from this phone.
+            </Text>
+          ) : null}
           <ErrorText message={list.error} />
           <FlatList
             data={list.items}

@@ -6,6 +6,7 @@ import type { Dashboard, ExpiringRow } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
 import { useCart } from '@/cart/CartProvider';
 import { Button, Card, KeyValue, Screen, SectionTitle } from '@/components/ui';
+import { SyncBanner } from '@/components/SyncBanner';
 import { formatINR, isNegative } from '@/utils/currency';
 import { useLoad } from '@/hooks/useLoad';
 import { colors } from '@/theme/colors';
@@ -65,10 +66,12 @@ export default function HomeScreen() {
       <Text style={{ fontSize: 24, fontWeight: '800', color: colors.text }}>
         Namaste, {firstName}
       </Text>
-      <Text style={{ color: colors.primary, fontWeight: '600', marginBottom: 16 }}>
+      <Text style={{ color: colors.primary, fontWeight: '600', marginBottom: 12 }}>
         {profile?.organization.name}
         {branch ? ` · ${branch.name}` : ''}
       </Text>
+
+      <SyncBanner />
 
       {can('sale.create') ? (
         <Button

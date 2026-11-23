@@ -391,3 +391,47 @@ Full report: `docs/audits/PHASE_11_12_AUDIT.md`. Nine probes on a real database,
 `reporting.int-spec.ts` builds one busy GST shop and checks each report against figures worked out by hand (revenue 400.00, cost 210.00, gross profit 190.00, net profit 140.00) and against independent SQL over the raw tables: summaries, series (day, week, month), product and category breakdowns, payment modes plus credit, profit, cash flow, purchases, stock value against `/inventory/valuation`, dues, collections, the day book, and the home screen against the reports. It also checks role limits (cashier 403, no profit columns without `report.profit`), isolation between shops and branches, a cancelled bill vanishing from every figure, and that bad requests are 400s.
 
 Speed (temporary probe, not kept): 50,000 bills over a year on the shared Neon database, slowest report 1.5 s including the network trip (see `docs/architecture/REPORTING.md`).
+
+## Phase 14: Offline Read Cache and Sync (2026-11-23)
+
+| Suite                                                                                  | Result                                                                                                                             |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace checks (`pnpm check`: format, lint, typecheck, unit tests)                   | 323 / 323 pass (api 199, validation 84, mobile 37, api-client 3)                                                                   |
+| **Sync integration on real PostgreSQL** (`apps/api/test/integration/sync.int-spec.ts`) | **4 / 4 pass** (51.7 s against remote Neon)                                                                                        |
+| New: `apps/api/src/modules/sync/domain/sync-cursor.spec.ts`                            | 4 / 4 pass (composite `(updated_at, id)` and `id` cursor round-trips, bad cursor/date `400` validation)                            |
+| New: `apps/mobile/src/sync/sync.spec.ts` (real in-memory SQLite via `node:sqlite`)     | 7 / 7 pass (paged delta pull, soft-delete eviction, Decimal owes filter, cache clear on logout & user/shop switch, drafts, outbox) |
+| Mobile local bundle / build                                                            | Intentionally not run locally per Phase 14 instructions (handled by CI / Expo cloud)                                               |
+
+`sync.int-spec.ts` verifies against a real PostgreSQL schema:
+
+- Initial and `updated_since` delta pulls on `GET /sync/products` (including conversions, prices, barcodes, and price edits bumping `updated_at`), `GET /sync/categories`, `GET /sync/units` (stable `id` paging), and `GET /sync/customers`.
+- Soft-deleted products, categories, and customers are returned with `deletedAt` in delta feeds so clients evict them locally.
+- Stable composite `(updated_at, id)` keyset paging across 5 customers forced onto the exact same `updated_at` timestamp (`limit=2`: zero skipped, zero duplicated).
+- Strict cross-organization isolation (Shop B never sees Shop A's records), auth (`401`), RBAC (`Collection Agent` gets `403` on `/sync/{products,categories,units}` and `200` on `/sync/customers`), and input validation (`400 INVALID_CURSOR`, `400 INVALID_UPDATED_SINCE`).
+- Idempotent `POST /held-bills` with `Idempotency-Key`: exact replay returns the same held-bill ID with `Idempotent-Replayed: true` and creates zero duplicates; different body with the same key returns `422 IDEMPOTENCY_KEY_REUSED`; malformed key returns `400 IDEMPOTENCY_KEY_INVALID`; requests without a key continue to work normally.
+
+## Phase 15: Mobile Integration & Notifications (2026-11-23)
+
+| Suite                                                                                                    | Result                                                           |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Workspace checks (`pnpm check`: format, lint, typecheck, unit tests)                                     | 324 / 324 pass (api 200, validation 84, mobile 37, api-client 3) |
+| **Notifications integration on real PostgreSQL** (`apps/api/test/integration/notifications.int-spec.ts`) | **1 / 1 pass** (30.9 s against remote Neon)                      |
+
+`notifications.int-spec.ts` verifies against a real PostgreSQL schema:
+
+- `POST /notifications/check-alerts` scans the working branch for `LOW_STOCK` and `EXPIRING_SOON` batches and deduplicates unread alerts (`2` created on first scan, `0` on immediate re-scan).
+- `GET /notifications/unread-count`, `GET /notifications?unreadOnly=true`, `POST /notifications/:id/read`, and `POST /notifications/read-all`.
+- Strict cross-organization isolation (Shop B sees `0` notifications and receives `404 NOTIFICATION_NOT_FOUND` on Shop A's IDs), `400 BRANCH_REQUIRED` when `X-Branch-Id` is omitted, and `401` when unauthenticated.
+
+## Phase 15: Mobile Integration & Notifications (2026-11-23)
+
+| Suite                                                                                                    | Result                                                           |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Workspace checks (`pnpm check`: format, lint, typecheck, unit tests)                                     | 324 / 324 pass (api 200, validation 84, mobile 37, api-client 3) |
+| **Notifications integration on real PostgreSQL** (`apps/api/test/integration/notifications.int-spec.ts`) | **1 / 1 pass** (30.9 s against remote Neon)                      |
+
+`notifications.int-spec.ts` verifies against a real PostgreSQL schema:
+
+- `POST /notifications/check-alerts` scans the working branch for `LOW_STOCK` and `EXPIRING_SOON` batches and deduplicates unread alerts (`2` created on first scan, `0` on immediate re-scan).
+- `GET /notifications/unread-count`, `GET /notifications?unreadOnly=true`, `POST /notifications/:id/read`, and `POST /notifications/read-all`.
+- Strict cross-organization isolation (Shop B sees `0` notifications and receives `404 NOTIFICATION_NOT_FOUND` on Shop A's IDs), `400 BRANCH_REQUIRED` when `X-Branch-Id` is omitted, and `401` when unauthenticated.

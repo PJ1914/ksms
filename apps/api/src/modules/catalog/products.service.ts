@@ -131,10 +131,13 @@ export class ProductsService {
   async list(organizationId: string, q: ListProductsQuery) {
     const page = q.page ?? 1;
     const pageSize = q.pageSize ?? 25;
+    const categoryIds = q.categoryId
+      ? await this.categories.descendantIds(this.prisma, organizationId, q.categoryId)
+      : null;
     const where: Prisma.ProductWhereInput = {
       organizationId,
       deletedAt: null,
-      ...(q.categoryId ? { categoryId: q.categoryId } : {}),
+      ...(categoryIds ? { categoryId: { in: categoryIds } } : {}),
       ...(q.status ? { status: q.status } : {}),
       ...(q.type ? { type: q.type } : {}),
       ...(q.updatedSince ? { updatedAt: { gt: new Date(q.updatedSince) } } : {}),
@@ -305,7 +308,19 @@ export class ProductsService {
     this.assertBarcodeUnits(conversions, []);
 
     return this.prisma.$transaction(async (tx) => {
-      if (dto.categoryId) await this.categories.assertExists(tx, organizationId, dto.categoryId);
+      let categoryId = dto.categoryId;
+      if (categoryId) {
+        await this.categories.assertExists(tx, organizationId, categoryId);
+      } else if (dto.autoCategorize) {
+        categoryId = await this.categories.resolveAutoCategory(
+          tx,
+          organizationId,
+          actorId,
+          dto.name,
+          dto.localName,
+          meta,
+        );
+      }
       const sku = dto.sku ?? (await this.generateSku(tx, organizationId));
       await this.assertSkuFree(tx, organizationId, sku);
       await this.assertBarcodesFree(tx, organizationId, barcodes);
@@ -313,7 +328,7 @@ export class ProductsService {
       const product = await tx.product.create({
         data: {
           organizationId,
-          categoryId: dto.categoryId,
+          categoryId,
           sku,
           name: dto.name,
           localName: dto.localName,

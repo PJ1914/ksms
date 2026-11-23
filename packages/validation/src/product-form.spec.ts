@@ -1,4 +1,4 @@
-import { buildProductPayload, validateProductForm } from './product-form';
+import { buildOpeningStockPayload, buildProductPayload, validateProductForm } from './product-form';
 
 const units = [
   { id: 'u-kg', code: 'KG' },
@@ -94,6 +94,91 @@ describe('buildProductPayload', () => {
         gstRatePercent: '',
       }),
     ).toMatch(/GST rate/i);
+  });
+
+  it('validates and includes optional barcode and MRP', () => {
+    expect(
+      validateProductForm({
+        name: 'Parle-G',
+        sellBy: 'PCS',
+        price: '10',
+        mrp: '10.00',
+        barcode: '8901719100017',
+      }),
+    ).toBeNull();
+    expect(
+      buildProductPayload(
+        {
+          name: 'Parle-G',
+          sellBy: 'PCS',
+          price: '10',
+          mrp: '10.00',
+          barcode: ' 8901719100017 ',
+        },
+        units,
+      ),
+    ).toEqual({
+      name: 'Parle-G',
+      type: 'COUNT',
+      baseUnitId: 'u-pcs',
+      prices: [{ unitId: 'u-pcs', price: '10' }],
+      mrp: '10.00',
+      barcodes: ['8901719100017'],
+    });
+    expect(
+      validateProductForm({ name: 'Parle-G', sellBy: 'PCS', price: '10', mrp: 'bad' }),
+    ).toMatch(/MRP/i);
+    expect(
+      validateProductForm({ name: 'Parle-G', sellBy: 'PCS', price: '10', barcode: '12' }),
+    ).toMatch(/Barcode/i);
+  });
+
+  it('validates and builds optional opening stock with optional cost (defaults to 0)', () => {
+    expect(
+      validateProductForm({
+        name: 'Parle-G',
+        sellBy: 'PCS',
+        price: '10',
+        openingQuantity: '24',
+      }),
+    ).toBeNull();
+    expect(
+      validateProductForm({
+        name: 'Parle-G',
+        sellBy: 'PCS',
+        price: '10',
+        openingQuantity: '0',
+      }),
+    ).toMatch(/Opening stock/i);
+    expect(
+      validateProductForm({
+        name: 'Parle-G',
+        sellBy: 'PCS',
+        price: '10',
+        openingQuantity: '10',
+        openingCost: 'bad',
+      }),
+    ).toMatch(/Cost price/i);
+
+    expect(
+      buildOpeningStockPayload('p-1', 'u-pcs', { openingQuantity: '', openingCost: '' }),
+    ).toBeNull();
+    expect(
+      buildOpeningStockPayload('p-1', 'u-pcs', { openingQuantity: ' 24 ', openingCost: '' }),
+    ).toEqual({
+      productId: 'p-1',
+      unitId: 'u-pcs',
+      quantity: '24',
+      unitCost: '0',
+    });
+    expect(
+      buildOpeningStockPayload('p-1', 'u-pcs', { openingQuantity: '24', openingCost: '8.50' }),
+    ).toEqual({
+      productId: 'p-1',
+      unitId: 'u-pcs',
+      quantity: '24',
+      unitCost: '8.50',
+    });
   });
 
   it('fails clearly if the server has no such unit', () => {

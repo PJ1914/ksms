@@ -1,9 +1,10 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
-import { getData, getPage, postData } from '@/api/client';
+import { getData, postData } from '@/api/client';
 import type { LedgerEntry, SupplierDetail } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
+import { ListFooter } from '@/components/ListFooter';
 import {
   Badge,
   Button,
@@ -15,7 +16,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
-import { useLoad } from '@/hooks/useLoad';
+import { useLoad, usePagedList } from '@/hooks/useLoad';
 import { colors } from '@/theme/colors';
 import { absMoney, formatINR, isNegative, isPositive } from '@/utils/currency';
 import { friendlyError } from '@/utils/errors';
@@ -24,24 +25,27 @@ import { formatDateTime, words } from '@/utils/format';
 export default function SupplierScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { can } = useAuth();
-  const { data, loading, error, refreshing, reload } = useLoad(async () => {
-    const supplier = await getData<SupplierDetail>(`/suppliers/${id}`);
-    const ledger = await getPage<LedgerEntry>(`/suppliers/${id}/ledger?pageSize=30`);
-    return { supplier, ledger };
-  }, [id]);
+  const {
+    data: s,
+    loading,
+    error,
+    refreshing,
+    reload,
+  } = useLoad(() => getData<SupplierDetail>(`/suppliers/${id}`), [id]);
+  const ledger = usePagedList<LedgerEntry>(`/suppliers/${id}/ledger`, 25);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
   if (loading) return <Loading />;
-  if (!data) return <ErrorText message={error ?? 'Could not load this supplier.'} />;
-  const { supplier: s, ledger } = data;
-  const owed = isPositive(s.balance);
+  if (!s) return <ErrorText message={error ?? 'Could not load this supplier.'} />;
+  const supplier = s;
+  const owed = isPositive(supplier.balance);
 
   async function toggleActive() {
     setBusy(true);
     setProblem(null);
     try {
-      await postData(`/suppliers/${id}/${s.isActive ? 'deactivate' : 'reactivate'}`);
+      await postData(`/suppliers/${id}/${supplier.isActive ? 'deactivate' : 'reactivate'}`);
       void reload();
     } catch (e) {
       setProblem(friendlyError(e));
@@ -109,10 +113,12 @@ export default function SupplierScreen() {
 
       <SectionTitle>Statement</SectionTitle>
       <Card>
-        {ledger.data.length === 0 ? (
+        {ledger.loading ? (
+          <Loading />
+        ) : ledger.items.length === 0 ? (
           <EmptyState icon="book-outline" title="Nothing yet" />
         ) : (
-          ledger.data.map((e) => (
+          ledger.items.map((e) => (
             <KeyValue
               key={e.id}
               label={`${words(e.type)} · ${formatDateTime(e.occurredAt)}`}
@@ -121,6 +127,12 @@ export default function SupplierScreen() {
             />
           ))
         )}
+        <ListFooter
+          shown={ledger.items.length}
+          total={ledger.meta?.total}
+          loadingMore={ledger.loadingMore}
+          onLoadMore={() => void ledger.loadMore()}
+        />
       </Card>
     </Screen>
   );

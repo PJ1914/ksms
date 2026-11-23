@@ -3,11 +3,22 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button, Card, Choice, KeyValue, ListRow, Screen, SectionTitle } from '@/components/ui';
+import { getData } from '@/api/client';
+import { useLoad } from '@/hooks/useLoad';
+import { useSync } from '@/sync/SyncProvider';
 import { colors } from '@/theme/colors';
 
 export default function MoreScreen() {
   const { profile, branch, switchBranch, signOut, can } = useAuth();
+  const { stats } = useSync();
   const [busy, setBusy] = useState(false);
+  const unread = useLoad(
+    () =>
+      getData<{ unreadCount: number }>('/notifications/unread-count')
+        .then((r) => r.unreadCount)
+        .catch(() => 0),
+    [branch?.id],
+  );
 
   return (
     <Screen>
@@ -122,6 +133,39 @@ export default function MoreScreen() {
           />
         </>
       ) : null}
+
+      <SectionTitle>Alerts & Catalog</SectionTitle>
+      <View style={{ gap: 8 }}>
+        <ListRow
+          title="Notifications"
+          subtitle={
+            (unread.data ?? 0) > 0
+              ? `${unread.data} unread alert${unread.data === 1 ? '' : 's'}`
+              : 'Low stock, expiring batches & alerts'
+          }
+          onPress={() => router.push('/notifications')}
+        />
+        {can('category.manage') ? (
+          <ListRow
+            title="Categories"
+            subtitle="Add, rename or remove product categories"
+            onPress={() => router.push('/categories')}
+          />
+        ) : null}
+      </View>
+
+      <SectionTitle>Offline & Sync</SectionTitle>
+      <ListRow
+        title="Sync & offline cache"
+        subtitle={
+          stats.failedOutbox > 0
+            ? `${stats.failedOutbox} failed upload${stats.failedOutbox === 1 ? '' : 's'} — tap to retry or discard`
+            : stats.pendingOutbox > 0
+              ? `${stats.pendingOutbox} held bill${stats.pendingOutbox === 1 ? '' : 's'} waiting to upload`
+              : `${stats.products} products · ${stats.customers} customers cached`
+        }
+        onPress={() => router.push('/sync')}
+      />
 
       <SectionTitle>Account</SectionTitle>
       <Button

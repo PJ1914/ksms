@@ -1,6 +1,6 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Text } from 'react-native';
+import { Share, Text } from 'react-native';
 import { type PayForm, buildPayPayload, validatePayForm } from '@ksms/validation';
 import { getData, getPage } from '@/api/client';
 import type { CollectionAgentRow, CustomerRow } from '@/api/types';
@@ -29,7 +29,7 @@ interface CollectionResult {
 
 export default function CollectCustomerPaymentScreen() {
   const { customerId } = useLocalSearchParams<{ customerId: string }>();
-  const { can } = useAuth();
+  const { can, profile } = useAuth();
   const {
     data,
     loading,
@@ -65,6 +65,21 @@ export default function CollectCustomerPaymentScreen() {
   }
 
   if (done) {
+    const shareReceipt = async () => {
+      const dueLine = isNegative(done.balanceAfter)
+        ? `Advance balance: ${formatINR(absMoney(done.balanceAfter))}`
+        : `Remaining due: ${formatINR(done.balanceAfter)}`;
+      const lines = [
+        `${profile?.organization.name ?? 'KSMS'} — Payment Receipt`,
+        `Receipt: ${done.receiptNumber}`,
+        `Customer: ${c.name}`,
+        `Received: ${formatINR(done.amount)} (${done.method})`,
+        ...(done.collectionRecord ? [`Collected by: ${done.collectionRecord.agentName}`] : []),
+        dueLine,
+      ];
+      await Share.share({ title: `Receipt ${done.receiptNumber}`, message: lines.join('\n') });
+    };
+
     return (
       <Screen footer={<Button title="Done" onPress={() => router.back()} />}>
         <Stack.Screen options={{ title: 'Collection recorded' }} />
@@ -86,6 +101,7 @@ export default function CollectCustomerPaymentScreen() {
             bold
           />
         </Card>
+        <Button title="Share receipt" variant="secondary" onPress={() => void shareReceipt()} />
       </Screen>
     );
   }

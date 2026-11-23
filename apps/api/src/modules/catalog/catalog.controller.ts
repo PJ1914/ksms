@@ -73,6 +73,17 @@ export class CatalogController {
     return this.categories.create(t.organizationId, t.userId, dto, meta(req));
   }
 
+  @Post('categories/auto-assign')
+  @HttpCode(200)
+  @RequirePermission('category.manage')
+  @ApiOperation({
+    summary:
+      'Auto-categorize uncategorized products based on their names (creates categories dynamically)',
+  })
+  autoAssignCategories(@Tenant() t: TenantContext, @Req() req: AppRequest) {
+    return this.categories.autoAssignUncategorized(t.organizationId, t.userId, meta(req));
+  }
+
   @Patch('categories/:id')
   @RequirePermission('category.manage')
   updateCategory(

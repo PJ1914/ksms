@@ -27,7 +27,7 @@ flowchart TB
   subgraph Device["Android device"]
     UI["Screens (Expo Router)"] --> Feat["Feature hooks + TanStack Query"]
     Feat --> Client["API client (packages/api-client)"]
-    Feat --> Local[("SQLite via Drizzle<br/>cache, drafts, held bills, outbox")]
+    Feat --> Local[("SQLite via expo-sqlite<br/>cache, drafts, held bills, outbox")]
     Client --> Sec["SecureStore<br/>tokens"]
   end
   Client -- HTTPS --> Edge
@@ -127,8 +127,8 @@ flowchart BT
 | Procurement           | Purchases, receipts, purchase returns                                                                                         |
 | Sales                 | Checkout orchestration, held bills, cancellations, returns, collections orchestration                                         |
 | Reporting             | Aggregations only                                                                                                             |
-| Notifications         | FCM, notification records                                                                                                     |
-| Audit & Sync          | Audit log, idempotency records, sync operations                                                                               |
+| Notifications         | In-app notifications, low-stock & expiry alert checks (`/notifications/*`); FCM delivery wired in Phase 17                    |
+| Audit & Sync          | Audit log, idempotency records, sync change feeds (`/sync/*`)                                                                 |
 
 Collection agents/records live in Customer Accounts (records) with assignments referencing Identity users.
 

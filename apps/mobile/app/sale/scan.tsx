@@ -6,6 +6,9 @@ import { getData } from '@/api/client';
 import type { ProductDetail } from '@/api/types';
 import { useCart } from '@/cart/CartProvider';
 import { Button, ErrorText } from '@/components/ui';
+import { isNetworkFailure } from '@/sync/backoff';
+import { getCachedProductByBarcode } from '@/sync/cache-store';
+import { useSync } from '@/sync/SyncProvider';
 import { colors } from '@/theme/colors';
 import { friendlyError } from '@/utils/errors';
 
@@ -18,6 +21,7 @@ interface Lookup {
 export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const { add } = useCart();
+  const { db } = useSync();
   const busy = useRef(false);
   const lastCode = useRef<{ code: string; at: number } | null>(null);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
@@ -34,7 +38,24 @@ export default function ScanScreen() {
     busy.current = true;
     lastCode.current = { code, at: now };
     try {
-      const r = await getData<Lookup>(`/products/by-barcode/${encodeURIComponent(code)}`);
+      let r: Lookup;
+      try {
+        r = await getData<Lookup>(`/products/by-barcode/${encodeURIComponent(code)}`);
+      } catch (lookupErr) {
+        if (isNetworkFailure(lookupErr) && db) {
+          const cached = await getCachedProductByBarcode(db, code);
+          if (cached) {
+            const matchedBarcode = (
+              cached.barcodes as { id: string; barcode: string; unitId?: string | null }[]
+            ).find((b) => b.barcode === code);
+            r = { barcode: { unitId: matchedBarcode?.unitId ?? null }, product: cached };
+          } else {
+            throw lookupErr;
+          }
+        } else {
+          throw lookupErr;
+        }
+      }
       if (r.product.status !== 'ACTIVE') throw new Error('inactive');
       const sale = r.product.conversions.filter((c) => c.isSaleUnit);
       const unit =

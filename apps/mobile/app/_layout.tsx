@@ -4,13 +4,17 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import { CartProvider } from '@/cart/CartProvider';
 import { API_URL } from '@/config';
+import { draftScopeKey } from '@/sync/cache-store';
+import { SyncProvider } from '@/sync/SyncProvider';
 import { colors } from '@/theme/colors';
 
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <StatusBar style="dark" />
-      <RootStack />
+      <SyncProvider>
+        <StatusBar style="dark" />
+        <RootStack />
+      </SyncProvider>
     </AuthProvider>
   );
 }
@@ -50,12 +54,30 @@ function RootStack() {
   }
 
   const signedIn = status === 'signedIn';
+  const scopeKey =
+    profile && branch ? draftScopeKey(profile.organization.id, profile.user.id, branch.id) : null;
   return (
     // a new cart for every sign-in and branch: an unfinished bill never crosses users or branches
-    <CartProvider key={`${profile?.user.id ?? 'signed-out'}:${branch?.id ?? 'no-branch'}`}>
+    <CartProvider
+      key={`${profile?.organization.id ?? 'no-org'}:${profile?.user.id ?? 'signed-out'}:${branch?.id ?? 'no-branch'}`}
+      scopeKey={scopeKey}
+    >
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Protected guard={signedIn}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="sync"
+            options={{ ...SCREEN_OPTIONS, title: 'Sync & offline cache' }}
+          />
+          <Stack.Screen
+            name="notifications"
+            options={{ ...SCREEN_OPTIONS, title: 'Notifications' }}
+          />
+          <Stack.Screen
+            name="product-edit"
+            options={{ ...SCREEN_OPTIONS, title: 'Edit product' }}
+          />
+          <Stack.Screen name="categories" options={{ ...SCREEN_OPTIONS, title: 'Categories' }} />
           <Stack.Screen
             name="product-new"
             options={{ ...SCREEN_OPTIONS, title: 'Add product', presentation: 'modal' }}

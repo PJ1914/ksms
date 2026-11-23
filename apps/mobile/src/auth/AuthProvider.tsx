@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { wipeLocalSyncCache } from '@/sync/expo-db';
 import {
   type Profile,
   getActiveBranch,
@@ -69,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setStatus('signedIn');
       },
       signOut: async () => {
+        await wipeLocalSyncCache();
         await signOut();
         setProfile(null);
         setStatus('signedOut');

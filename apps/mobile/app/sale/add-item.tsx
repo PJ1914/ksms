@@ -5,6 +5,8 @@ import { quantityString } from '@ksms/validation';
 import { getData, query } from '@/api/client';
 import type { ProductDetail, ProductRow } from '@/api/types';
 import { useCart } from '@/cart/CartProvider';
+import { CategoryChips, type CategoryChipItem } from '@/components/CategoryChips';
+import { ListFooter } from '@/components/ListFooter';
 import {
   Button,
   Card,
@@ -18,6 +20,13 @@ import {
   Choice,
 } from '@/components/ui';
 import { useLoad, usePagedList } from '@/hooks/useLoad';
+import { isNetworkFailure } from '@/sync/backoff';
+import {
+  getCachedProductDetail,
+  listCachedCategories,
+  searchCachedProducts,
+} from '@/sync/cache-store';
+import { useSync } from '@/sync/SyncProvider';
 import { colors } from '@/theme/colors';
 import { formatINR, isPositive } from '@/utils/currency';
 import { friendlyError } from '@/utils/errors';
@@ -30,9 +39,23 @@ interface Quote {
 
 export default function AddItemScreen() {
   const { cart, add } = useCart();
+  const { db } = useSync();
   const [search, setSearch] = useState('');
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [added, setAdded] = useState<string | null>(null);
+
+  const cats = useLoad<CategoryChipItem[]>(async () => {
+    try {
+      const list = await getData<CategoryChipItem[]>('/categories');
+      return list.filter((c) => (c.productCount ?? 1) > 0);
+    } catch (e) {
+      if (isNetworkFailure(e) && db) {
+        return (await listCachedCategories(db)).map((c) => ({ id: c.id, name: c.name }));
+      }
+      return [];
+    }
+  }, [db]);
 
   return (
     <View
@@ -75,20 +98,37 @@ export default function AddItemScreen() {
             placeholder="Search name, SKU or barcode"
             onScan={() => router.push('/sale/scan')}
           />
-          <Results search={search} onPick={setSelected} />
+          <CategoryChips categories={cats.data ?? []} value={categoryId} onChange={setCategoryId} />
+          <Results search={search} categoryId={categoryId} onPick={setSelected} />
         </>
       )}
     </View>
   );
 }
 
-function Results({ search, onPick }: { search: string; onPick: (id: string) => void }) {
+function Results({
+  search,
+  categoryId,
+  onPick,
+}: {
+  search: string;
+  categoryId: string | null;
+  onPick: (id: string) => void;
+}) {
+  const { db } = useSync();
   const list = usePagedList<ProductRow>(
-    `/products${query({ q: search.trim(), status: 'ACTIVE', sort: 'name' })}`,
+    `/products${query({ q: search.trim(), status: 'ACTIVE', categoryId: categoryId ?? undefined, sort: 'name' })}`,
+    30,
+    db ? () => searchCachedProducts(db, search, true, categoryId) : undefined,
   );
   if (list.loading) return <Loading />;
   return (
     <>
+      {list.fromCache ? (
+        <Text style={{ color: colors.warning, fontSize: 13, marginBottom: 8 }}>
+          Offline — showing saved products from this phone.
+        </Text>
+      ) : null}
       <ErrorText message={list.error} />
       <FlatList
         data={list.items}
@@ -97,6 +137,15 @@ function Results({ search, onPick }: { search: string; onPick: (id: string) => v
         onEndReachedThreshold={0.5}
         onEndReached={() => void list.loadMore()}
         ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        ListFooterComponent={
+          <ListFooter
+            shown={list.items.length}
+            total={list.meta?.total}
+            loadingMore={list.loadingMore}
+            fromCache={list.fromCache}
+            onLoadMore={() => void list.loadMore()}
+          />
+        }
         ListEmptyComponent={
           <EmptyState
             icon="search-outline"
@@ -138,15 +187,27 @@ function Picker({
   ) => void;
   onCancel: () => void;
 }) {
+  const { db } = useSync();
   const {
     data: p,
     loading,
     error,
-  } = useLoad(() => getData<ProductDetail>(`/products/${productId}`), [productId]);
+  } = useLoad(async () => {
+    try {
+      return await getData<ProductDetail>(`/products/${productId}`);
+    } catch (e) {
+      if (isNetworkFailure(e) && db) {
+        const cached = await getCachedProductDetail(db, productId);
+        if (cached) return cached;
+      }
+      throw e;
+    }
+  }, [productId, db]);
   const [unitId, setUnitId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState('1');
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [quoteOffline, setQuoteOffline] = useState(false);
 
   const saleUnits = p?.conversions.filter((c) => c.isSaleUnit) ?? [];
   const chosen = unitId ?? saleUnits.find((c) => c.isBase)?.unitId ?? saleUnits[0]?.unitId ?? null;
@@ -156,6 +217,7 @@ function Picker({
   useEffect(() => {
     setQuote(null);
     setQuoteError(null);
+    setQuoteOffline(false);
     if (!chosen || !qtyOk) return;
     let alive = true;
     const t = setTimeout(() => {
@@ -163,7 +225,15 @@ function Picker({
         `/products/${productId}/quote${query({ unitId: chosen, quantity: quantity.trim() })}`,
       )
         .then((q) => alive && setQuote(q))
-        .catch((e) => alive && setQuoteError(friendlyError(e)));
+        .catch((e) => {
+          if (!alive) return;
+          if (isNetworkFailure(e)) {
+            setQuoteOffline(true);
+            setQuoteError(null);
+          } else {
+            setQuoteError(friendlyError(e));
+          }
+        });
     }, 300);
     return () => {
       alive = false;
@@ -209,11 +279,16 @@ function Picker({
             >
               <Money value={quote.amount} />
             </Text>
+          ) : quoteOffline ? (
+            <Text style={{ color: colors.warning, fontSize: 13, marginBottom: 8 }}>
+              Offline — item will be saved on your draft bill and priced by the server before
+              checkout.
+            </Text>
           ) : null}
           <ErrorText message={quoteError ?? (qtyOk ? null : 'Enter a quantity, like 1 or 0.5.')} />
           <Button
             title="Add to bill"
-            disabled={!quote || !chosen}
+            disabled={(!quote && !quoteOffline) || !chosen || !qtyOk}
             onPress={() =>
               onAdd(
                 {

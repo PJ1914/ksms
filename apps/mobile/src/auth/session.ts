@@ -47,6 +47,21 @@ export const api = createApiClient({
   getBranchId: () => branchId,
 });
 
+/** Sends an authenticated POST pinned to a specific branch (used by the outbox when uploading held bills). */
+export function postForBranch<T>(
+  targetBranchId: string,
+  path: string,
+  body: unknown,
+  idempotencyKey?: string,
+): Promise<T> {
+  const client = createApiClient({
+    baseUrl: API_URL,
+    getAccessToken: () => validAccessToken(),
+    getBranchId: () => targetBranchId,
+  });
+  return client.post<T>(path, body, idempotencyKey);
+}
+
 /** Which branch the app works in (sent as X-Branch-Id). Must be one of the user's branches. */
 export function setActiveBranch(id: string | null): void {
   branchId = id;

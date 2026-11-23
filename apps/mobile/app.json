@@ -14,7 +14,8 @@
         {
           "cameraPermission": "KSMS uses the camera only to scan product barcodes."
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "android": {
       "package": "com.ksms.storemanager"

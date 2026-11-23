@@ -2,9 +2,10 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
 import { moneyString } from '@ksms/validation';
-import { getData, getPage, patchData, postData } from '@/api/client';
+import { getData, patchData, postData } from '@/api/client';
 import type { CustomerRow, LedgerEntry } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
+import { ListFooter } from '@/components/ListFooter';
 import {
   Badge,
   Button,
@@ -17,7 +18,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
-import { useLoad } from '@/hooks/useLoad';
+import { useLoad, usePagedList } from '@/hooks/useLoad';
 import { colors } from '@/theme/colors';
 import { absMoney, formatINR, isNegative, isPositive } from '@/utils/currency';
 import { friendlyError } from '@/utils/errors';
@@ -26,21 +27,23 @@ import { formatDateTime, words } from '@/utils/format';
 export default function CustomerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { can } = useAuth();
-  const { data, loading, error, refreshing, reload } = useLoad(async () => {
-    const customer = await getData<CustomerRow>(`/customers/${id}`);
-    const ledger = can('ledger.read')
-      ? await getPage<LedgerEntry>(`/customers/${id}/ledger?pageSize=30`)
-      : null;
-    return { customer, ledger };
-  }, [id]);
+  const {
+    data: c,
+    loading,
+    error,
+    refreshing,
+    reload,
+  } = useLoad(() => getData<CustomerRow>(`/customers/${id}`), [id]);
+  const canLedger = can('ledger.read');
+  const ledger = usePagedList<LedgerEntry>(canLedger ? `/customers/${id}/ledger` : null, 25);
   const [limit, setLimit] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
   if (loading) return <Loading />;
-  if (!data) return <ErrorText message={error ?? 'Could not load this customer.'} />;
-  const { customer: c, ledger } = data;
-  const owes = isPositive(c.balance);
+  if (!c) return <ErrorText message={error ?? 'Could not load this customer.'} />;
+  const customer = c;
+  const owes = isPositive(customer.balance);
 
   async function saveLimit() {
     const v = (limit ?? '').trim();
@@ -51,7 +54,10 @@ export default function CustomerScreen() {
     setBusy(true);
     setProblem(null);
     try {
-      await patchData(`/customers/${id}`, { creditLimit: v === '' ? null : v, version: c.version });
+      await patchData(`/customers/${id}`, {
+        creditLimit: v === '' ? null : v,
+        version: customer.version,
+      });
       setLimit(null);
       void reload();
     } catch (e) {
@@ -65,7 +71,7 @@ export default function CustomerScreen() {
     setBusy(true);
     setProblem(null);
     try {
-      await postData(`/customers/${id}/${c.isActive ? 'deactivate' : 'reactivate'}`);
+      await postData(`/customers/${id}/${customer.isActive ? 'deactivate' : 'reactivate'}`);
       void reload();
     } catch (e) {
       setProblem(friendlyError(e));
@@ -139,14 +145,16 @@ export default function CustomerScreen() {
         />
       ) : null}
 
-      {ledger ? (
+      {canLedger ? (
         <>
           <SectionTitle>Khata statement</SectionTitle>
           <Card>
-            {ledger.data.length === 0 ? (
+            {ledger.loading ? (
+              <Loading />
+            ) : ledger.items.length === 0 ? (
               <EmptyState icon="book-outline" title="No khata entries yet" />
             ) : (
-              ledger.data.map((e) => (
+              ledger.items.map((e) => (
                 <KeyValue
                   key={e.id}
                   label={`${e.description ? `${e.description} · ` : ''}${words(e.type)} · ${formatDateTime(e.occurredAt)}`}
@@ -155,6 +163,12 @@ export default function CustomerScreen() {
                 />
               ))
             )}
+            <ListFooter
+              shown={ledger.items.length}
+              total={ledger.meta?.total}
+              loadingMore={ledger.loadingMore}
+              onLoadMore={() => void ledger.loadMore()}
+            />
           </Card>
         </>
       ) : null}

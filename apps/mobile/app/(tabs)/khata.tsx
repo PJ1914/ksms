@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, View } from 'react-native';
+import { FlatList, Text, View } from 'react-native';
 import { query } from '@/api/client';
 import type { CustomerRow } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
+import { ListFooter } from '@/components/ListFooter';
 import {
   Badge,
   Choice,
@@ -15,6 +16,8 @@ import {
   SearchBox,
 } from '@/components/ui';
 import { usePagedList } from '@/hooks/useLoad';
+import { searchCachedCustomers } from '@/sync/cache-store';
+import { useSync } from '@/sync/SyncProvider';
 import { colors } from '@/theme/colors';
 import { absMoney, formatINR, isNegative, isPositive } from '@/utils/currency';
 
@@ -26,10 +29,13 @@ const FILTERS = [
 
 export default function KhataScreen() {
   const { can } = useAuth();
+  const { db } = useSync();
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
   const list = usePagedList<CustomerRow>(
     `/customers${query({ q: search.trim(), owes: filter === 'owes', sort: filter === 'owes' ? 'balance' : 'name', order: filter === 'owes' ? 'desc' : 'asc' })}`,
+    30,
+    db ? () => searchCachedCustomers(db, { q: search, owes: filter === 'owes' }) : undefined,
   );
 
   if (!can('customer.read'))
@@ -51,6 +57,11 @@ export default function KhataScreen() {
         <Loading />
       ) : (
         <>
+          {list.fromCache ? (
+            <Text style={{ color: colors.warning, fontSize: 13, marginBottom: 6 }}>
+              Offline — showing saved customers from this phone.
+            </Text>
+          ) : null}
           <ErrorText message={list.error} />
           <FlatList
             data={list.items}
@@ -61,6 +72,15 @@ export default function KhataScreen() {
             onEndReachedThreshold={0.5}
             onEndReached={() => void list.loadMore()}
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+            ListFooterComponent={
+              <ListFooter
+                shown={list.items.length}
+                total={list.meta?.total}
+                loadingMore={list.loadingMore}
+                fromCache={list.fromCache}
+                onLoadMore={() => void list.loadMore()}
+              />
+            }
             ListEmptyComponent={
               <EmptyState
                 icon="people-outline"

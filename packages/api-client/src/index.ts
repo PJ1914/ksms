@@ -27,7 +27,7 @@ export function createApiClient(opts: ApiClientOptions) {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   async function request<T>(
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     path: string,
     body?: unknown,
     idempotencyKey?: string,
@@ -70,6 +70,7 @@ export function createApiClient(opts: ApiClientOptions) {
     get: <T>(path: string) => request<T>('GET', path),
     post: <T>(path: string, body?: unknown, idempotencyKey?: string) =>
       request<T>('POST', path, body, idempotencyKey),
+    put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
     patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
     delete: <T>(path: string) => request<T>('DELETE', path),
   };

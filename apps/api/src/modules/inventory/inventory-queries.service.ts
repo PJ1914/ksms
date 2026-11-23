@@ -29,6 +29,25 @@ export class InventoryQueriesService {
     return t.branchId;
   }
 
+  private async categoryTreeIds(organizationId: string, rootId: string): Promise<string[]> {
+    const all = await this.prisma.productCategory.findMany({
+      where: { organizationId, deletedAt: null },
+      select: { id: true, parentId: true },
+    });
+    const ids = new Set<string>([rootId]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const c of all) {
+        if (c.parentId && ids.has(c.parentId) && !ids.has(c.id)) {
+          ids.add(c.id);
+          grew = true;
+        }
+      }
+    }
+    return [...ids];
+  }
+
   /** Stock per product (products without any stock appear with 0). Cost fields only when includeCost. */
   async balances(t: TenantContext, q: BalancesQuery, includeCost: boolean) {
     const branchId = this.branchOf(t);
@@ -42,7 +61,12 @@ export class InventoryQueriesService {
       conditions.push(
         Prisma.sql`(p.name ILIKE ${likePattern(q.q)} OR p.sku ILIKE ${likePattern(q.q)})`,
       );
-    if (q.categoryId) conditions.push(Prisma.sql`p.category_id = ${q.categoryId}::uuid`);
+    if (q.categoryId) {
+      const catIds = await this.categoryTreeIds(t.organizationId, q.categoryId);
+      conditions.push(
+        Prisma.sql`p.category_id IN (${Prisma.join(catIds.map((id) => Prisma.sql`${id}::uuid`))})`,
+      );
+    }
     if (q.lowStock === 'true') {
       conditions.push(
         Prisma.sql`p.status <> 'DISCONTINUED' AND p.min_stock_level > 0 AND COALESCE(b.quantity_on_hand, 0) <= p.min_stock_level`,

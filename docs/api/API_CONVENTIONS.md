@@ -284,3 +284,22 @@ Routes: `POST /customers/:id/payments`, `POST /collections` (both need `Idempote
 | 400  | `INVALID_DATE`         | A `from` / `to` filter is not a real calendar date                                                                                                        |
 | 400  | `INVALID_RANGE`        | A report period is reversed (`from` after `to`) or longer than 366 days                                                                                   |
 | 409  | `DAY_ALREADY_CLOSED`   | A cash line (manual entry, expense date) names a day that is closed. Sales and collections made "now" are never refused: they go on the next business day |
+
+## Delta sync endpoints & codes added with Phase 14
+
+| HTTP | code                    | Meaning                                                                          |
+| ---- | ----------------------- | -------------------------------------------------------------------------------- |
+| 400  | `INVALID_CURSOR`        | The opaque `cursor` query parameter is malformed or invalid                      |
+| 400  | `INVALID_UPDATED_SINCE` | The `updated_since` query parameter is not a valid ISO-8601 UTC/offset timestamp |
+
+Routes: `GET /sync/products`, `GET /sync/categories`, `GET /sync/units` (need `product.read`), `GET /sync/customers` (needs `customer.read`). Responses use the cursor envelope `{ data: [...], meta: { limit, hasMore, nextCursor, serverTime } }`.
+
+`POST /held-bills` now accepts an optional `Idempotency-Key` (UUID) header used by the mobile sync outbox; retries with the same key and body replay the stored held bill with `Idempotent-Replayed: true` and create no duplicates.
+
+## Notifications endpoints added with Phase 15
+
+| HTTP | code                     | Meaning                                |
+| ---- | ------------------------ | -------------------------------------- |
+| 404  | `NOTIFICATION_NOT_FOUND` | No such notification for this org/user |
+
+Routes: `GET /notifications`, `GET /notifications/unread-count`, `POST /notifications/:id/read`, `POST /notifications/read-all` (all `@AuthenticatedOnly()`), and `POST /notifications/check-alerts` (`@RequireBranch()`, needs `stock.read`).

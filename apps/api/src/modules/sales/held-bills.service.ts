@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { TenantContext } from '../../common/auth/auth.types';
 import { AppException } from '../../common/errors/app.exception';
+import { IdempotencyService } from '../../common/idempotency/idempotency.service';
 import { Paginated } from '../../common/pagination/paginated';
 import { PrismaService } from '../../database/prisma.service';
 import type { Prisma } from '../../generated/prisma/client';
@@ -8,6 +9,7 @@ import type { HeldBillDto, HeldBillsQuery } from './sales.dto';
 import { branchOf } from './sales.service';
 
 const MAX_PAYLOAD_BYTES = 64 * 1024;
+type Db = PrismaService | Prisma.TransactionClient;
 
 /**
  * Held bills: a cart parked at the counter ("hold this, serve the next customer") so another device in the branch
@@ -15,13 +17,32 @@ const MAX_PAYLOAD_BYTES = 64 * 1024;
  */
 @Injectable()
 export class HeldBillsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly idempotency: IdempotencyService,
+  ) {}
 
   async create(t: TenantContext, dto: HeldBillDto) {
+    return this.createInDb(this.prisma, t, dto);
+  }
+
+  /** Idempotent held-bill upload used by the mobile sync outbox so retries never create duplicates. */
+  async createIdempotent(t: TenantContext, idempotencyKey: string, dto: HeldBillDto) {
+    const branchId = branchOf(t);
+    return this.idempotency.execute(
+      t.organizationId,
+      idempotencyKey,
+      'POST /held-bills',
+      { branchId, ...dto },
+      (tx) => this.createInDb(tx, t, dto),
+    );
+  }
+
+  private async createInDb(db: Db, t: TenantContext, dto: HeldBillDto) {
     const branchId = branchOf(t);
     this.assertPayload(dto.payload);
-    await this.assertCustomer(t.organizationId, dto.customerId);
-    const h = await this.prisma.heldBill.create({
+    await this.assertCustomer(db, t.organizationId, dto.customerId);
+    const h = await db.heldBill.create({
       data: {
         organizationId: t.organizationId,
         branchId,
@@ -62,7 +83,7 @@ export class HeldBillsService {
   async update(t: TenantContext, id: string, dto: HeldBillDto) {
     await this.find(t, id);
     this.assertPayload(dto.payload);
-    await this.assertCustomer(t.organizationId, dto.customerId);
+    await this.assertCustomer(this.prisma, t.organizationId, dto.customerId);
     const h = await this.prisma.heldBill.update({
       where: { id },
       data: {
@@ -97,9 +118,9 @@ export class HeldBillsService {
     }
   }
 
-  private async assertCustomer(organizationId: string, customerId?: string) {
+  private async assertCustomer(db: Db, organizationId: string, customerId?: string) {
     if (!customerId) return;
-    const c = await this.prisma.customer.findFirst({
+    const c = await db.customer.findFirst({
       where: { id: customerId, organizationId, deletedAt: null },
       select: { id: true },
     });

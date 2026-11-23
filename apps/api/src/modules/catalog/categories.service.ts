@@ -4,6 +4,7 @@ import type { Db } from '../../database/db.types';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import type { CreateCategoryDto, UpdateCategoryDto } from './catalog.dto';
+import { inferCategory } from './domain/auto-category';
 
 interface Meta {
   correlationId?: string;
@@ -27,6 +28,129 @@ export class CategoriesService {
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
     return rows.map(({ _count, ...c }) => ({ ...c, productCount: _count.products }));
+  }
+
+  /** Returns `rootId` plus every non-deleted descendant category ID in the organization. */
+  async descendantIds(db: Db, organizationId: string, rootId: string): Promise<string[]> {
+    const all = await db.productCategory.findMany({
+      where: { organizationId, deletedAt: null },
+      select: { id: true, parentId: true },
+    });
+    const result = new Set<string>([rootId]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const row of all) {
+        if (row.parentId && result.has(row.parentId) && !result.has(row.id)) {
+          result.add(row.id);
+          grew = true;
+        }
+      }
+    }
+    return [...result];
+  }
+
+  /** Finds an existing category by name (case-insensitive) or creates it dynamically in the same transaction. */
+  async findOrCreateByName(
+    tx: Db,
+    organizationId: string,
+    actorId: string,
+    name: string,
+    meta: Meta,
+  ): Promise<{ id: string; created: boolean }> {
+    const existing = await tx.productCategory.findFirst({
+      where: { organizationId, deletedAt: null, name: { equals: name, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existing) return { id: existing.id, created: false };
+
+    const created = await tx.productCategory.create({
+      data: { organizationId, name, parentId: null, sortOrder: 0 },
+      select: SELECT,
+    });
+    await this.audit.record(tx, {
+      organizationId,
+      actorId,
+      action: 'category.create',
+      entityType: 'category',
+      entityId: created.id,
+      after: created,
+      ...meta,
+    });
+    return { id: created.id, created: true };
+  }
+
+  /** Infers and resolves/creates a category for a single product name inside an existing transaction. */
+  async resolveAutoCategory(
+    tx: Db,
+    organizationId: string,
+    actorId: string,
+    name: string,
+    localName: string | null | undefined,
+    meta: Meta,
+  ): Promise<string | undefined> {
+    const existing = await tx.productCategory.findMany({
+      where: { organizationId, deletedAt: null },
+      select: { id: true, name: true },
+    });
+    const suggestion = inferCategory(name, localName, existing);
+    if (!suggestion) return undefined;
+    if (suggestion.categoryId) return suggestion.categoryId;
+    const { id } = await this.findOrCreateByName(
+      tx,
+      organizationId,
+      actorId,
+      suggestion.categoryName,
+      meta,
+    );
+    return id;
+  }
+
+  /** Scans all uncategorized active products in the shop and auto-assigns matching categories. */
+  async autoAssignUncategorized(organizationId: string, actorId: string, meta: Meta) {
+    return this.prisma.$transaction(async (tx) => {
+      const [products, existing] = await Promise.all([
+        tx.product.findMany({
+          where: { organizationId, deletedAt: null, categoryId: null },
+          select: { id: true, name: true, localName: true },
+        }),
+        tx.productCategory.findMany({
+          where: { organizationId, deletedAt: null },
+          select: { id: true, name: true },
+        }),
+      ]);
+
+      const known = [...existing];
+      let updated = 0;
+      let createdCategories = 0;
+
+      for (const p of products) {
+        const suggestion = inferCategory(p.name, p.localName, known);
+        if (!suggestion) continue;
+        let catId = suggestion.categoryId;
+        if (!catId) {
+          const res = await this.findOrCreateByName(
+            tx,
+            organizationId,
+            actorId,
+            suggestion.categoryName,
+            meta,
+          );
+          catId = res.id;
+          if (res.created) {
+            createdCategories += 1;
+            known.push({ id: catId, name: suggestion.categoryName });
+          }
+        }
+        await tx.product.update({
+          where: { id: p.id },
+          data: { categoryId: catId, version: { increment: 1 } },
+        });
+        updated += 1;
+      }
+
+      return { updated, createdCategories };
+    });
   }
 
   /** Category must belong to the organization (used when attaching products). */

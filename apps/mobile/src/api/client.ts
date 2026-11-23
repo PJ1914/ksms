@@ -19,6 +19,9 @@ export const postData = async <T>(
   idempotencyKey?: string,
 ): Promise<T> => (await api.post<{ data: T }>(path, body, idempotencyKey)).data;
 
+export const putData = async <T>(path: string, body?: unknown): Promise<T> =>
+  (await api.put<{ data: T }>(path, body)).data;
+
 export const patchData = async <T>(path: string, body?: unknown): Promise<T> =>
   (await api.patch<{ data: T }>(path, body)).data;
 

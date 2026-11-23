@@ -11,3 +11,18 @@ export class Paginated<T> {
     >,
   ) {}
 }
+
+export interface CursorMeta {
+  limit: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+  serverTime: string;
+}
+
+/** Return this from a controller to get `{ data: items, meta: { limit, hasMore, nextCursor, serverTime } }`. */
+export class CursorPage<T> {
+  constructor(
+    public readonly items: T[],
+    public readonly meta: CursorMeta,
+  ) {}
+}

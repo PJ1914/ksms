@@ -30,6 +30,9 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
+import { isNetworkFailure } from '@/sync/backoff';
+import { removeLocalHeldBillByServerId } from '@/sync/cache-store';
+import { useSync } from '@/sync/SyncProvider';
 import { colors } from '@/theme/colors';
 import { formatINR, isPositive, isZero } from '@/utils/currency';
 import { friendlyError } from '@/utils/errors';
@@ -43,8 +46,9 @@ const METHODS = [
 ] as const;
 
 export default function NewBillScreen() {
-  const { can } = useAuth();
+  const { can, branch } = useAuth();
   const { cart, update, remove, setBillDiscount, clear, checkoutKey } = useCart();
+  const { db, holdBill } = useSync();
   const [payments, setPayments] = useState<PaymentEntry[]>([]);
   const [allowOverLimit, setAllowOverLimit] = useState(false);
   const [preview, setPreview] = useState<SalePreview | null>(null);
@@ -114,10 +118,10 @@ export default function NewBillScreen() {
       clear();
       router.replace({ pathname: '/sale/[id]', params: { id: sale.id } });
     } catch (e) {
-      const offline = e instanceof TypeError;
+      const offline = isNetworkFailure(e);
       setError(
         offline
-          ? 'No answer from the server. If the bill may have gone through, tap Pay again: the same bill will not be charged twice.'
+          ? 'No answer from the server. Checkout requires an internet connection — your draft bill is saved on this phone. If the bill may have gone through, tap Pay again when online: it will not be charged twice.'
           : friendlyError(e),
       );
       if (e instanceof ApiError && e.code === 'INSUFFICIENT_STOCK') setPreview(null);
@@ -127,17 +131,21 @@ export default function NewBillScreen() {
   }
 
   async function hold() {
-    if (cartIsEmpty(cart) || busy) return;
+    if (cartIsEmpty(cart) || busy || !branch) return;
     setBusy(true);
     setError(null);
     try {
       const { heldBillId, ...payload } = cart;
-      await postData('/held-bills', {
+      await holdBill({
+        branchId: branch.id,
         ...(cart.customerName ? { label: cart.customerName } : {}),
         ...(cart.customerId ? { customerId: cart.customerId } : {}),
         payload,
       });
-      if (heldBillId) await deleteData(`/held-bills/${heldBillId}`).catch(() => undefined);
+      if (heldBillId) {
+        await deleteData(`/held-bills/${heldBillId}`).catch(() => undefined);
+        if (db) await removeLocalHeldBillByServerId(db, heldBillId).catch(() => undefined);
+      }
       clear();
       setPayments([]);
       router.back();

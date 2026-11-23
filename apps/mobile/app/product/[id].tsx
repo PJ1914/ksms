@@ -55,6 +55,9 @@ export default function ProductScreen() {
           }
         />
         {p.hsnCode ? <KeyValue label="HSN" value={p.hsnCode} /> : null}
+        {p.barcodes.length > 0 ? (
+          <KeyValue label="Barcodes" value={p.barcodes.map((b) => b.barcode).join(', ')} />
+        ) : null}
         {p.status !== 'ACTIVE' ? <Badge text={words(p.status)} tone="warn" /> : null}
       </Card>
 
@@ -86,6 +89,13 @@ export default function ProductScreen() {
             />
           ))}
       </Card>
+      {can('product.manage') ? (
+        <Button
+          title="Edit product & prices"
+          variant="secondary"
+          onPress={() => router.push({ pathname: '/product-edit', params: { id: p.id } })}
+        />
+      ) : null}
 
       {stock ? (
         <>

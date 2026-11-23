@@ -1,6 +1,7 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type Page, getPage } from '@/api/client';
+import { isNetworkFailure } from '@/sync/backoff';
 import { friendlyError } from '@/utils/errors';
 
 /**
@@ -61,16 +62,23 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
   return { data, error, loading, refreshing, reload };
 }
 
-/** A list that loads page by page as the user scrolls, with pull to refresh. `path` includes any filters. */
-export function usePagedList<T, M = Record<string, unknown>>(path: string | null, pageSize = 30) {
+/** A list that loads page by page as the user scrolls, with pull to refresh and optional offline cache fallback. */
+export function usePagedList<T, M = Record<string, unknown>>(
+  path: string | null,
+  pageSize = 30,
+  fallback?: () => Promise<T[] | null>,
+) {
   const [items, setItems] = useState<T[]>([]);
   const [meta, setMeta] = useState<Page<T, M>['meta'] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fromCache, setFromCache] = useState(false);
   const [loading, setLoading] = useState(path !== null);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const latest = useRef(0);
   const first = useRef(true);
+  const fallbackRef = useRef(fallback);
+  fallbackRef.current = fallback;
 
   const url = useCallback(
     (page: number) =>
@@ -95,9 +103,27 @@ export function usePagedList<T, M = Record<string, unknown>>(path: string | null
         if (ticket !== latest.current) return;
         setItems(res.data);
         setMeta(res.meta);
+        setFromCache(false);
         setError(null);
       } catch (e) {
-        if (ticket === latest.current) setError(friendlyError(e));
+        if (ticket !== latest.current) return;
+        if (isNetworkFailure(e) && fallbackRef.current) {
+          const cached = await fallbackRef.current().catch(() => null);
+          if (ticket !== latest.current) return;
+          if (cached !== null) {
+            setItems(cached);
+            setMeta({
+              page: 1,
+              pageSize: Math.max(1, cached.length),
+              total: cached.length,
+            } as Page<T, M>['meta']);
+            setFromCache(true);
+            setError(null);
+            return;
+          }
+        }
+        setFromCache(false);
+        setError(friendlyError(e));
       } finally {
         if (ticket === latest.current) {
           setLoading(false);
@@ -112,7 +138,7 @@ export function usePagedList<T, M = Record<string, unknown>>(path: string | null
   reloadRef.current = reload;
 
   const loadMore = useCallback(async () => {
-    if (!meta || loadingMore || items.length >= meta.total) return;
+    if (fromCache || !meta || loadingMore || items.length >= meta.total) return;
     const target = url(meta.page + 1);
     if (target === null) return;
     const ticket = latest.current;
@@ -127,7 +153,7 @@ export function usePagedList<T, M = Record<string, unknown>>(path: string | null
     } finally {
       setLoadingMore(false);
     }
-  }, [items.length, loadingMore, meta, url]);
+  }, [fromCache, items.length, loadingMore, meta, url]);
 
   useEffect(() => {
     if (path === null) {
@@ -135,6 +161,7 @@ export function usePagedList<T, M = Record<string, unknown>>(path: string | null
       setItems([]);
       setMeta(null);
       setError(null);
+      setFromCache(false);
       setLoading(false);
       setRefreshing(false);
       return;
@@ -154,5 +181,5 @@ export function usePagedList<T, M = Record<string, unknown>>(path: string | null
     }, []),
   );
 
-  return { items, meta, error, loading, refreshing, loadingMore, reload, loadMore };
+  return { items, meta, error, fromCache, loading, refreshing, loadingMore, reload, loadMore };
 }
