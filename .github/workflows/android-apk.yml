@@ -39,7 +39,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/app.json') }}
+          restore-keys: gradle-${{ runner.os }}-
 
       - run: pnpm install --frozen-lockfile
 
@@ -50,16 +56,6 @@ jobs:
         working-directory: apps/mobile
         run: pnpm exec expo prebuild --platform android --no-install
 
-      - name: Speed up Gradle
-        working-directory: apps/mobile/android
-        run: |
-          cat >> gradle.properties <<'PROPS'
-          org.gradle.parallel=true
-          org.gradle.caching=true
-          org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g
-          android.enablePngCrunchInReleaseBuilds=false
-          PROPS
-
       - name: Set versionCode from run number
         working-directory: apps/mobile/android/app
         run: sed -i "s/versionCode [0-9]*/versionCode ${{ github.run_number }}/" build.gradle
@@ -68,7 +64,13 @@ jobs:
       # For Play Store you'd switch to your own keystore later.
       - name: Build release APK
         working-directory: apps/mobile/android
-        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --build-cache --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon -Dorg.gradle.jvmargs="-Xmx4g" 2>&1 | tee ../gradle.log || {
+            echo "::error title=Gradle failed::$(grep -E 'FAILED|What went wrong|error:|Error|Caused by|Could not' -A3 ../gradle.log | tail -25 | sed ':a;N;$!ba;s/%/%25/g;s///g;s/
+/%0A/g')"
+            exit 1
+          }
 
       - name: Rename APK
         run: |
