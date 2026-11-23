@@ -67,8 +67,7 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon -Dorg.gradle.jvmargs="-Xmx4g" 2>&1 | tee ../gradle.log || {
-            echo "::error title=Gradle failed::$(grep -E 'FAILED|What went wrong|error:|Caused by|Could not' -A3 ../gradle.log | tail -25 | tr -d '%' | tr '
-' '~')"
+            echo "::error title=Gradle failed::$(grep -E 'FAILED|What went wrong|error:|Caused by|Could not' -A3 ../gradle.log | tail -25 | tr -d '%' | paste -sd '~' -)"
             exit 1
           }
 
