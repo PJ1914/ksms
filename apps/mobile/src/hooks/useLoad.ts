@@ -1,6 +1,7 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type Page, getPage } from '@/api/client';
+import { peek, remember } from '@/api/swr-cache';
 import { isNetworkFailure } from '@/sync/backoff';
 import { friendlyError } from '@/utils/errors';
 
@@ -8,10 +9,10 @@ import { friendlyError } from '@/utils/errors';
  * Loads one thing and reloads it whenever the screen comes back into view (after adding something, say).
  * Answers to out-of-date requests are ignored, so a slow reply can never overwrite a newer one.
  */
-export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
-  const [data, setData] = useState<T | null>(null);
+export function useLoad<T>(load: () => Promise<T>, deps: unknown[], cacheKey?: string) {
+  const [data, setData] = useState<T | null>(() => (cacheKey ? (peek<T>(cacheKey) ?? null) : null));
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !(cacheKey && peek(cacheKey) !== undefined));
   const [refreshing, setRefreshing] = useState(false);
   const latest = useRef(0);
   const first = useRef(true);
@@ -26,6 +27,7 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
         const result = await run();
         if (ticket !== latest.current) return;
         setData(result);
+        if (cacheKey) remember(cacheKey, result);
         setError(null);
       } catch (e) {
         if (ticket === latest.current) setError(friendlyError(e));
@@ -36,7 +38,7 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
         }
       }
     },
-    [run],
+    [run, cacheKey],
   );
 
   const reloadRef = useRef(reload);
@@ -44,9 +46,12 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
 
   // First load, and again whenever the inputs change.
   useEffect(() => {
-    setLoading(true);
+    const cached = cacheKey ? peek<T>(cacheKey) : undefined;
+    if (cached !== undefined)
+      setData(cached); // show the last answer at once, refresh quietly
+    else setLoading(true);
     void reload();
-  }, [reload]);
+  }, [reload, cacheKey]);
 
   // Coming back to the screen (not the very first time) refreshes quietly.
   useFocusEffect(
@@ -103,6 +108,7 @@ export function usePagedList<T, M = Record<string, unknown>>(
         if (ticket !== latest.current) return;
         setItems(res.data);
         setMeta(res.meta);
+        remember(target, res);
         setFromCache(false);
         setError(null);
       } catch (e) {
@@ -166,10 +172,17 @@ export function usePagedList<T, M = Record<string, unknown>>(
       setRefreshing(false);
       return;
     }
-    setLoading(true);
-    const t = setTimeout(() => void reload(), 250); // short pause while typing in a search box
+    const hit = peek<Page<T, M>>(url(1) ?? '');
+    if (hit) {
+      setItems(hit.data);
+      setMeta(hit.meta);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    const t = setTimeout(() => void reload(), hit ? 0 : 250); // short pause while typing in a search box
     return () => clearTimeout(t);
-  }, [path, reload]);
+  }, [path, reload, url]);
 
   useFocusEffect(
     useCallback(() => {

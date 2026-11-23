@@ -1,3 +1,4 @@
+import { setCacheScope } from '@/api/swr-cache';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { wipeLocalSyncCache } from '@/sync/expo-db';
 import {
@@ -54,6 +55,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     return () => setSignedOutListener(null);
   }, [restore]);
+
+  // Cached screen data belongs to one user + branch; switching either clears it.
+  setCacheScope(`${profile?.user.id ?? 'none'}:${branchId ?? 'none'}`);
 
   const value = useMemo<AuthState>(
     () => ({

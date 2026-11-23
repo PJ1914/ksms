@@ -40,17 +40,21 @@ export default function StockScreen() {
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
 
-  const cats = useLoad<CategoryChipItem[]>(async () => {
-    try {
-      const list = await getData<CategoryChipItem[]>('/categories');
-      return list.filter((c) => (c.productCount ?? 1) > 0);
-    } catch (e) {
-      if (isNetworkFailure(e) && db) {
-        return (await listCachedCategories(db)).map((c) => ({ id: c.id, name: c.name }));
+  const cats = useLoad<CategoryChipItem[]>(
+    async () => {
+      try {
+        const list = await getData<CategoryChipItem[]>('/categories');
+        return list.filter((c) => (c.productCount ?? 1) > 0);
+      } catch (e) {
+        if (isNetworkFailure(e) && db) {
+          return (await listCachedCategories(db)).map((c) => ({ id: c.id, name: c.name }));
+        }
+        return [];
       }
-      return [];
-    }
-  }, [db]);
+    },
+    [db],
+    'stock-categories',
+  );
 
   async function onBarcodeScanned(code: string) {
     setScanning(false);

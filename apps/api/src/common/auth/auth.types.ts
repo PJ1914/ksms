@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import type { MemberLookup } from '../tenant/member-lookup';
 
 /** Claims inside a short-lived access token. Permissions are NOT embedded (looked up per request). */
 export interface AccessTokenClaims {
@@ -26,4 +27,6 @@ export type AppRequest = Request & {
   id?: string;
   principal?: Principal;
   tenant?: TenantContext;
+  /** Started by AuthGuard so the membership query runs alongside the session query. */
+  memberLookup?: MemberLookup;
 };

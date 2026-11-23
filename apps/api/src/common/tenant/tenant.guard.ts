@@ -6,6 +6,7 @@ import { PrismaService } from '../../database/prisma.service';
 import type { AppRequest } from '../auth/auth.types';
 import { IS_PUBLIC, REQUIRE_BRANCH } from '../auth/decorators';
 import { AppException } from '../errors/app.exception';
+import { findMember } from './member-lookup';
 
 const uuid = z.uuid();
 
@@ -30,24 +31,8 @@ export class TenantGuard implements CanActivate {
     const principal = req.principal;
     if (!principal) throw new AppException('UNAUTHORIZED', 'Not authenticated', 401);
 
-    const member = await this.prisma.organizationMember.findUnique({
-      where: {
-        organizationId_userId: {
-          organizationId: principal.organizationId,
-          userId: principal.userId,
-        },
-      },
-      select: {
-        id: true,
-        roleId: true,
-        status: true,
-        // A branch that was switched off or deleted can no longer be worked in.
-        branches: {
-          where: { branch: { deletedAt: null, isActive: true } },
-          select: { branchId: true },
-        },
-      },
-    });
+    const member = await (req.memberLookup ??
+      findMember(this.prisma, principal.organizationId, principal.userId));
     if (!member || member.status !== 'ACTIVE') {
       throw new AppException(
         'ORG_ACCESS_DENIED',

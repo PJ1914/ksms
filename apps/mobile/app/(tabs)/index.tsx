@@ -26,30 +26,35 @@ export default function HomeScreen() {
   const { cart } = useCart();
   const today = todayInIndia();
 
-  const { data, refreshing, reload } = useLoad<Counts>(async () => {
-    const total = async (path: string) => (await getPage(path)).meta.total;
-    const [billsToday, lowStock, expiring, customersOwing, suppliersOwed] = await Promise.all([
-      can('sale.read')
-        ? total(`/sales?from=${today}&to=${today}&status=COMPLETED&pageSize=1`).catch(() => null)
-        : null,
-      can('stock.read')
-        ? total('/inventory/balances?lowStock=true&pageSize=1').catch(() => null)
-        : null,
-      can('stock.read')
-        ? getData<ExpiringRow[]>('/inventory/expiring?withinDays=30')
-            .then((r) => r.length)
-            .catch(() => null)
-        : null,
-      can('customer.read') ? total('/customers?owes=true&pageSize=1').catch(() => null) : null,
-      can('supplier.read') ? total('/suppliers?owed=true&pageSize=1').catch(() => null) : null,
-    ]);
-    return { billsToday, lowStock, expiring, customersOwing, suppliersOwed };
-  }, [today, branch?.id]);
+  const { data, refreshing, reload } = useLoad<Counts>(
+    async () => {
+      const total = async (path: string) => (await getPage(path)).meta.total;
+      const [billsToday, lowStock, expiring, customersOwing, suppliersOwed] = await Promise.all([
+        can('sale.read')
+          ? total(`/sales?from=${today}&to=${today}&status=COMPLETED&pageSize=1`).catch(() => null)
+          : null,
+        can('stock.read')
+          ? total('/inventory/balances?lowStock=true&pageSize=1').catch(() => null)
+          : null,
+        can('stock.read')
+          ? getData<ExpiringRow[]>('/inventory/expiring?withinDays=30')
+              .then((r) => r.length)
+              .catch(() => null)
+          : null,
+        can('customer.read') ? total('/customers?owes=true&pageSize=1').catch(() => null) : null,
+        can('supplier.read') ? total('/suppliers?owed=true&pageSize=1').catch(() => null) : null,
+      ]);
+      return { billsToday, lowStock, expiring, customersOwing, suppliersOwed };
+    },
+    [today, branch?.id],
+    `home-counts:${today}`,
+  );
 
   const money = useLoad<Dashboard | null>(
     () =>
       can('report.financial') ? getData<Dashboard>('/reports/dashboard') : Promise.resolve(null),
     [today, branch?.id],
+    `home-dashboard:${today}`,
   );
   const d = money.data;
 

@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../database/prisma.service';
 import { AppException } from '../errors/app.exception';
+import { findMember } from '../tenant/member-lookup';
 import { AccessTokenService } from './access-token.service';
 import type { AppRequest } from './auth.types';
 import { IS_PUBLIC } from './decorators';
@@ -33,6 +34,9 @@ export class AuthGuard implements CanActivate {
 
     const claims = await this.tokens.verify(match[1]);
 
+    // Membership is needed by the next guard; start it now so both queries run at the same time.
+    const memberLookup = findMember(this.prisma, claims.org, claims.sub);
+    memberLookup.catch(() => undefined); // errors surface where it is awaited (or are moot if auth fails)
     const session = await this.prisma.userSession.findUnique({
       where: { id: claims.sid },
       select: {
@@ -54,6 +58,7 @@ export class AuthGuard implements CanActivate {
       session.user.tokenVersion === claims.v;
     if (!valid) throw new AppException('UNAUTHORIZED', 'Session is no longer valid', 401);
 
+    req.memberLookup = memberLookup;
     req.principal = { userId: claims.sub, sessionId: claims.sid, organizationId: claims.org };
     return true;
   }
