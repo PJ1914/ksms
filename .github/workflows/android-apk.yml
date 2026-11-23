@@ -50,6 +50,17 @@ jobs:
         working-directory: apps/mobile
         run: pnpm exec expo prebuild --platform android --no-install
 
+      - name: Speed up Gradle
+        working-directory: apps/mobile/android
+        run: |
+          cat >> gradle.properties <<'PROPS'
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          org.gradle.configureondemand=true
+          org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g
+          android.enablePngCrunchInReleaseBuilds=false
+          PROPS
+
       - name: Set versionCode from run number
         working-directory: apps/mobile/android/app
         run: sed -i "s/versionCode [0-9]*/versionCode ${{ github.run_number }}/" build.gradle
@@ -58,7 +69,7 @@ jobs:
       # For Play Store you'd switch to your own keystore later.
       - name: Build release APK
         working-directory: apps/mobile/android
-        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --build-cache --no-daemon -Dorg.gradle.jvmargs="-Xmx4g"
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --build-cache --no-daemon
 
       - name: Rename APK
         run: |
