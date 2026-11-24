@@ -5,7 +5,17 @@ import { newKey, postData } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { api } from '@/auth/session';
 import { BarcodeScannerModal } from '@/components/BarcodeScannerModal';
-import { Button, Card, Choice, ErrorText, Field, SectionTitle } from '@/components/ui';
+import {
+  Button,
+  Card,
+  Choice,
+  CONTENT_MAX,
+  ErrorText,
+  Field,
+  FormHeader,
+  SectionTitle,
+} from '@/components/ui';
+import { icons } from '@/theme/art';
 import { colors } from '@/theme/colors';
 import { friendlyError } from '@/utils/errors';
 import {
@@ -109,6 +119,11 @@ export default function NewProductScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
+        <FormHeader
+          art={icons.addProduct}
+          title="New product"
+          note="Name, unit and selling price are enough to start billing."
+        />
         <Field
           label="Product name"
           value={name}
@@ -230,18 +245,25 @@ export default function NewProductScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 32 },
-  label: { fontSize: 14, fontWeight: '500', color: colors.text, marginBottom: 6 },
+  container: {
+    padding: 20,
+    paddingBottom: 40,
+    width: '100%',
+    maxWidth: CONTENT_MAX,
+    alignSelf: 'center',
+  },
+  label: { fontSize: 13, fontWeight: '700', color: '#3D4C43', marginBottom: 8 },
   choices: { gap: 8, marginBottom: 14 },
   choice: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    minHeight: 48,
   },
-  choiceSelected: { borderColor: colors.primary, backgroundColor: '#E6F1EC' },
+  choiceSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   choiceText: { fontSize: 15, color: colors.text },
   choiceTextSelected: { color: colors.primary, fontWeight: '600' },
   note: { fontSize: 13, color: colors.textMuted, marginBottom: 12 },

@@ -9,10 +9,12 @@ import {
   Choice,
   ErrorText,
   Field,
+  FormHeader,
   Loading,
   Screen,
   SectionTitle,
 } from '@/components/ui';
+import { icons } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { friendlyError } from '@/utils/errors';
 
@@ -103,6 +105,11 @@ export default function GstSettingsScreen() {
       }
     >
       <Stack.Screen options={{ title: 'GST & Billing Settings' }} />
+      <FormHeader
+        art={icons.gstInvoice}
+        title="GST & billing"
+        note="These settings decide the tax on every new bill."
+      />
 
       <SectionTitle>Shop GST</SectionTitle>
       <Card>

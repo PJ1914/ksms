@@ -7,11 +7,13 @@ import {
   Choice,
   EmptyState,
   ErrorText,
+  Hero,
   KeyValue,
   ListRow,
   Loading,
   Screen,
 } from '@/components/ui';
+import { icons, illustrations } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { formatINR } from '@/utils/currency';
 
@@ -51,6 +53,13 @@ export default function PurchasesReportScreen() {
         <Loading />
       ) : data ? (
         <>
+          <Hero
+            label="Bought (net of returns)"
+            value={formatINR(data.totals.net)}
+            tint="mango"
+            art={icons.repPurchases}
+            sub={`${data.totals.orders} purchase orders`}
+          />
           <Card>
             <KeyValue label="Bought (net of returns)" value={formatINR(data.totals.net)} bold />
             <KeyValue label="Purchase orders" value={String(data.totals.orders)} />
@@ -60,7 +69,7 @@ export default function PurchasesReportScreen() {
           <Choice label="Show" options={VIEWS} value={view} onChange={setView} />
           {view === 'days' ? (
             data.series.length === 0 ? (
-              <EmptyState icon="cart-outline" title="No purchases in this period" />
+              <EmptyState art={illustrations.emptyPurchases} title="No purchases in this period" />
             ) : (
               data.series
                 .slice()
@@ -80,7 +89,10 @@ export default function PurchasesReportScreen() {
             <>
               <ErrorText message={suppliers.error} />
               {suppliers.data?.data.length === 0 ? (
-                <EmptyState icon="cart-outline" title="No purchases in this period" />
+                <EmptyState
+                  art={illustrations.emptyPurchases}
+                  title="No purchases in this period"
+                />
               ) : (
                 suppliers.data?.data.map((s) => (
                   <ListRow

@@ -9,14 +9,17 @@ import { CategoryChips, type CategoryChipItem } from '@/components/CategoryChips
 import { ListFooter } from '@/components/ListFooter';
 import {
   Badge,
-  Choice,
   EmptyState,
   ErrorText,
-  FloatingButton,
+  IconTile,
   ListRow,
   Loading,
   SearchBox,
+  Segmented,
+  TabHeader,
+  Page,
 } from '@/components/ui';
+import { categoryArt, illustrations } from '@/theme/art';
 import { useLoad, usePagedList } from '@/hooks/useLoad';
 import { isNetworkFailure } from '@/sync/backoff';
 import { getCachedProductByBarcode, listCachedCategories } from '@/sync/cache-store';
@@ -105,29 +108,35 @@ export default function StockScreen() {
   }
 
   return (
-    <View
-      style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 12 }}
-    >
-      {filter !== 'expiring' && (
-        <SearchBox
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search name, SKU or barcode"
-          onScan={() => setScanning(true)}
-        />
-      )}
-      <Choice options={FILTERS} value={filter} onChange={setFilter} />
-      {filter !== 'expiring' ? (
-        <CategoryChips categories={cats.data ?? []} value={categoryId} onChange={setCategoryId} />
-      ) : null}
-      {filter === 'expiring' ? (
-        <ExpiringList />
-      ) : (
-        <StockList filter={filter} search={search} categoryId={categoryId} />
-      )}
-      {can('product.manage') && filter !== 'expiring' && (
-        <FloatingButton label="Add product" onPress={() => router.push('/product-new')} />
-      )}
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <TabHeader
+        title="Stock"
+        subtitle="Your products and what is on the shelf"
+        action={
+          can('product.manage')
+            ? { label: 'Product', onPress: () => router.push('/product-new') }
+            : undefined
+        }
+      />
+      <Page>
+        {filter !== 'expiring' && (
+          <SearchBox
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search name, SKU or barcode"
+            onScan={() => setScanning(true)}
+          />
+        )}
+        <Segmented options={FILTERS} value={filter} onChange={setFilter} />
+        {filter !== 'expiring' ? (
+          <CategoryChips categories={cats.data ?? []} value={categoryId} onChange={setCategoryId} />
+        ) : null}
+        {filter === 'expiring' ? (
+          <ExpiringList />
+        ) : (
+          <StockList filter={filter} search={search} categoryId={categoryId} />
+        )}
+      </Page>
       <BarcodeScannerModal
         visible={scanning}
         title="Scan product barcode"
@@ -162,7 +171,7 @@ function StockList({
       <FlatList
         data={list.items}
         keyExtractor={(p) => p.productId}
-        contentContainerStyle={list.items.length ? { paddingBottom: 96 } : undefined}
+        contentContainerStyle={{ paddingBottom: 24 }}
         refreshing={list.refreshing}
         onRefresh={() => void list.reload(true)}
         onEndReachedThreshold={0.5}
@@ -178,7 +187,13 @@ function StockList({
         }
         ListEmptyComponent={
           <EmptyState
-            icon="cube-outline"
+            art={
+              filter === 'low'
+                ? illustrations.emptyExpiring
+                : search.trim()
+                  ? illustrations.emptySearch
+                  : illustrations.emptyProducts
+            }
             title={
               filter === 'low'
                 ? 'Nothing is running low'
@@ -187,19 +202,22 @@ function StockList({
                   : 'No products yet'
             }
             note={
-              filter === 'all' && !search.trim() ? 'Tap + to add your first product.' : undefined
+              filter === 'all' && !search.trim()
+                ? 'Tap “+ Product” at the top to add your first product.'
+                : undefined
             }
           />
         }
         renderItem={({ item }) => (
           <ListRow
+            leading={<IconTile art={categoryArt(item.name)} tint="mango" size={48} />}
             title={item.name}
             subtitle={item.sku}
             right={
               <Text
                 style={{
                   fontSize: 16,
-                  fontWeight: '700',
+                  fontWeight: '800',
                   color: item.isLowStock ? colors.danger : colors.text,
                 }}
               >
@@ -233,10 +251,16 @@ function ExpiringList() {
         onRefresh={() => void reload(true)}
         ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         ListEmptyComponent={
-          <EmptyState icon="checkmark-circle-outline" title="Nothing expires in the next 30 days" />
+          <EmptyState
+            art={illustrations.emptyExpiring}
+            title="Nothing expires in the next 30 days"
+            note="Everything on your shelves is fresh."
+          />
         }
+        contentContainerStyle={{ paddingBottom: 24 }}
         renderItem={({ item }) => (
           <ListRow
+            leading={<IconTile art={categoryArt(item.product.name)} tint="tomato" size={48} />}
             title={item.product.name}
             subtitle={`Batch ${item.batchNumber} · expires ${item.expiryDate}`}
             right={

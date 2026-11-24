@@ -12,6 +12,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
+import { illustrations } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { colors } from '@/theme/colors';
 import { friendlyError } from '@/utils/errors';
@@ -162,7 +163,7 @@ export default function CategoriesScreen() {
       <SectionTitle>{`All categories (${data?.length ?? 0})`}</SectionTitle>
       {!data || data.length === 0 ? (
         <EmptyState
-          icon="pricetags-outline"
+          art={illustrations.emptyProducts}
           title="No categories yet"
           note="Add categories above to group your products."
         />

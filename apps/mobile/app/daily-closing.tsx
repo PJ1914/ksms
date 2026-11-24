@@ -13,11 +13,13 @@ import {
   EmptyState,
   ErrorText,
   Field,
+  Hero,
   KeyValue,
   Loading,
   Screen,
   SectionTitle,
 } from '@/components/ui';
+import { illustrations } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { useSubmit } from '@/hooks/useSubmit';
 import { colors } from '@/theme/colors';
@@ -45,7 +47,10 @@ export default function DailyClosingScreen() {
 
   if (!can('cashbook.read') && !can('closing.manage')) {
     return (
-      <EmptyState icon="lock-closed-outline" title="Daily closing is not available for your role" />
+      <EmptyState
+        art={illustrations.roleLocked}
+        title="Daily closing is not available for your role"
+      />
     );
   }
 
@@ -92,6 +97,13 @@ export default function DailyClosingScreen() {
   return (
     <Screen onRefresh={() => void reload(true)} refreshing={refreshing}>
       <Stack.Screen options={{ title: `Closing · ${preview.businessDate}` }} />
+      <Hero
+        label="Cash that should be in the drawer"
+        value={formatINR(preview.expectedCash)}
+        art={illustrations.dailyClosing}
+        tint="mango"
+        sub={`Opening ${formatINR(preview.openingCash)} · in ${formatINR(preview.cashIn)} · out ${formatINR(preview.cashOut)}`}
+      />
       <Card>
         <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 8 }}>
           Today ({preview.businessDate})
@@ -165,7 +177,7 @@ export default function DailyClosingScreen() {
       <SectionTitle>Recent closings</SectionTitle>
       <Card>
         {history.length === 0 ? (
-          <EmptyState icon="lock-closed-outline" title="No closed days yet" />
+          <EmptyState art={illustrations.dailyClosing} title="No closed days yet" />
         ) : (
           history.map((c) => (
             <KeyValue

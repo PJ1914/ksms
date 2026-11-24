@@ -17,10 +17,11 @@ import {
   ListRow,
   Loading,
   SearchBox,
+  pageStyle,
 } from '@/components/ui';
+import { icons, illustrations } from '@/theme/art';
 import { usePagedList } from '@/hooks/useLoad';
 import { useSubmit } from '@/hooks/useSubmit';
-import { colors } from '@/theme/colors';
 import { absMoney, formatINR, isPositive } from '@/utils/currency';
 import { words } from '@/utils/format';
 
@@ -45,7 +46,7 @@ export default function CashbookScreen() {
 
   if (!can('cashbook.read')) {
     return (
-      <EmptyState icon="lock-closed-outline" title="Cashbook is not available for your role" />
+      <EmptyState art={illustrations.roleLocked} title="Cashbook is not available for your role" />
     );
   }
 
@@ -73,9 +74,7 @@ export default function CashbookScreen() {
   const summary = list.meta?.summary;
 
   return (
-    <View
-      style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 12 }}
-    >
+    <View style={pageStyle}>
       <Stack.Screen options={{ title: 'Cashbook' }} />
       {summary ? (
         <Card>
@@ -140,12 +139,14 @@ export default function CashbookScreen() {
             onEndReached={() => void list.loadMore()}
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
             ListEmptyComponent={
-              <EmptyState icon="wallet-outline" title="No cashbook entries yet" />
+              <EmptyState art={illustrations.dailyClosing} title="No cashbook entries yet" />
             }
             renderItem={({ item }) => {
               const pos = isPositive(item.amount);
               return (
                 <ListRow
+                  art={icons.cashbook}
+                  tint="blue"
                   title={item.description ?? words(item.kind)}
                   subtitle={`${item.businessDate} · ${words(item.kind)} · ${item.method}`}
                   right={

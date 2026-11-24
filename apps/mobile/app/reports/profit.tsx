@@ -1,7 +1,17 @@
 import { getData, query } from '@/api/client';
 import type { ProfitReport } from '@/api/types';
 import { Note, PeriodChoice, usePeriod } from '@/components/ReportParts';
-import { Card, ErrorText, KeyValue, Loading, Screen, SectionTitle } from '@/components/ui';
+import {
+  Card,
+  ErrorText,
+  Hero,
+  KeyValue,
+  Loading,
+  Screen,
+  SectionTitle,
+  Stats,
+} from '@/components/ui';
+import { icons } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { formatINR, isNegative } from '@/utils/currency';
 
@@ -19,6 +29,21 @@ export default function ProfitScreen() {
         <Loading />
       ) : data ? (
         <>
+          <Hero
+            label="Net profit (estimate)"
+            value={formatINR(data.netProfit)}
+            valueTone={isNegative(data.netProfit) ? 'danger' : 'success'}
+            tint={isNegative(data.netProfit) ? 'tomato' : 'green'}
+            art={icons.repProfit}
+            sub={`Gross margin ${data.grossMarginPercent}%`}
+          />
+          <Stats
+            items={[
+              { label: 'Revenue', value: formatINR(data.revenue), tint: 'blue' },
+              { label: 'Gross profit', value: formatINR(data.grossProfit), tint: 'green' },
+              { label: 'Expenses', value: formatINR(data.expenses.total), tint: 'tomato' },
+            ]}
+          />
           <SectionTitle>Gross profit (estimate)</SectionTitle>
           <Card>
             <KeyValue label="Revenue (sales before GST)" value={formatINR(data.revenue)} />

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Text } from 'react-native';
-import { Choice } from '@/components/ui';
+import { Segmented } from '@/components/ui';
 import { colors } from '@/theme/colors';
 import { type PeriodKey, PERIODS, periodRange } from '@/utils/period';
 import { todayInIndia } from '@/utils/today';
@@ -19,7 +19,7 @@ export function PeriodChoice({
   value: PeriodKey;
   onChange: (k: PeriodKey) => void;
 }) {
-  return <Choice label="Period" options={PERIODS} value={value} onChange={onChange} />;
+  return <Segmented options={PERIODS} value={value} onChange={onChange} />;
 }
 
 /** A small grey note under a figure, used to say what a number means. */

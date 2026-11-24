@@ -4,7 +4,18 @@ import { FlatList, Text, View } from 'react-native';
 import { query } from '@/api/client';
 import type { CustomerRow } from '@/api/types';
 import { useCart } from '@/cart/CartProvider';
-import { Badge, Button, EmptyState, ErrorText, ListRow, Loading, SearchBox } from '@/components/ui';
+import {
+  Avatar,
+  Badge,
+  Button,
+  EmptyState,
+  ErrorText,
+  ListRow,
+  Loading,
+  pageStyle,
+  SearchBox,
+} from '@/components/ui';
+import { illustrations } from '@/theme/art';
 import { usePagedList } from '@/hooks/useLoad';
 import { searchCachedCustomers } from '@/sync/cache-store';
 import { useSync } from '@/sync/SyncProvider';
@@ -23,9 +34,7 @@ export default function ChooseCustomerScreen() {
   );
 
   return (
-    <View
-      style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 12 }}
-    >
+    <View style={pageStyle}>
       <Stack.Screen options={{ title: 'Who is this bill for?' }} />
       <SearchBox
         value={search}
@@ -60,7 +69,7 @@ export default function ChooseCustomerScreen() {
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
             ListEmptyComponent={
               <EmptyState
-                icon="people-outline"
+                art={illustrations.emptyCustomers}
                 title="No customers found"
                 note="Add the customer first, then choose them here."
               />
@@ -76,6 +85,7 @@ export default function ChooseCustomerScreen() {
             }
             renderItem={({ item }) => (
               <ListRow
+                leading={<Avatar name={item.name} />}
                 title={item.name}
                 subtitle={item.phone ?? 'No mobile number'}
                 right={

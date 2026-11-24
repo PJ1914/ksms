@@ -1,13 +1,22 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Text } from 'react-native';
 import { type PayForm, buildPayPayload, validatePayForm } from '@ksms/validation';
 import { getData } from '@/api/client';
 import type { SupplierDetail } from '@/api/types';
-import { Button, Card, Choice, ErrorText, Field, KeyValue, Loading, Screen } from '@/components/ui';
+import {
+  Button,
+  Card,
+  Choice,
+  ErrorText,
+  Field,
+  Hero,
+  KeyValue,
+  Loading,
+  Screen,
+} from '@/components/ui';
+import { illustrations } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { useSubmit } from '@/hooks/useSubmit';
-import { colors } from '@/theme/colors';
 import { formatINR, isPositive } from '@/utils/currency';
 
 const METHODS = [
@@ -50,10 +59,12 @@ export default function PaySupplierScreen() {
     return (
       <Screen footer={<Button title="Done" onPress={() => router.back()} />}>
         <Stack.Screen options={{ title: 'Payment recorded' }} />
+        <Hero
+          label="Payment saved"
+          value={`Receipt ${done.receiptNumber}`}
+          art={illustrations.billSaved}
+        />
         <Card>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: colors.success, marginBottom: 8 }}>
-            Receipt {done.receiptNumber}
-          </Text>
           {done.allocations.map((a) => (
             <KeyValue
               key={a.purchaseNumber}
@@ -73,24 +84,26 @@ export default function PaySupplierScreen() {
   return (
     <Screen footer={<Button title="Record payment" onPress={pay} busy={busy} />}>
       <Stack.Screen options={{ title: `Pay ${s.name}` }} />
-      <Card>
-        <KeyValue
-          label="You owe"
-          value={formatINR(s.balance)}
-          bold
-          tone={isPositive(s.balance) ? 'danger' : undefined}
-        />
-        {s.unpaidPurchaseCount > 0 ? (
-          <KeyValue label="Unpaid purchases" value={`${s.unpaidPurchaseCount}`} tone="muted" />
-        ) : null}
+      <Hero
+        label={`You owe ${s.name}`}
+        value={formatINR(s.balance)}
+        valueTone={isPositive(s.balance) ? 'danger' : 'success'}
+        tint={isPositive(s.balance) ? 'mango' : 'green'}
+        art={illustrations.supplierTruck}
+        sub={
+          s.unpaidPurchaseCount > 0
+            ? `${s.unpaidPurchaseCount} unpaid purchase${s.unpaidPurchaseCount === 1 ? '' : 's'}`
+            : undefined
+        }
+      >
         {isPositive(s.balance) ? (
           <Button
-            title={`Pay everything: ${formatINR(s.balance)}`}
+            title={`Pay everything ${formatINR(s.balance)}`}
             variant="secondary"
             onPress={() => setForm((f) => ({ ...f, amount: s.balance }))}
           />
         ) : null}
-      </Card>
+      </Hero>
       <Field
         label="Amount ₹"
         value={form.amount}

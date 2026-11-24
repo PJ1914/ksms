@@ -4,7 +4,18 @@ import { Text } from 'react-native';
 import { moneyString } from '@ksms/validation';
 import { getData } from '@/api/client';
 import type { CustomerRow } from '@/api/types';
-import { Button, Card, Choice, ErrorText, Field, KeyValue, Loading, Screen } from '@/components/ui';
+import {
+  Button,
+  Card,
+  Choice,
+  ErrorText,
+  Field,
+  FormHeader,
+  KeyValue,
+  Loading,
+  Screen,
+} from '@/components/ui';
+import { icons } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { useSubmit } from '@/hooks/useSubmit';
 import { colors } from '@/theme/colors';
@@ -95,6 +106,11 @@ export default function CustomerKhataAdjustScreen() {
   return (
     <Screen footer={<Button title="Save khata entry" onPress={save} busy={busy} />}>
       <Stack.Screen options={{ title: `Khata · ${c.name}` }} />
+      <FormHeader
+        art={icons.payKhata}
+        title="Khata entry"
+        note="For old balances or corrections. Bills and payments are added for you."
+      />
       <Card>
         <KeyValue
           label="Current balance"

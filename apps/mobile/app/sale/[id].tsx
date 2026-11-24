@@ -1,6 +1,7 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Share, Text, View } from 'react-native';
+import { Image, Share, Text, View } from 'react-native';
+import { illustrations } from '@/theme/art';
 import { getData } from '@/api/client';
 import type { SaleDetail } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
@@ -84,11 +85,21 @@ export default function SaleScreen() {
     <Screen onRefresh={() => void reload(true)} refreshing={refreshing}>
       <Stack.Screen options={{ title: s.saleNumber }} />
 
+      {!cancelled ? (
+        <View style={{ alignItems: 'center', marginBottom: 8 }}>
+          <Image
+            source={illustrations.billSaved}
+            style={{ width: 150, height: 130 }}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+        </View>
+      ) : null}
       <Card>
         <View
           style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
         >
-          <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text }}>
+          <Text style={{ fontSize: 28, fontWeight: '800', color: colors.text }}>
             {formatINR(s.total)}
           </Text>
           <Badge text={cancelled ? 'Cancelled' : 'Completed'} tone={cancelled ? 'bad' : 'good'} />

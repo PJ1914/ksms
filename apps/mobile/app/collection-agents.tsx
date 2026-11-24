@@ -5,6 +5,7 @@ import { getData, getPage, postData, query } from '@/api/client';
 import type { CollectionAgentDetail, CollectionAgentRow, CustomerRow } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
 import {
+  Avatar,
   Badge,
   Button,
   Card,
@@ -14,9 +15,11 @@ import {
   KeyValue,
   ListRow,
   Loading,
+  pageStyle,
   SearchBox,
   SectionTitle,
 } from '@/components/ui';
+import { illustrations } from '@/theme/art';
 import { useLoad, usePagedList } from '@/hooks/useLoad';
 import { colors } from '@/theme/colors';
 import { formatINR } from '@/utils/currency';
@@ -52,7 +55,7 @@ export default function CollectionAgentsScreen() {
   if (!can('collection.read')) {
     return (
       <EmptyState
-        icon="lock-closed-outline"
+        art={illustrations.roleLocked}
         title="Collection agents are not available for your role"
       />
     );
@@ -111,9 +114,7 @@ export default function CollectionAgentsScreen() {
   }
 
   return (
-    <View
-      style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 12 }}
-    >
+    <View style={pageStyle}>
       <Stack.Screen options={{ title: 'Collection agents' }} />
       <SearchBox value={search} onChangeText={setSearch} placeholder="Search agent name or phone" />
 
@@ -181,6 +182,7 @@ export default function CollectionAgentsScreen() {
               />
               {(candidates.data?.data ?? []).map((c) => (
                 <ListRow
+                  leading={<Avatar name={c.name} size={40} />}
                   key={c.id}
                   title={c.name}
                   subtitle={c.phone ?? 'No mobile number'}
@@ -209,10 +211,11 @@ export default function CollectionAgentsScreen() {
             onEndReached={() => void list.loadMore()}
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
             ListEmptyComponent={
-              <EmptyState icon="people-outline" title="No collection agents yet" />
+              <EmptyState art={illustrations.collectionAgent} title="No collection agents yet" />
             }
             renderItem={({ item }) => (
               <ListRow
+                leading={<Avatar name={item.name} />}
                 title={item.name}
                 subtitle={`${item.phone ?? 'No phone'} · ${item.activeAssignments} assigned`}
                 right={<Badge text={formatINR(item.totalCollected)} tone="good" />}

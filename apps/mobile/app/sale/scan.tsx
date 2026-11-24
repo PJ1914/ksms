@@ -131,6 +131,11 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: colors.background,
   },
-  panel: { padding: 16, backgroundColor: colors.surface },
+  panel: {
+    padding: 20,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
   note: { fontSize: 16, color: colors.text, marginBottom: 12, textAlign: 'center' },
 });

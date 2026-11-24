@@ -1,14 +1,24 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Share, Text } from 'react-native';
+import { Share } from 'react-native';
 import { type PayForm, buildPayPayload, validatePayForm } from '@ksms/validation';
 import { getData, getPage } from '@/api/client';
 import type { CollectionAgentRow, CustomerRow } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
-import { Button, Card, Choice, ErrorText, Field, KeyValue, Loading, Screen } from '@/components/ui';
+import {
+  Button,
+  Card,
+  Choice,
+  ErrorText,
+  Field,
+  Hero,
+  KeyValue,
+  Loading,
+  Screen,
+} from '@/components/ui';
+import { icons } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { useSubmit } from '@/hooks/useSubmit';
-import { colors } from '@/theme/colors';
 import { absMoney, formatINR, isNegative, isPositive } from '@/utils/currency';
 
 const METHODS = [
@@ -83,10 +93,14 @@ export default function CollectCustomerPaymentScreen() {
     return (
       <Screen footer={<Button title="Done" onPress={() => router.back()} />}>
         <Stack.Screen options={{ title: 'Collection recorded' }} />
+        <Hero
+          label={`Received from ${c.name}`}
+          value={formatINR(done.amount)}
+          valueTone="success"
+          art={icons.payReceived}
+          sub={`Receipt ${done.receiptNumber}`}
+        />
         <Card>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: colors.success, marginBottom: 8 }}>
-            Receipt {done.receiptNumber}
-          </Text>
           <KeyValue label="Customer" value={c.name} />
           <KeyValue label="Received" value={formatINR(done.amount)} tone="success" />
           <KeyValue label="Mode" value={done.method} />
@@ -101,7 +115,12 @@ export default function CollectCustomerPaymentScreen() {
             bold
           />
         </Card>
-        <Button title="Share receipt" variant="secondary" onPress={() => void shareReceipt()} />
+        <Button
+          title="Share receipt"
+          icon="share-social-outline"
+          variant="secondary"
+          onPress={() => void shareReceipt()}
+        />
       </Screen>
     );
   }
@@ -109,21 +128,21 @@ export default function CollectCustomerPaymentScreen() {
   return (
     <Screen footer={<Button title="Record collection" onPress={collect} busy={busy} />}>
       <Stack.Screen options={{ title: `Collect from ${c.name}` }} />
-      <Card>
-        <KeyValue
-          label="Customer owes"
-          value={formatINR(isNegative(c.balance) ? absMoney(c.balance) : c.balance)}
-          bold
-          tone={isPositive(c.balance) ? 'danger' : undefined}
-        />
+      <Hero
+        label={isNegative(c.balance) ? 'Advance with you' : `${c.name} owes`}
+        value={formatINR(isNegative(c.balance) ? absMoney(c.balance) : c.balance)}
+        valueTone={isPositive(c.balance) ? 'danger' : 'success'}
+        tint={isPositive(c.balance) ? 'tomato' : 'green'}
+        art={icons.payReceived}
+      >
         {isPositive(c.balance) ? (
           <Button
-            title={`Collect full due: ${formatINR(c.balance)}`}
+            title={`Collect full due ${formatINR(c.balance)}`}
             variant="secondary"
             onPress={() => setForm((f) => ({ ...f, amount: c.balance }))}
           />
         ) : null}
-      </Card>
+      </Hero>
 
       <Field
         label="Amount received (₹)"

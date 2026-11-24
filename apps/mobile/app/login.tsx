@@ -1,5 +1,16 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { illustrations } from '@/theme/art';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError } from '@ksms/api-client';
 import { normalizeIndianPhone } from '@ksms/validation';
@@ -77,12 +88,24 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <Text style={styles.brand}>KSMS</Text>
-          <Text style={styles.subtitle}>
-            {registering ? 'Create your shop' : 'Sign in to your shop'}
-          </Text>
+          <View style={styles.hero}>
+            <Image
+              source={illustrations.shopfront}
+              style={styles.heroArt}
+              resizeMode="contain"
+              accessibilityIgnoresInvertColors
+            />
+            <Text style={styles.brand}>
+              {registering ? 'Set up your shop' : 'Your shop, in your pocket'}
+            </Text>
+            <Text style={styles.subtitle}>
+              {registering
+                ? 'Takes a minute. You can add products and customers after.'
+                : 'Billing, stock and khata — even when the internet is down.'}
+            </Text>
+          </View>
 
-          <View style={styles.card}>
+          <View style={styles.form}>
             {registering && (
               <>
                 <Field
@@ -131,19 +154,31 @@ export default function LoginScreen() {
               />
             )}
             <ErrorText message={error} />
-            <Button title={registering ? 'Create shop' : 'Sign in'} onPress={submit} busy={busy} />
+            <Button
+              title={registering ? 'Create shop' : 'Sign in'}
+              icon={registering ? 'storefront-outline' : 'arrow-forward'}
+              onPress={submit}
+              busy={busy}
+            />
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setMode(registering ? 'signIn' : 'register');
+                setShops([]);
+                setOrganizationId(undefined);
+                setError(null);
+              }}
+              style={styles.switch}
+            >
+              <Text style={styles.switchText}>
+                {registering ? 'I already have an account' : 'New here? Create your shop'}
+              </Text>
+            </Pressable>
           </View>
-
-          <Button
-            variant="secondary"
-            title={registering ? 'I already have an account' : 'New here? Create your shop'}
-            onPress={() => {
-              setMode(registering ? 'signIn' : 'register');
-              setShops([]);
-              setOrganizationId(undefined);
-              setError(null);
-            }}
-          />
+          <View style={styles.trust}>
+            <Ionicons name="shield-checkmark-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.trustText}>Your data is backed up safely</Text>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -152,20 +187,47 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  container: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  brand: { fontSize: 32, fontWeight: '700', color: colors.primary, textAlign: 'center' },
-  subtitle: {
-    fontSize: 16,
-    color: colors.textMuted,
+  container: { flexGrow: 1, paddingBottom: 24 },
+  hero: {
+    backgroundColor: colors.primarySoft,
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
+    alignItems: 'center',
+    paddingTop: 24,
+    paddingBottom: 24,
+    paddingHorizontal: 24,
+  },
+  heroArt: { width: 260, height: 190 },
+  brand: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: colors.text,
     textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 24,
+    marginTop: 8,
+    letterSpacing: -0.3,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
+  subtitle: {
+    fontSize: 14,
+    color: '#3D4C43',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 20,
   },
+  form: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+  },
+  switch: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  switchText: { fontSize: 15, fontWeight: '700', color: colors.primary },
+  trust: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 12,
+  },
+  trustText: { fontSize: 12, color: colors.textMuted },
 });

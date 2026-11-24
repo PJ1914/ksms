@@ -9,7 +9,8 @@ import {
 } from '@ksms/validation';
 import { getData } from '@/api/client';
 import type { ProductDetail, StockDetail } from '@/api/types';
-import { Button, Choice, ErrorText, Field, Loading, Screen } from '@/components/ui';
+import { Button, Choice, ErrorText, Field, FormHeader, Loading, Screen } from '@/components/ui';
+import { icons } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { useSubmit } from '@/hooks/useSubmit';
 import { formatDate, trimZeros } from '@/utils/format';
@@ -82,6 +83,11 @@ export default function StockAdjustScreen() {
       footer={<Button title={`Save ${TITLES[mode].toLowerCase()}`} onPress={save} busy={busy} />}
     >
       <Stack.Screen options={{ title: `${TITLES[mode]}: ${product.name}` }} />
+      <FormHeader
+        art={icons.stockAdjust}
+        title="Change stock"
+        note="Every change is kept in the history with its reason."
+      />
 
       {product.conversions.length > 1 ? (
         <Choice

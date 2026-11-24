@@ -16,11 +16,13 @@ import {
   Choice,
   ErrorText,
   Field,
+  FormHeader,
   ListRow,
   Screen,
   SearchBox,
   SectionTitle,
 } from '@/components/ui';
+import { illustrations } from '@/theme/art';
 import { usePagedList } from '@/hooks/useLoad';
 import { useSubmit } from '@/hooks/useSubmit';
 import { colors } from '@/theme/colors';
@@ -73,6 +75,11 @@ export default function NewPurchaseScreen() {
       }
     >
       <Stack.Screen options={{ title: 'New purchase' }} />
+      <FormHeader
+        art={illustrations.supplierTruck}
+        title="New purchase"
+        note="Add what arrived from the supplier. Stock goes up when you save."
+      />
 
       <SectionTitle>Supplier</SectionTitle>
       {supplierId ? (

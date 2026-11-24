@@ -1,6 +1,15 @@
 import { router, Stack } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  type ImageSourcePropType,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
   type PaymentEntry,
@@ -19,6 +28,7 @@ import type { SalePreview } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
 import { useCart } from '@/cart/CartProvider';
 import {
+  Avatar,
   Badge,
   Button,
   Card,
@@ -26,15 +36,18 @@ import {
   EmptyState,
   ErrorText,
   Field,
+  IconTile,
   KeyValue,
   Screen,
   SectionTitle,
+  MAX_FONT_SCALE,
 } from '@/components/ui';
+import { icons, illustrations } from '@/theme/art';
 import { isNetworkFailure } from '@/sync/backoff';
 import { removeLocalHeldBillByServerId } from '@/sync/cache-store';
 import { useSync } from '@/sync/SyncProvider';
-import { colors } from '@/theme/colors';
-import { formatINR, isPositive, isZero } from '@/utils/currency';
+import { colors, radius, shadow } from '@/theme/colors';
+import { formatINR, isPositive, isZero, stepQuantity } from '@/utils/currency';
 import { friendlyError } from '@/utils/errors';
 import { trimZeros } from '@/utils/format';
 
@@ -55,6 +68,9 @@ export default function NewBillScreen() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openLine, setOpenLine] = useState<string | null>(null);
+  const [showBillDiscount, setShowBillDiscount] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
 
   const cartProblem = cartIsEmpty(cart) ? null : validateCart(cart);
   const paymentProblem = validatePayments(payments);
@@ -173,22 +189,50 @@ export default function NewBillScreen() {
   const setPayment = (i: number, patch: Partial<PaymentEntry>) =>
     setPayments((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
 
+  /** Quick payment: the whole bill by one method. 'KHATA' means nothing paid now. */
+  const quick: 'CASH' | 'UPI' | 'KHATA' | 'SPLIT' | null = !preview
+    ? null
+    : payments.length === 0
+      ? cart.customerId
+        ? 'KHATA'
+        : null
+      : payments.length === 1 && payments[0]!.amount === preview.total
+        ? payments[0]!.method === 'CASH'
+          ? 'CASH'
+          : payments[0]!.method === 'UPI'
+            ? 'UPI'
+            : 'SPLIT'
+        : 'SPLIT';
+
   return (
     <Screen
       footer={
         <View>
           {blocker && !cartIsEmpty(cart) ? (
-            <Text style={{ color: colors.textMuted, marginBottom: 6, fontSize: 13 }}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.blocker}>
               {blocker}
             </Text>
           ) : null}
           <ErrorText message={error} />
-          <Button
-            title={total ? `Pay ${formatINR(total)}` : 'Pay'}
-            onPress={pay}
-            busy={busy}
-            disabled={!!blocker}
-          />
+          <View style={styles.payRow}>
+            <View>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.payLabel}>
+                {cart.lines.length} item{cart.lines.length === 1 ? '' : 's'} · Total
+              </Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.payTotal}>
+                {total ? formatINR(total) : '—'}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button
+                title={quick === 'KHATA' ? 'Save on khata' : 'Save bill'}
+                icon="checkmark"
+                onPress={pay}
+                busy={busy}
+                disabled={!!blocker}
+              />
+            </View>
+          </View>
         </View>
       }
     >
@@ -197,111 +241,185 @@ export default function NewBillScreen() {
           title: cart.heldBillId ? 'Held bill' : 'New bill',
           headerRight: () =>
             cartIsEmpty(cart) ? null : (
-              <Text
+              <Pressable
                 accessibilityRole="button"
                 onPress={confirmClear}
-                style={{ color: colors.danger, fontWeight: '600' }}
+                hitSlop={10}
+                style={{ paddingHorizontal: 4 }}
               >
-                Clear
-              </Text>
+                <Text
+                  maxFontSizeMultiplier={MAX_FONT_SCALE}
+                  style={{ color: colors.danger, fontWeight: '700' }}
+                >
+                  Clear
+                </Text>
+              </Pressable>
             ),
         }}
       />
 
-      <Button title="Add items" onPress={() => router.push('/sale/add-item')} />
+      {/* Customer */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={cart.customerId ? 'Change customer' : 'Choose customer'}
+        onPress={() => router.push('/sale/customer')}
+        style={({ pressed }) => [styles.customer, pressed && { opacity: 0.8 }]}
+      >
+        {cart.customerName ? (
+          <Avatar name={cart.customerName} size={42} />
+        ) : (
+          <IconTile icon="person-outline" tint="blue" size={42} />
+        )}
+        <View style={{ flex: 1 }}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.customerName}>
+            {cart.customerName ?? 'Walk-in customer'}
+          </Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.customerSub}>
+            {cart.customerId ? 'Tap to change' : 'Add a customer to give khata'}
+          </Text>
+        </View>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.link}>
+          {cart.customerId ? 'Change' : 'Choose'}
+        </Text>
+      </Pressable>
+
+      {/* Add items */}
+      <View style={styles.addRow}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/sale/add-item')}
+          style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.85 }]}
+        >
+          <Ionicons name="search" size={20} color={colors.textMuted} />
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.addText}>
+            Add item by name
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Scan barcodes"
+          onPress={() => router.push('/sale/scan')}
+          style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.85 }]}
+        >
+          <Ionicons name="barcode-outline" size={24} color={colors.text} />
+        </Pressable>
+      </View>
 
       {cartIsEmpty(cart) ? (
         <EmptyState
-          icon="cart-outline"
+          art={illustrations.emptyCart}
           title="The bill is empty"
-          note="Tap Add items to search, or scan a barcode."
+          note="Search an item by name, or scan its barcode."
         />
       ) : (
         <>
-          <SectionTitle>Items</SectionTitle>
-          {cart.lines.map((l, i) => {
-            const pl = preview?.lines[i];
-            return (
-              <Card key={l.key}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ flex: 1, fontSize: 16, fontWeight: '600', color: colors.text }}>
-                    {l.name}
-                  </Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remove ${l.name}`}
-                    onPress={() => remove(l.key)}
-                    hitSlop={10}
-                  >
-                    <Ionicons name="trash-outline" size={22} color={colors.danger} />
-                  </Pressable>
-                </View>
-                <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-                  <View style={{ flex: 1 }}>
-                    <Field
-                      label={`Quantity (${l.unitCode})`}
-                      value={l.quantity}
-                      onChangeText={(v) => update(l.key, { quantity: v })}
-                      keyboardType="decimal-pad"
-                    />
+          <View style={styles.lines}>
+            {cart.lines.map((l, i) => {
+              const pl = preview?.lines[i];
+              const open = openLine === l.key;
+              const canEditPrice = can('discount.apply') || can('price.override');
+              return (
+                <View key={l.key} style={[styles.line, i > 0 && styles.lineBorder]}>
+                  <View style={styles.lineTop}>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        maxFontSizeMultiplier={MAX_FONT_SCALE}
+                        style={styles.lineName}
+                        numberOfLines={2}
+                      >
+                        {l.name}
+                      </Text>
+                      <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.lineSub}>
+                        {pl ? `${formatINR(pl.unitPrice)} / ${l.unitCode}` : l.unitCode}
+                        {pl && isPositive(pl.discount ?? '0') ? ' · discount' : ''}
+                      </Text>
+                    </View>
+                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.lineAmt}>
+                      {pl ? formatINR(pl.net) : ''}
+                    </Text>
                   </View>
-                  {can('discount.apply') ? (
-                    <View style={{ flex: 1 }}>
-                      <Field
-                        label="Discount ₹"
-                        value={l.discount}
-                        onChangeText={(v) => update(l.key, { discount: v })}
+                  <View style={styles.lineControls}>
+                    <View style={styles.stepper}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`One less ${l.name}`}
+                        onPress={() => update(l.key, { quantity: stepQuantity(l.quantity, -1) })}
+                        style={styles.stepBtn}
+                      >
+                        <Ionicons name="remove" size={18} color={colors.primary} />
+                      </Pressable>
+                      <TextInput
+                        maxFontSizeMultiplier={MAX_FONT_SCALE}
+                        accessibilityLabel={`Quantity of ${l.name}`}
+                        value={l.quantity}
+                        onChangeText={(v) => update(l.key, { quantity: v })}
                         keyboardType="decimal-pad"
+                        style={styles.qty}
+                        selectTextOnFocus
                       />
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`One more ${l.name}`}
+                        onPress={() => update(l.key, { quantity: stepQuantity(l.quantity, 1) })}
+                        style={[styles.stepBtn, { backgroundColor: colors.primary }]}
+                      >
+                        <Ionicons name="add" size={18} color={colors.onPrimary} />
+                      </Pressable>
                     </View>
-                  ) : null}
-                  {can('price.override') ? (
-                    <View style={{ flex: 1 }}>
-                      <Field
-                        label={`Price/${l.unitCode} ₹`}
-                        value={l.unitPrice}
-                        onChangeText={(v) => update(l.key, { unitPrice: v })}
-                        keyboardType="decimal-pad"
-                        placeholder={pl?.unitPrice}
-                      />
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      {canEditPrice ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityState={{ expanded: open }}
+                          onPress={() => setOpenLine(open ? null : l.key)}
+                          style={styles.iconBtn}
+                        >
+                          <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.link}>
+                            {open ? 'Done' : 'More'}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${l.name}`}
+                        onPress={() => remove(l.key)}
+                        style={styles.iconBtn}
+                      >
+                        <Ionicons name="trash-outline" size={20} color={colors.danger} />
+                      </Pressable>
+                    </View>
+                  </View>
+                  {open ? (
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                      {can('discount.apply') ? (
+                        <View style={{ flex: 1 }}>
+                          <Field
+                            label="Discount ₹"
+                            value={l.discount}
+                            onChangeText={(v) => update(l.key, { discount: v })}
+                            keyboardType="decimal-pad"
+                          />
+                        </View>
+                      ) : null}
+                      {can('price.override') ? (
+                        <View style={{ flex: 1 }}>
+                          <Field
+                            label={`Price/${l.unitCode} ₹`}
+                            value={l.unitPrice}
+                            onChangeText={(v) => update(l.key, { unitPrice: v })}
+                            keyboardType="decimal-pad"
+                            placeholder={pl?.unitPrice}
+                          />
+                        </View>
+                      ) : null}
                     </View>
                   ) : null}
                 </View>
-                {pl ? (
-                  <Text style={{ textAlign: 'right', fontWeight: '700', color: colors.text }}>
-                    {trimZeros(pl.quantity)} × {formatINR(pl.unitPrice)} = {formatINR(pl.net)}
-                  </Text>
-                ) : null}
-              </Card>
-            );
-          })}
+              );
+            })}
 
-          <SectionTitle>Customer</SectionTitle>
-          <Card>
-            <KeyValue label="Bill for" value={cart.customerName ?? 'Walk-in customer'} bold />
-            <Button
-              title={cart.customerId ? 'Change customer' : 'Choose customer (for khata)'}
-              variant="secondary"
-              onPress={() => router.push('/sale/customer')}
-            />
-          </Card>
-
-          {can('discount.apply') ? (
-            <Field
-              label="Discount on the whole bill ₹ (optional)"
-              value={cart.billDiscount}
-              onChangeText={setBillDiscount}
-              keyboardType="decimal-pad"
-            />
-          ) : null}
-
-          <ErrorText message={cartProblem ?? paymentProblem ?? previewError} />
-
-          {preview ? (
-            <>
-              <SectionTitle>Total</SectionTitle>
-              <Card>
-                <KeyValue label="Items" value={formatINR(preview.subtotal)} />
+            {preview ? (
+              <View style={[styles.totals, styles.lineBorder]}>
                 {isPositive(preview.discountTotal) ? (
                   <KeyValue
                     label="Discount"
@@ -311,14 +429,19 @@ export default function NewBillScreen() {
                 ) : null}
                 {isPositive(preview.taxTotal) ? (
                   <>
-                    <KeyValue label="Taxable value" value={formatINR(preview.taxableTotal)} />
+                    <KeyValue
+                      label="Taxable value"
+                      value={formatINR(preview.taxableTotal)}
+                      tone="muted"
+                    />
                     {preview.interState ? (
-                      <KeyValue label="IGST" value={formatINR(preview.igstTotal)} />
+                      <KeyValue label="IGST" value={formatINR(preview.igstTotal)} tone="muted" />
                     ) : (
-                      <>
-                        <KeyValue label="CGST" value={formatINR(preview.cgstTotal)} />
-                        <KeyValue label="SGST" value={formatINR(preview.sgstTotal)} />
-                      </>
+                      <KeyValue
+                        label="CGST + SGST"
+                        value={`${formatINR(preview.cgstTotal)} + ${formatINR(preview.sgstTotal)}`}
+                        tone="muted"
+                      />
                     )}
                   </>
                 ) : null}
@@ -326,105 +449,172 @@ export default function NewBillScreen() {
                   <KeyValue label="Round off" value={formatINR(preview.roundOff)} tone="muted" />
                 ) : null}
                 <KeyValue label="Total to pay" value={formatINR(preview.total)} bold />
-              </Card>
+              </View>
+            ) : null}
+          </View>
 
-              {stockProblem ? (
-                <Card style={{ backgroundColor: colors.dangerSoft, borderColor: colors.danger }}>
-                  {preview.warnings.stock.map((w) => {
-                    const line = cart.lines.find((l) => l.productId === w.productId);
-                    return (
-                      <Text key={w.productId} style={{ color: colors.danger }}>
-                        {line?.name ?? 'An item'}: only {trimZeros(w.availableBaseQuantity)} in
-                        stock
-                      </Text>
-                    );
-                  })}
+          {can('discount.apply') ? (
+            showBillDiscount || cart.billDiscount ? (
+              <Field
+                label="Discount on the whole bill ₹"
+                value={cart.billDiscount}
+                onChangeText={setBillDiscount}
+                keyboardType="decimal-pad"
+              />
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setShowBillDiscount(true)}
+                style={{ minHeight: 44, justifyContent: 'center' }}
+              >
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.link}>
+                  + Discount on the whole bill
+                </Text>
+              </Pressable>
+            )
+          ) : null}
+
+          <ErrorText message={cartProblem ?? paymentProblem ?? previewError} />
+
+          {preview && stockProblem ? (
+            <Card tint="tomato">
+              {preview.warnings.stock.map((w) => {
+                const line = cart.lines.find((l) => l.productId === w.productId);
+                return (
+                  <Text
+                    maxFontSizeMultiplier={MAX_FONT_SCALE}
+                    key={w.productId}
+                    style={{ color: colors.danger, fontWeight: '600' }}
+                  >
+                    {line?.name ?? 'An item'}: only {trimZeros(w.availableBaseQuantity)} in stock
+                  </Text>
+                );
+              })}
+            </Card>
+          ) : null}
+
+          {preview ? (
+            <>
+              <SectionTitle>How is the customer paying?</SectionTitle>
+              <View style={styles.methods}>
+                <MethodTile
+                  art={icons.payCash}
+                  label="Cash"
+                  selected={quick === 'CASH'}
+                  onPress={() => setPayments([{ method: 'CASH', amount: preview.total }])}
+                />
+                <MethodTile
+                  art={icons.payUpi}
+                  label="UPI"
+                  selected={quick === 'UPI'}
+                  onPress={() => setPayments([{ method: 'UPI', amount: preview.total }])}
+                />
+                <MethodTile
+                  art={icons.payKhata}
+                  label="Khata"
+                  selected={quick === 'KHATA'}
+                  disabled={!cart.customerId}
+                  onPress={() =>
+                    cart.customerId ? setPayments([]) : router.push('/sale/customer')
+                  }
+                />
+              </View>
+              {!cart.customerId ? (
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.methodNote}>
+                  Choose a customer above to put the bill on khata.
+                </Text>
+              ) : null}
+
+              {quick === 'SPLIT' || splitOpen ? (
+                <>
+                  {payments.map((p, i) => (
+                    <Card key={i}>
+                      <Choice
+                        options={METHODS}
+                        value={p.method}
+                        onChange={(m) => setPayment(i, { method: m })}
+                      />
+                      <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <View style={{ flex: 1 }}>
+                          <Field
+                            label="Amount ₹"
+                            value={p.amount}
+                            onChangeText={(v) => setPayment(i, { amount: v })}
+                            keyboardType="decimal-pad"
+                          />
+                        </View>
+                        {p.method !== 'CASH' ? (
+                          <View style={{ flex: 1 }}>
+                            <Field
+                              label="Reference"
+                              value={p.referenceNo ?? ''}
+                              onChangeText={(v) => setPayment(i, { referenceNo: v })}
+                            />
+                          </View>
+                        ) : null}
+                      </View>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => setPayments((prev) => prev.filter((_, idx) => idx !== i))}
+                        style={{ minHeight: 40, justifyContent: 'center' }}
+                      >
+                        <Text
+                          maxFontSizeMultiplier={MAX_FONT_SCALE}
+                          style={{ color: colors.danger, fontWeight: '700' }}
+                        >
+                          Remove this payment
+                        </Text>
+                      </Pressable>
+                    </Card>
+                  ))}
+                  <Button
+                    icon="add"
+                    title={payments.length ? 'Add another payment' : 'Add a payment'}
+                    variant="secondary"
+                    onPress={() =>
+                      setPayments((prev) => [
+                        ...prev,
+                        {
+                          method: prev.length ? 'UPI' : 'CASH',
+                          amount: left && isPositive(left) ? left : '',
+                        },
+                      ])
+                    }
+                  />
+                </>
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setSplitOpen(true)}
+                  style={{ minHeight: 44, justifyContent: 'center' }}
+                >
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.link}>
+                    Split payment, card or bank transfer
+                  </Text>
+                </Pressable>
+              )}
+
+              {payments.length > 0 || onCredit ? (
+                <Card tint={onCredit ? 'mango' : 'green'} style={{ marginTop: 8 }}>
+                  <KeyValue label="Paid now" value={formatINR(preview.paid)} />
+                  <KeyValue
+                    label={onCredit ? 'Goes on khata' : 'Left to pay'}
+                    value={formatINR(left ?? '0')}
+                    tone={onCredit ? 'danger' : 'muted'}
+                    bold
+                  />
+                  {onCredit && cart.customerId ? (
+                    <Badge text={`Owed by ${cart.customerName}`} tone="warn" />
+                  ) : null}
                 </Card>
               ) : null}
 
-              <SectionTitle>Payment</SectionTitle>
-              <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                <Button
-                  title={`Cash ${formatINR(preview.total)}`}
-                  variant="secondary"
-                  onPress={() => setPayments([{ method: 'CASH', amount: preview.total }])}
-                />
-                <Button
-                  title={`UPI ${formatINR(preview.total)}`}
-                  variant="secondary"
-                  onPress={() => setPayments([{ method: 'UPI', amount: preview.total }])}
-                />
-                {cart.customerId ? (
-                  <Button
-                    title="All on khata"
-                    variant="secondary"
-                    onPress={() => setPayments([])}
-                  />
-                ) : null}
-              </View>
-              {payments.map((p, i) => (
-                <Card key={i}>
-                  <Choice
-                    options={METHODS}
-                    value={p.method}
-                    onChange={(m) => setPayment(i, { method: m })}
-                  />
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <View style={{ flex: 1 }}>
-                      <Field
-                        label="Amount ₹"
-                        value={p.amount}
-                        onChangeText={(v) => setPayment(i, { amount: v })}
-                        keyboardType="decimal-pad"
-                      />
-                    </View>
-                    {p.method !== 'CASH' ? (
-                      <View style={{ flex: 1 }}>
-                        <Field
-                          label="Reference"
-                          value={p.referenceNo ?? ''}
-                          onChangeText={(v) => setPayment(i, { referenceNo: v })}
-                        />
-                      </View>
-                    ) : null}
-                  </View>
-                  <Button
-                    title="Remove this payment"
-                    variant="secondary"
-                    onPress={() => setPayments((prev) => prev.filter((_, idx) => idx !== i))}
-                  />
-                </Card>
-              ))}
-              <Button
-                title={payments.length ? 'Add another payment (split)' : 'Add a payment'}
-                variant="secondary"
-                onPress={() =>
-                  setPayments((prev) => [
-                    ...prev,
-                    {
-                      method: prev.length ? 'UPI' : 'CASH',
-                      amount: left && isPositive(left) ? left : '',
-                    },
-                  ])
-                }
-              />
-
-              <Card>
-                <KeyValue label="Paid now" value={formatINR(preview.paid)} />
-                <KeyValue
-                  label={onCredit ? 'Goes on khata' : 'Left to pay'}
-                  value={formatINR(left ?? '0')}
-                  tone={onCredit ? 'danger' : 'muted'}
-                  bold
-                />
-                {onCredit && cart.customerId ? (
-                  <Badge text={`Owed by ${cart.customerName}`} tone="warn" />
-                ) : null}
-              </Card>
-
               {limitProblem && preview.warnings.creditLimit ? (
-                <Card style={{ backgroundColor: colors.warningSoft, borderColor: colors.warning }}>
-                  <Text style={{ color: colors.warning, fontWeight: '600' }}>
+                <Card tint="mango">
+                  <Text
+                    maxFontSizeMultiplier={MAX_FONT_SCALE}
+                    style={{ color: colors.warning, fontWeight: '700' }}
+                  >
                     Over the credit limit: limit{' '}
                     {formatINR(preview.warnings.creditLimit.creditLimit)}, already owes{' '}
                     {formatINR(preview.warnings.creditLimit.balance)}, can still take{' '}
@@ -441,7 +631,10 @@ export default function NewBillScreen() {
                       onPress={() => setAllowOverLimit((v) => !v)}
                     />
                   ) : (
-                    <Text style={{ color: colors.warning, marginTop: 6 }}>
+                    <Text
+                      maxFontSizeMultiplier={MAX_FONT_SCALE}
+                      style={{ color: colors.warning, marginTop: 6 }}
+                    >
                       Take more payment now, or ask a manager.
                     </Text>
                   )}
@@ -450,10 +643,166 @@ export default function NewBillScreen() {
             </>
           ) : null}
 
-          <View style={{ height: 12 }} />
-          <Button title="Hold this bill for later" variant="secondary" onPress={hold} busy={busy} />
+          <Button
+            icon="pause"
+            title="Hold this bill for later"
+            variant="secondary"
+            onPress={hold}
+            busy={busy}
+          />
         </>
       )}
     </Screen>
   );
 }
+
+function MethodTile({
+  art,
+  label,
+  selected,
+  disabled,
+  onPress,
+}: {
+  art: ImageSourcePropType;
+  label: string;
+  selected: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected, disabled: !!disabled }}
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.method,
+        selected && styles.methodOn,
+        disabled && { opacity: 0.55 },
+        pressed && { opacity: 0.8 },
+      ]}
+    >
+      <Image source={art} style={{ width: 40, height: 40 }} resizeMode="contain" />
+      <Text
+        maxFontSizeMultiplier={MAX_FONT_SCALE}
+        style={[styles.methodText, selected && { color: colors.primary }]}
+      >
+        {label}
+      </Text>
+      {selected ? (
+        <View style={styles.methodCheck}>
+          <Ionicons name="checkmark" size={14} color={colors.onPrimary} />
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  blocker: { color: colors.textMuted, marginBottom: 6, fontSize: 13 },
+  payRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  payLabel: { fontSize: 12, color: colors.textMuted },
+  payTotal: { fontSize: 24, fontWeight: '800', color: colors.text },
+  customer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: 12,
+    marginBottom: 12,
+    ...shadow.card,
+    shadowOpacity: 0.04,
+  },
+  customerName: { fontSize: 15, fontWeight: '700', color: colors.text },
+  customerSub: { fontSize: 13, color: colors.textMuted, marginTop: 1 },
+  link: { fontSize: 14, fontWeight: '700', color: colors.primary },
+  addRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  addBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 52,
+    paddingHorizontal: 14,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  addText: { fontSize: 16, color: colors.textMuted },
+  scanBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lines: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+    ...shadow.card,
+  },
+  line: { paddingVertical: 12 },
+  lineBorder: { borderTopWidth: 1, borderTopColor: '#EEF3EF' },
+  lineTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  lineName: { fontSize: 15, fontWeight: '700', color: colors.text },
+  lineSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  lineAmt: { fontSize: 16, fontWeight: '800', color: colors.text },
+  lineControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stepBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qty: {
+    minWidth: 56,
+    height: 40,
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 6,
+  },
+  iconBtn: { minWidth: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  totals: { paddingVertical: 10 },
+  methods: { flexDirection: 'row', gap: 10 },
+  method: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  methodOn: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  methodText: { fontSize: 14, fontWeight: '700', color: colors.text },
+  methodCheck: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  methodNote: { fontSize: 12, color: colors.textMuted, marginTop: 8 },
+});

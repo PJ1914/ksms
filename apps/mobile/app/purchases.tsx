@@ -6,15 +6,16 @@ import type { PurchaseRow } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
 import {
   Badge,
-  Choice,
   EmptyState,
   ErrorText,
   FloatingButton,
   ListRow,
   Loading,
+  pageStyle,
+  Segmented,
 } from '@/components/ui';
+import { icons, illustrations } from '@/theme/art';
 import { usePagedList } from '@/hooks/useLoad';
-import { colors } from '@/theme/colors';
 import { formatINR, isPositive } from '@/utils/currency';
 import { formatDate, purchaseTone, words } from '@/utils/format';
 
@@ -32,11 +33,9 @@ export default function PurchasesScreen() {
     `/purchases${query({ unpaid: filter === 'unpaid', status: filter === 'waiting' ? 'CONFIRMED' : undefined })}`,
   );
   return (
-    <View
-      style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 12 }}
-    >
+    <View style={pageStyle}>
       <Stack.Screen options={{ title: 'Purchases' }} />
-      <Choice options={FILTERS} value={filter} onChange={setFilter} />
+      <Segmented options={FILTERS} value={filter} onChange={setFilter} />
       {list.loading ? (
         <Loading />
       ) : (
@@ -53,13 +52,15 @@ export default function PurchasesScreen() {
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
             ListEmptyComponent={
               <EmptyState
-                icon="cart-outline"
+                art={illustrations.emptyPurchases}
                 title="No purchases here"
                 note={filter === 'all' ? 'Tap + to record goods you bought.' : undefined}
               />
             }
             renderItem={({ item }) => (
               <ListRow
+                art={icons.repPurchases}
+                tint="mango"
                 title={`${item.supplier.name}`}
                 subtitle={`${item.purchaseNumber} · ${formatDate(item.purchaseDate)}`}
                 right={<Badge text={words(item.status)} tone={purchaseTone(item.status)} />}

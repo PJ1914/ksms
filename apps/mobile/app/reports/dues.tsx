@@ -3,14 +3,15 @@ import { getPage, query } from '@/api/client';
 import type { DuesMeta, DuesRow } from '@/api/types';
 import {
   Card,
-  Choice,
   EmptyState,
   ErrorText,
   KeyValue,
   ListRow,
   Loading,
   Screen,
+  Segmented,
 } from '@/components/ui';
+import { illustrations } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { formatINR } from '@/utils/currency';
 import { formatDate } from '@/utils/format';
@@ -30,7 +31,7 @@ export default function DuesScreen() {
   const s = data?.meta.summary;
   return (
     <Screen onRefresh={() => void reload(true)} refreshing={refreshing}>
-      <Choice options={PARTIES} value={party} onChange={setParty} />
+      <Segmented options={PARTIES} value={party} onChange={setParty} />
       <ErrorText message={error} />
       {loading ? (
         <Loading />
@@ -67,7 +68,7 @@ export default function DuesScreen() {
             </Card>
           ) : null}
           {data?.data.length === 0 ? (
-            <EmptyState icon="checkmark-circle-outline" title="Nothing outstanding" />
+            <EmptyState art={illustrations.duesCleared} title="Nothing outstanding" />
           ) : (
             data?.data.map((r) => (
               <ListRow

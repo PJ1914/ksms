@@ -89,6 +89,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   note: { fontSize: 16, color: colors.text, textAlign: 'center', marginBottom: 16 },
-  footer: { padding: 16, backgroundColor: colors.surface },
+  footer: {
+    padding: 20,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
   hint: { fontSize: 14, color: colors.textMuted, textAlign: 'center', marginBottom: 10 },
 });

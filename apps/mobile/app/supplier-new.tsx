@@ -2,7 +2,8 @@ import { router, Stack } from 'expo-router';
 import { useState } from 'react';
 import { buildSupplierPayload, validateSupplierForm } from '@ksms/validation';
 import { postData } from '@/api/client';
-import { Button, ErrorText, Field, Screen } from '@/components/ui';
+import { Button, ErrorText, Field, FormHeader, Screen } from '@/components/ui';
+import { icons } from '@/theme/art';
 import { friendlyError } from '@/utils/errors';
 
 export default function NewSupplierScreen() {
@@ -31,6 +32,11 @@ export default function NewSupplierScreen() {
   return (
     <Screen footer={<Button title="Save supplier" onPress={save} busy={busy} />}>
       <Stack.Screen options={{ title: 'Add supplier' }} />
+      <FormHeader
+        art={icons.addSupplier}
+        title="New supplier"
+        note="Who you buy from. You can record purchases and payments after."
+      />
       <Field
         label="Supplier name"
         value={name}

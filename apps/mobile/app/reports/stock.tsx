@@ -7,12 +7,14 @@ import {
   Choice,
   EmptyState,
   ErrorText,
+  Hero,
   KeyValue,
   ListRow,
   Loading,
   Screen,
   SectionTitle,
 } from '@/components/ui';
+import { icons, illustrations } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { formatINR } from '@/utils/currency';
 
@@ -45,6 +47,13 @@ export default function StockReportScreen() {
         <Loading />
       ) : s ? (
         <>
+          <Hero
+            label="Stock value (at cost)"
+            value={formatINR(s.stockValue)}
+            tint="blue"
+            art={icons.repStock}
+            sub={`${s.productsInStock} products in stock`}
+          />
           <Card>
             <KeyValue label="Stock value (at cost)" value={formatINR(s.stockValue)} bold />
             <KeyValue label="Products in stock" value={String(s.productsInStock)} />
@@ -91,7 +100,7 @@ export default function StockReportScreen() {
         <Loading />
       ) : movers.data?.items.length === 0 ? (
         <EmptyState
-          icon="cube-outline"
+          art={illustrations.emptyProducts}
           title={kind === 'fast' ? 'Nothing sold yet' : 'No stock on the shelf'}
         />
       ) : (

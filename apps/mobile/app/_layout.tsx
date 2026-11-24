@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { illustrations } from '@/theme/art';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import { CartProvider } from '@/cart/CartProvider';
 import { API_URL } from '@/config';
@@ -22,10 +23,12 @@ export default function RootLayout() {
 /** Every screen outside the five tabs shows a header with a back arrow; screens set their own title. */
 const SCREEN_OPTIONS = {
   headerShown: true,
-  headerTintColor: colors.primary,
-  headerTitleStyle: { color: colors.text, fontWeight: '600' as const },
-  headerStyle: { backgroundColor: colors.surface },
+  headerTintColor: colors.text,
+  headerTitleStyle: { color: colors.text, fontWeight: '800' as const, fontSize: 18 },
+  headerStyle: { backgroundColor: colors.background },
+  headerShadowVisible: false,
   headerBackTitle: 'Back',
+  contentStyle: { backgroundColor: colors.background },
 };
 
 function RootStack() {
@@ -41,6 +44,11 @@ function RootStack() {
   if (status === 'offline') {
     return (
       <View style={styles.center}>
+        <Image
+          source={illustrations.offline}
+          style={{ width: 200, height: 200 }}
+          resizeMode="contain"
+        />
         <Text style={styles.title}>Cannot reach the server</Text>
         <Text style={styles.note}>
           Check the API is running on the PC and this phone is on the same Wi-Fi.
@@ -186,14 +194,21 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: colors.background,
   },
-  title: { fontSize: 20, fontWeight: '600', color: colors.text },
-  note: { marginTop: 8, fontSize: 14, color: colors.textMuted, textAlign: 'center' },
-  button: {
-    marginTop: 20,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+  title: { fontSize: 22, fontWeight: '800', color: colors.text, marginTop: 8 },
+  note: {
+    marginTop: 8,
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 20,
   },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
+  button: {
+    marginTop: 24,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 32,
+    minHeight: 54,
+    justifyContent: 'center',
+    borderRadius: 14,
+  },
+  buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });

@@ -7,12 +7,14 @@ import {
   Choice,
   EmptyState,
   ErrorText,
+  Hero,
   KeyValue,
   ListRow,
   Loading,
   Screen,
   SectionTitle,
 } from '@/components/ui';
+import { icons, illustrations } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { formatINR } from '@/utils/currency';
 import { words } from '@/utils/format';
@@ -59,30 +61,38 @@ export default function SalesReportScreen() {
       {summary.loading ? (
         <Loading />
       ) : t ? (
-        <Card>
-          <KeyValue label="Net sales (before GST)" value={formatINR(t.netSales)} bold />
-          <KeyValue label="Bills" value={String(t.bills)} />
-          <KeyValue label="Billed to customers (with GST)" value={formatINR(t.billValue)} />
-          <KeyValue label="Average bill" value={formatINR(t.averageBill)} />
-          <KeyValue label="Discounts given" value={formatINR(t.discount)} />
-          <KeyValue label="GST charged" value={formatINR(t.gst)} />
-          <KeyValue label="Left on credit" value={formatINR(t.creditGiven)} />
-          <KeyValue
-            label={`Returns (${t.returnsCount})`}
-            value={formatINR(t.returnsValue)}
-            tone="danger"
+        <>
+          <Hero
+            label="Net sales (before GST)"
+            value={formatINR(t.netSales)}
+            art={icons.repSales}
+            sub={`${t.bills} bills · average ${formatINR(t.averageBill)}`}
           />
-          <Note>
-            Net sales = what was sold before GST, less discounts and goods returned. It is not the
-            money received.
-          </Note>
-        </Card>
+          <Card>
+            <KeyValue label="Net sales (before GST)" value={formatINR(t.netSales)} bold />
+            <KeyValue label="Bills" value={String(t.bills)} />
+            <KeyValue label="Billed to customers (with GST)" value={formatINR(t.billValue)} />
+            <KeyValue label="Average bill" value={formatINR(t.averageBill)} />
+            <KeyValue label="Discounts given" value={formatINR(t.discount)} />
+            <KeyValue label="GST charged" value={formatINR(t.gst)} />
+            <KeyValue label="Left on credit" value={formatINR(t.creditGiven)} />
+            <KeyValue
+              label={`Returns (${t.returnsCount})`}
+              value={formatINR(t.returnsValue)}
+              tone="danger"
+            />
+            <Note>
+              Net sales = what was sold before GST, less discounts and goods returned. It is not the
+              money received.
+            </Note>
+          </Card>
+        </>
       ) : null}
 
       <Choice label="Show" options={VIEWS} value={view} onChange={setView} />
       {view === 'days' ? (
         summary.data && summary.data.series.length === 0 ? (
-          <EmptyState icon="receipt-outline" title="No sales in this period" />
+          <EmptyState art={illustrations.emptyBills} title="No sales in this period" />
         ) : (
           summary.data?.series
             .slice()
@@ -104,7 +114,7 @@ export default function SalesReportScreen() {
           <ErrorText message={breakdown.error} />
           <SectionTitle>{`By ${words(view)}`}</SectionTitle>
           {breakdown.data?.data.length === 0 ? (
-            <EmptyState icon="receipt-outline" title="Nothing sold in this period" />
+            <EmptyState art={illustrations.emptyBills} title="Nothing sold in this period" />
           ) : (
             breakdown.data?.data.map((r, i) => (
               <ListRow

@@ -1,7 +1,17 @@
 import { getData, query } from '@/api/client';
 import type { CashFlowReport } from '@/api/types';
-import { Note, PeriodChoice, usePeriod } from '@/components/ReportParts';
-import { Card, ErrorText, KeyValue, Loading, Screen, SectionTitle } from '@/components/ui';
+import { PeriodChoice, usePeriod } from '@/components/ReportParts';
+import {
+  Card,
+  ErrorText,
+  Hero,
+  KeyValue,
+  Loading,
+  Screen,
+  SectionTitle,
+  Stats,
+} from '@/components/ui';
+import { icons } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { formatINR, isNegative } from '@/utils/currency';
 import { words } from '@/utils/format';
@@ -20,17 +30,20 @@ export default function CashFlowScreen() {
         <Loading />
       ) : data ? (
         <>
-          <Card>
-            <KeyValue label="Money in" value={formatINR(data.totals.moneyIn)} tone="success" />
-            <KeyValue label="Money out" value={formatINR(data.totals.moneyOut)} tone="danger" />
-            <KeyValue
-              label="Net movement"
-              value={formatINR(data.totals.net)}
-              bold
-              tone={isNegative(data.totals.net) ? 'danger' : undefined}
-            />
-            <Note>Money that moved in the cash book, whatever it was for. This is not profit.</Note>
-          </Card>
+          <Hero
+            label="Net cash movement"
+            value={formatINR(data.totals.net)}
+            valueTone={isNegative(data.totals.net) ? 'danger' : 'success'}
+            tint={isNegative(data.totals.net) ? 'tomato' : 'blue'}
+            art={icons.repCash}
+            sub="Money that moved in the cash book, whatever it was for. This is not profit."
+          />
+          <Stats
+            items={[
+              { label: 'Money in', value: formatINR(data.totals.moneyIn), tint: 'green' },
+              { label: 'Money out', value: formatINR(data.totals.moneyOut), tint: 'tomato' },
+            ]}
+          />
           <SectionTitle>By payment mode</SectionTitle>
           <Card>
             {data.byMethod.map((m) => (

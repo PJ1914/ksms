@@ -7,7 +7,8 @@ import type { HeldBill } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
 import { useCart } from '@/cart/CartProvider';
 import { ListFooter } from '@/components/ListFooter';
-import { Badge, Button, EmptyState, ErrorText, ListRow, Loading } from '@/components/ui';
+import { Badge, Button, EmptyState, ErrorText, ListRow, Loading, pageStyle } from '@/components/ui';
+import { icons, illustrations } from '@/theme/art';
 import { usePagedList } from '@/hooks/useLoad';
 import {
   listLocalHeldBills,
@@ -133,9 +134,7 @@ export default function HeldBillsScreen() {
 
   if (list.loading && localBills.length === 0) return <Loading />;
   return (
-    <View
-      style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 12 }}
-    >
+    <View style={pageStyle}>
       <Stack.Screen options={{ title: 'Held bills' }} />
       {list.fromCache ? (
         <Text style={{ color: colors.warning, fontSize: 13, marginBottom: 8 }}>
@@ -172,7 +171,7 @@ export default function HeldBillsScreen() {
         }
         ListEmptyComponent={
           <EmptyState
-            icon="pause-circle-outline"
+            art={illustrations.emptyHeld}
             title="No held bills"
             note="On a bill, tap “Hold this bill for later” to park it."
           />
@@ -190,6 +189,8 @@ export default function HeldBillsScreen() {
           return (
             <View>
               <ListRow
+                art={icons.hold}
+                tint="mango"
                 title={item.label ?? 'Held bill'}
                 subtitle={`${c?.lines.length ?? 0} items · ${formatDateTime(item.createdAt)}`}
                 right={badge}

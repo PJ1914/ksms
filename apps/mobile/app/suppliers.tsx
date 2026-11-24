@@ -5,17 +5,19 @@ import { query } from '@/api/client';
 import type { SupplierRow } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
 import {
+  Avatar,
   Badge,
-  Choice,
   EmptyState,
   ErrorText,
   FloatingButton,
   ListRow,
   Loading,
+  pageStyle,
   SearchBox,
+  Segmented,
 } from '@/components/ui';
+import { illustrations } from '@/theme/art';
 import { usePagedList } from '@/hooks/useLoad';
-import { colors } from '@/theme/colors';
 import { absMoney, formatINR, isNegative, isPositive } from '@/utils/currency';
 
 type Filter = 'all' | 'owed';
@@ -32,16 +34,14 @@ export default function SuppliersScreen() {
     `/suppliers${query({ q: search.trim(), owed: filter === 'owed', sort: filter === 'owed' ? 'balance' : 'name', order: filter === 'owed' ? 'desc' : 'asc' })}`,
   );
   return (
-    <View
-      style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 12 }}
-    >
+    <View style={pageStyle}>
       <Stack.Screen options={{ title: 'Suppliers' }} />
       <SearchBox
         value={search}
         onChangeText={setSearch}
         placeholder="Search name or mobile number"
       />
-      <Choice options={FILTERS} value={filter} onChange={setFilter} />
+      <Segmented options={FILTERS} value={filter} onChange={setFilter} />
       {list.loading ? (
         <Loading />
       ) : (
@@ -58,7 +58,7 @@ export default function SuppliersScreen() {
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
             ListEmptyComponent={
               <EmptyState
-                icon="business-outline"
+                art={illustrations.emptySuppliers}
                 title={
                   filter === 'owed'
                     ? 'You owe no supplier anything'
@@ -71,6 +71,7 @@ export default function SuppliersScreen() {
             }
             renderItem={({ item }) => (
               <ListRow
+                leading={<Avatar name={item.name} />}
                 title={item.name}
                 subtitle={item.contactPerson ?? item.phone ?? undefined}
                 right={

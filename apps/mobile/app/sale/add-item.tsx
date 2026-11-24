@@ -10,15 +10,18 @@ import { ListFooter } from '@/components/ListFooter';
 import {
   Button,
   Card,
+  Choice,
   EmptyState,
   ErrorText,
   Field,
+  IconTile,
   ListRow,
   Loading,
   Money,
+  pageStyle,
   SearchBox,
-  Choice,
 } from '@/components/ui';
+import { categoryArt, illustrations } from '@/theme/art';
 import { useLoad, usePagedList } from '@/hooks/useLoad';
 import { isNetworkFailure } from '@/sync/backoff';
 import {
@@ -58,9 +61,7 @@ export default function AddItemScreen() {
   }, [db]);
 
   return (
-    <View
-      style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 12 }}
-    >
+    <View style={pageStyle}>
       <Stack.Screen
         options={{
           title: 'Add items',
@@ -148,13 +149,14 @@ function Results({
         }
         ListEmptyComponent={
           <EmptyState
-            icon="search-outline"
+            art={illustrations.emptySearch}
             title="No products match"
             note="Check the spelling, or scan the barcode."
           />
         }
         renderItem={({ item }) => (
           <ListRow
+            leading={<IconTile art={categoryArt(item.name)} tint="mango" size={48} />}
             title={item.name}
             subtitle={item.sku}
             right={

@@ -4,7 +4,17 @@ import { Alert, Text, View } from 'react-native';
 import { parseHeldCart } from '@ksms/validation';
 import { useSync } from '@/sync/SyncProvider';
 import type { OutboxRow } from '@/sync/types';
-import { Badge, Button, Card, EmptyState, KeyValue, Screen, SectionTitle } from '@/components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  FormHeader,
+  KeyValue,
+  Screen,
+  SectionTitle,
+} from '@/components/ui';
+import { illustrations } from '@/theme/art';
 import { colors } from '@/theme/colors';
 import { formatDateTime } from '@/utils/format';
 
@@ -63,6 +73,11 @@ export default function SyncScreen() {
   return (
     <Screen refreshing={syncState === 'syncing'} onRefresh={() => void syncNow()}>
       <Stack.Screen options={{ title: 'Sync & offline cache' }} />
+      <FormHeader
+        art={illustrations.sync}
+        title="Sync & backup"
+        note="Bills and data are saved on this phone and uploaded when online."
+      />
 
       <Card>
         <View
@@ -107,7 +122,7 @@ export default function SyncScreen() {
       <SectionTitle>{`Failed & conflicted uploads (${failedItems.length})`}</SectionTitle>
       {failedItems.length === 0 ? (
         <EmptyState
-          icon="checkmark-circle-outline"
+          art={illustrations.sync}
           title="No failed items"
           note="All held bills either uploaded cleanly or are waiting for the next automatic retry."
         />

@@ -8,15 +8,17 @@ import {
   Badge,
   Button,
   Card,
-  Choice,
   EmptyState,
   ErrorText,
   Field,
   KeyValue,
   ListRow,
   Loading,
+  pageStyle,
   SearchBox,
+  Segmented,
 } from '@/components/ui';
+import { icons, illustrations } from '@/theme/art';
 import { usePagedList } from '@/hooks/useLoad';
 import { useSubmit } from '@/hooks/useSubmit';
 import { colors } from '@/theme/colors';
@@ -47,7 +49,10 @@ export default function CollectionsScreen() {
 
   if (!can('collection.read')) {
     return (
-      <EmptyState icon="lock-closed-outline" title="Collections are not available for your role" />
+      <EmptyState
+        art={illustrations.roleLocked}
+        title="Collections are not available for your role"
+      />
     );
   }
 
@@ -66,16 +71,14 @@ export default function CollectionsScreen() {
   }
 
   return (
-    <View
-      style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 12 }}
-    >
+    <View style={pageStyle}>
       <Stack.Screen options={{ title: 'Collections' }} />
       <SearchBox
         value={search}
         onChangeText={setSearch}
         placeholder="Search receipt no, customer, or reference"
       />
-      <Choice options={FILTERS} value={status} onChange={setStatus} />
+      <Segmented options={FILTERS} value={status} onChange={setStatus} />
 
       {selected ? (
         <Card>
@@ -137,10 +140,14 @@ export default function CollectionsScreen() {
             onEndReached={() => void list.loadMore()}
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
             ListEmptyComponent={
-              <EmptyState icon="cash-outline" title="No collections recorded yet" />
+              <EmptyState
+                art={illustrations.emptyCollections}
+                title="No collections recorded yet"
+              />
             }
             renderItem={({ item }) => (
               <ListRow
+                art={icons.payReceived}
                 title={`${item.customer?.name ?? 'Customer'} · ${item.receiptNumber ?? ''}`}
                 subtitle={`${item.method}${item.agent ? ` · ${item.agent.name}` : ''} · ${formatDateTime(item.paidAt)}`}
                 right={

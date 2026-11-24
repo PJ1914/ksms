@@ -11,6 +11,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
+import { illustrations } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { formatINR } from '@/utils/currency';
 
@@ -47,7 +48,10 @@ export default function CollectionsReportScreen() {
           ) : null}
           <SectionTitle>By agent</SectionTitle>
           {data?.data.length === 0 ? (
-            <EmptyState icon="cash-outline" title="No collections in this period" />
+            <EmptyState
+              art={illustrations.emptyCollections}
+              title="No collections in this period"
+            />
           ) : (
             data?.data.map((a) => (
               <ListRow

@@ -4,7 +4,17 @@ import { FlatList, Pressable, Text, View } from 'react-native';
 import { postData, query } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { ListFooter } from '@/components/ListFooter';
-import { Badge, Button, Card, Choice, EmptyState, ErrorText, Loading } from '@/components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ErrorText,
+  Loading,
+  pageStyle,
+  Segmented,
+} from '@/components/ui';
+import { illustrations } from '@/theme/art';
 import { usePagedList } from '@/hooks/useLoad';
 import { colors } from '@/theme/colors';
 import { friendlyError } from '@/utils/errors';
@@ -75,11 +85,9 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <View
-      style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 12 }}
-    >
+    <View style={pageStyle}>
       <Stack.Screen options={{ title: 'Notifications' }} />
-      <Choice options={FILTERS} value={filter} onChange={setFilter} />
+      <Segmented options={FILTERS} value={filter} onChange={setFilter} />
 
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
         {can('stock.read') ? (
@@ -126,7 +134,7 @@ export default function NotificationsScreen() {
           }
           ListEmptyComponent={
             <EmptyState
-              icon="notifications-outline"
+              art={illustrations.emptyNotifications}
               title={filter === 'unread' ? 'No unread alerts' : 'No notifications yet'}
               note="Low stock and expiring batch alerts for this branch appear here."
             />

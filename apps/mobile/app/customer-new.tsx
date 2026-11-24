@@ -2,7 +2,8 @@ import { router, Stack } from 'expo-router';
 import { useState } from 'react';
 import { buildCustomerPayload, validateCustomerForm } from '@ksms/validation';
 import { postData } from '@/api/client';
-import { Button, ErrorText, Field, Screen } from '@/components/ui';
+import { Button, ErrorText, Field, FormHeader, Screen } from '@/components/ui';
+import { icons } from '@/theme/art';
 import { friendlyError } from '@/utils/errors';
 
 export default function NewCustomerScreen() {
@@ -31,6 +32,11 @@ export default function NewCustomerScreen() {
   return (
     <Screen footer={<Button title="Save customer" onPress={save} busy={busy} />}>
       <Stack.Screen options={{ title: 'Add customer' }} />
+      <FormHeader
+        art={icons.addCustomer}
+        title="New customer"
+        note="Only the name is needed. Add a mobile number to send reminders."
+      />
       <Field
         label="Name"
         value={name}

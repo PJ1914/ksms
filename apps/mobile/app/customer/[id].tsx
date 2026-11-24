@@ -1,23 +1,29 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Text } from 'react-native';
+import { Linking, Text, View } from 'react-native';
+import Decimal from 'decimal.js';
 import { moneyString } from '@ksms/validation';
 import { getData, patchData, postData } from '@/api/client';
 import type { CustomerRow, LedgerEntry } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
 import { ListFooter } from '@/components/ListFooter';
 import {
+  Avatar,
   Badge,
   Button,
   Card,
   EmptyState,
+  EntryRow,
   ErrorText,
   Field,
-  KeyValue,
+  Group,
+  Hero,
   Loading,
+  QuickActions,
   Screen,
   SectionTitle,
 } from '@/components/ui';
+import { illustrations } from '@/theme/art';
 import { useLoad, usePagedList } from '@/hooks/useLoad';
 import { colors } from '@/theme/colors';
 import { absMoney, formatINR, isNegative, isPositive } from '@/utils/currency';
@@ -83,38 +89,85 @@ export default function CustomerScreen() {
   return (
     <Screen onRefresh={() => void reload(true)} refreshing={refreshing}>
       <Stack.Screen options={{ title: c.name }} />
-      <Card>
-        <Text
-          style={{ fontSize: 26, fontWeight: '800', color: owes ? colors.danger : colors.text }}
-        >
-          {formatINR(isNegative(c.balance) ? absMoney(c.balance) : c.balance)}
-        </Text>
-        <Text style={{ color: colors.textMuted, marginBottom: 8 }}>
-          {owes ? 'owes you' : isNegative(c.balance) ? 'advance with you' : 'nothing owed'}
-        </Text>
-        <KeyValue label="Mobile" value={c.phone ?? 'Not given'} />
-        <KeyValue
-          label="Credit limit"
-          value={c.creditLimit ? formatINR(c.creditLimit) : 'No limit'}
-        />
-        {!c.isActive ? <Badge text="Switched off: no new khata" tone="warn" /> : null}
-      </Card>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+        <Avatar name={c.name} size={56} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text }}>{c.name}</Text>
+          <Text style={{ fontSize: 14, color: colors.textMuted }}>
+            {c.phone ?? 'No mobile number'}
+          </Text>
+        </View>
+        {!c.isActive ? <Badge text="Switched off" tone="warn" /> : null}
+      </View>
+
+      <Hero
+        label={owes ? 'Balance due' : isNegative(c.balance) ? 'Advance with you' : 'All clear'}
+        value={formatINR(isNegative(c.balance) ? absMoney(c.balance) : c.balance)}
+        valueTone={owes ? 'danger' : 'success'}
+        tint={owes ? 'tomato' : 'green'}
+        art={owes ? illustrations.ledger : illustrations.duesCleared}
+        sub={c.creditLimit ? `Credit limit ${formatINR(c.creditLimit)}` : 'No credit limit set'}
+      >
+        {owes && c.creditLimit && isPositive(c.creditLimit) ? (
+          <LimitBar used={c.balance} limit={c.creditLimit} />
+        ) : null}
+      </Hero>
+
+      <QuickActions
+        actions={[
+          {
+            label: 'Got payment',
+            icon: 'cash-outline',
+            primary: true,
+            hidden: !can('collection.create'),
+            onPress: () => router.push({ pathname: '/customer/pay', params: { customerId: id } }),
+          },
+          {
+            label: 'Khata entry',
+            icon: 'create-outline',
+            hidden: !can('customer.manage'),
+            onPress: () =>
+              router.push({ pathname: '/customer/adjust', params: { customerId: id } }),
+          },
+          {
+            label: 'Call',
+            icon: 'call-outline',
+            hidden: !c.phone,
+            onPress: () => void Linking.openURL(`tel:${c.phone}`),
+          },
+          {
+            label: 'Message',
+            icon: 'chatbubble-outline',
+            hidden: !c.phone || !owes,
+            onPress: () =>
+              void Linking.openURL(
+                `sms:${c.phone}?body=${encodeURIComponent(`Namaste ${c.name}, your khata balance is ${formatINR(c.balance)}. Thank you.`)}`,
+              ),
+          },
+        ]}
+      />
 
       {can('customer.manage') ? (
         limit === null ? (
-          <>
-            <Button
-              title="Change credit limit"
-              variant="secondary"
-              onPress={() => setLimit(c.creditLimit ?? '')}
-            />
-            <Button
-              title={c.isActive ? 'Switch this customer off' : 'Switch this customer on'}
-              variant="secondary"
-              onPress={toggleActive}
-              busy={busy}
-            />
-          </>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Button
+                title="Credit limit"
+                icon="speedometer-outline"
+                variant="secondary"
+                onPress={() => setLimit(c.creditLimit ?? '')}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button
+                title={c.isActive ? 'Switch off' : 'Switch on'}
+                icon={c.isActive ? 'pause-circle-outline' : 'play-circle-outline'}
+                variant="secondary"
+                onPress={toggleActive}
+                busy={busy}
+              />
+            </View>
+          </View>
         ) : (
           <Card>
             <Field
@@ -131,47 +184,59 @@ export default function CustomerScreen() {
       ) : null}
       {limit === null ? <ErrorText message={problem} /> : null}
 
-      {can('collection.create') ? (
-        <Button
-          title="Record payment"
-          onPress={() => router.push({ pathname: '/customer/pay', params: { customerId: id } })}
-        />
-      ) : null}
-      {can('customer.manage') ? (
-        <Button
-          title="Add khata entry"
-          variant="secondary"
-          onPress={() => router.push({ pathname: '/customer/adjust', params: { customerId: id } })}
-        />
-      ) : null}
-
       {canLedger ? (
         <>
           <SectionTitle>Khata statement</SectionTitle>
-          <Card>
-            {ledger.loading ? (
-              <Loading />
-            ) : ledger.items.length === 0 ? (
-              <EmptyState icon="book-outline" title="No khata entries yet" />
-            ) : (
-              ledger.items.map((e) => (
-                <KeyValue
+          {ledger.loading ? (
+            <Loading />
+          ) : ledger.items.length === 0 ? (
+            <EmptyState art={illustrations.emptyKhata} title="No khata entries yet" />
+          ) : (
+            <Group>
+              {ledger.items.map((e) => (
+                <EntryRow
                   key={e.id}
-                  label={`${e.description ? `${e.description} · ` : ''}${words(e.type)} · ${formatDateTime(e.occurredAt)}`}
-                  value={`${isPositive(e.amount) ? '+' : '−'}${formatINR(absMoney(e.amount))}`}
-                  tone={isPositive(e.amount) ? 'danger' : 'success'}
+                  title={e.description || words(e.type)}
+                  subtitle={`${e.description ? `${words(e.type)} · ` : ''}${formatDateTime(e.occurredAt)}`}
+                  amount={`${isPositive(e.amount) ? '+' : '−'}${formatINR(absMoney(e.amount))}`}
+                  direction={isPositive(e.amount) ? 'out' : 'in'}
                 />
-              ))
-            )}
-            <ListFooter
-              shown={ledger.items.length}
-              total={ledger.meta?.total}
-              loadingMore={ledger.loadingMore}
-              onLoadMore={() => void ledger.loadMore()}
-            />
-          </Card>
+              ))}
+            </Group>
+          )}
+          <ListFooter
+            shown={ledger.items.length}
+            total={ledger.meta?.total}
+            loadingMore={ledger.loadingMore}
+            onLoadMore={() => void ledger.loadMore()}
+          />
         </>
       ) : null}
     </Screen>
+  );
+}
+
+/** How much of the credit limit is used (decimal maths; the bar is capped at 100%). */
+function LimitBar({ used, limit }: { used: string; limit: string }) {
+  const pct = Decimal.min(new Decimal(used).div(limit).times(100), 100)
+    .toDecimalPlaces(0)
+    .toNumber();
+  const over = pct >= 100;
+  return (
+    <View>
+      <View style={{ height: 8, borderRadius: 99, backgroundColor: '#FFFFFF', overflow: 'hidden' }}>
+        <View
+          style={{
+            width: `${pct}%`,
+            height: '100%',
+            borderRadius: 99,
+            backgroundColor: over ? colors.danger : '#E4572E',
+          }}
+        />
+      </View>
+      <Text style={{ fontSize: 12, color: colors.danger, marginTop: 6, fontWeight: '600' }}>
+        {over ? 'Over the credit limit' : `${pct}% of the credit limit used`}
+      </Text>
+    </View>
   );
 }

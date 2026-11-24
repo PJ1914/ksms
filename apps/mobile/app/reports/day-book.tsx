@@ -12,6 +12,7 @@ import {
   Loading,
   Screen,
 } from '@/components/ui';
+import { illustrations } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { formatINR } from '@/utils/currency';
 import { formatDateTime, words } from '@/utils/format';
@@ -54,7 +55,7 @@ export default function DayBookScreen() {
       {loading ? (
         <Loading />
       ) : data?.data.length === 0 ? (
-        <EmptyState icon="book-outline" title="Nothing happened on this day" />
+        <EmptyState art={illustrations.reports} title="Nothing happened on this day" />
       ) : (
         <>
           <Card>

@@ -1,4 +1,12 @@
-import { absMoney, formatINR, isMoreThan, isNegative, isPositive, isZero } from './currency';
+import {
+  absMoney,
+  formatINR,
+  isMoreThan,
+  isNegative,
+  isPositive,
+  isZero,
+  stepQuantity,
+} from './currency';
 
 describe('formatINR', () => {
   it.each([
@@ -26,5 +34,22 @@ describe('decimal string helpers', () => {
     expect(isMoreThan('0.3', '0.1')).toBe(true);
     expect(isMoreThan('0.30000000000000004', '0.3')).toBe(true);
     expect(isMoreThan('100.10', '100.1')).toBe(false);
+  });
+});
+
+describe('stepQuantity', () => {
+  it('adds and removes whole units on decimal strings', () => {
+    expect(stepQuantity('2', 1)).toBe('3');
+    expect(stepQuantity('2.5', 1)).toBe('3.5');
+    expect(stepQuantity('2.5', -1)).toBe('1.5');
+  });
+  it('never goes to zero or below', () => {
+    expect(stepQuantity('1', -1)).toBe('1');
+    expect(stepQuantity('0.5', -1)).toBe('0.5');
+  });
+  it('treats blank or invalid input as empty', () => {
+    expect(stepQuantity('', 1)).toBe('1');
+    expect(stepQuantity('abc', 1)).toBe('1');
+    expect(stepQuantity('', -1)).toBe('1');
   });
 });

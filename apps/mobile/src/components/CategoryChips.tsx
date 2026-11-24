@@ -1,4 +1,6 @@
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { MAX_FONT_SCALE } from '@/components/ui';
+import { categoryArt } from '@/theme/art';
 import { colors } from '@/theme/colors';
 
 export interface CategoryChipItem {
@@ -7,7 +9,7 @@ export interface CategoryChipItem {
   productCount?: number;
 }
 
-/** Horizontal scrollable category filter chips (`All` + each shop category). */
+/** Horizontal scrollable category filter chips (`All` + each shop category, with its picture). */
 export function CategoryChips({
   categories,
   value,
@@ -26,11 +28,12 @@ export function CategoryChips({
       style={styles.bar}
       contentContainerStyle={styles.content}
     >
-      <Chip label="All categories" selected={value === null} onPress={() => onChange(null)} />
+      <Chip label="All" selected={value === null} onPress={() => onChange(null)} />
       {categories.map((c) => (
         <Chip
           key={c.id}
-          label={c.productCount !== undefined ? `${c.name} (${c.productCount})` : c.name}
+          label={c.name}
+          art
           selected={value === c.id}
           onPress={() => onChange(value === c.id ? null : c.id)}
         />
@@ -41,10 +44,12 @@ export function CategoryChips({
 
 function Chip({
   label,
+  art,
   selected,
   onPress,
 }: {
   label: string;
+  art?: boolean;
   selected: boolean;
   onPress: () => void;
 }) {
@@ -55,26 +60,33 @@ function Chip({
       onPress={onPress}
       style={[styles.chip, selected && styles.chipSelected]}
     >
-      <Text style={[styles.text, selected && styles.textSelected]}>{label}</Text>
+      {art ? <Image source={categoryArt(label)} style={styles.art} resizeMode="contain" /> : null}
+      <Text
+        maxFontSizeMultiplier={MAX_FONT_SCALE}
+        style={[styles.text, selected && styles.textSelected]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  bar: { flexGrow: 0, marginBottom: 10 },
-  content: { gap: 8, paddingVertical: 2 },
+  bar: { flexGrow: 0, marginBottom: 12 },
+  content: { gap: 8, paddingVertical: 2, paddingRight: 8 },
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    minHeight: 40,
     borderRadius: 999,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  chipSelected: {
-    borderColor: colors.primary,
-    backgroundColor: '#E6F1EC',
-  },
-  text: { fontSize: 13, color: colors.textMuted, fontWeight: '600' },
-  textSelected: { color: colors.primary },
+  chipSelected: { borderColor: colors.text, backgroundColor: colors.text },
+  art: { width: 22, height: 22 },
+  text: { fontSize: 14, color: colors.text, fontWeight: '600' },
+  textSelected: { color: colors.surface },
 });

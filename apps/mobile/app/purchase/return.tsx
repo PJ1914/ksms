@@ -5,7 +5,17 @@ import { Text } from 'react-native';
 import { type ReturnLineForm, buildPurchaseReturnPayload, validateReturn } from '@ksms/validation';
 import { getData } from '@/api/client';
 import type { PurchaseDetail, StockDetail } from '@/api/types';
-import { Button, Card, Choice, ErrorText, Field, Loading, Screen } from '@/components/ui';
+import {
+  Button,
+  Card,
+  Choice,
+  ErrorText,
+  Field,
+  FormHeader,
+  Loading,
+  Screen,
+} from '@/components/ui';
+import { icons } from '@/theme/art';
 import { useLoad } from '@/hooks/useLoad';
 import { useSubmit } from '@/hooks/useSubmit';
 import { colors } from '@/theme/colors';
@@ -58,6 +68,11 @@ export default function PurchaseReturnScreen() {
   return (
     <Screen footer={<Button title="Send these goods back" onPress={submit} busy={busy} />}>
       <Stack.Screen options={{ title: `Return from ${p.purchaseNumber}` }} />
+      <FormHeader
+        art={icons.returns}
+        title="Send goods back"
+        note="Pick what goes back to the supplier. Stock goes down when you save."
+      />
       {p.items.map((i) => {
         const max = returnableIn(i);
         if (new Decimal(max).lte(0)) return null;

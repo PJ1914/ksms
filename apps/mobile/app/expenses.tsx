@@ -17,7 +17,9 @@ import {
   ListRow,
   Loading,
   SearchBox,
+  pageStyle,
 } from '@/components/ui';
+import { icons, illustrations } from '@/theme/art';
 import { useLoad, usePagedList } from '@/hooks/useLoad';
 import { useSubmit } from '@/hooks/useSubmit';
 import { colors } from '@/theme/colors';
@@ -56,7 +58,7 @@ export default function ExpensesScreen() {
 
   if (!can('expense.read')) {
     return (
-      <EmptyState icon="lock-closed-outline" title="Expenses are not available for your role" />
+      <EmptyState art={illustrations.roleLocked} title="Expenses are not available for your role" />
     );
   }
 
@@ -113,9 +115,7 @@ export default function ExpensesScreen() {
   }
 
   return (
-    <View
-      style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 12 }}
-    >
+    <View style={pageStyle}>
       <Stack.Screen options={{ title: 'Expenses' }} />
       <SearchBox
         value={search}
@@ -241,9 +241,13 @@ export default function ExpensesScreen() {
             onEndReachedThreshold={0.5}
             onEndReached={() => void list.loadMore()}
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-            ListEmptyComponent={<EmptyState icon="receipt-outline" title="No expenses recorded" />}
+            ListEmptyComponent={
+              <EmptyState art={illustrations.emptyExpenses} title="No expenses recorded" />
+            }
             renderItem={({ item }) => (
               <ListRow
+                art={icons.expenses}
+                tint="tomato"
                 title={`${item.categoryName}${item.description ? ` · ${item.description}` : ''}`}
                 subtitle={`${item.expenseDate} · ${item.method}`}
                 right={
