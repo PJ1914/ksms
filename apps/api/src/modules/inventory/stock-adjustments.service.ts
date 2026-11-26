@@ -40,7 +40,7 @@ export class StockAdjustmentsService {
   async openingStock(t: TenantContext, key: string, dto: OpeningStockDto, meta: Meta) {
     const ctx = this.ctx(t);
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /inventory/opening-stock',
       { branchId: ctx.branchId, ...dto },
@@ -120,7 +120,7 @@ export class StockAdjustmentsService {
     if (dto.allowNegative) await this.assertNegativeOverrideAllowed(t, dto);
 
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /inventory/adjustments',
       { branchId: ctx.branchId, ...dto },

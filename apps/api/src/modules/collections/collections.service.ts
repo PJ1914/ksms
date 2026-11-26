@@ -51,7 +51,7 @@ export class CollectionsService {
   ) {
     const branchId = this.branch(t);
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       routeKey,
       { branchId, customerId, ...dto },
@@ -292,7 +292,7 @@ export class CollectionsService {
   ) {
     const branchId = this.branch(t);
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /collections/:id/reverse',
       { branchId, paymentId, ...dto },
@@ -397,6 +397,7 @@ export class CollectionsService {
           balanceAfter: posted.balanceAfter.toFixed(2),
         };
       },
+      { successStatus: 200 }, // answered with HTTP 200 (FIXES F15)
     );
   }
 

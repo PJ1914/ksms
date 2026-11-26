@@ -129,6 +129,8 @@ model AuditLog {
 model IdempotencyRecord {
   id             String            @id @default(uuid(7)) @db.Uuid
   organizationId String            @map("organization_id") @db.Uuid
+  /// Who sent the first request (FIXES F15); null for keys stored before this column existed.
+  userId         String?           @map("user_id") @db.Uuid
   key            String
   endpoint       String
   requestHash    String            @map("request_hash") // detects same key with different payload

@@ -244,7 +244,7 @@ export class CustomersService {
     }
     const branchId = t.branchId;
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /customers/:id/ledger/adjust',
       { branchId, customerId, ...dto },

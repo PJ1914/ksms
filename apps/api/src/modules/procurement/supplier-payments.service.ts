@@ -56,7 +56,7 @@ export class SupplierPaymentsService {
   ) {
     const branchId = this.branch(t);
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /suppliers/:id/payments',
       { branchId, supplierId, ...dto },
@@ -175,7 +175,7 @@ export class SupplierPaymentsService {
     // Like every other money action, a payment can be undone only from the branch it was made in.
     const scopeBranchId = this.branch(t);
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /supplier-payments/:id/reverse',
       { branchId: scopeBranchId, paymentId, ...dto },

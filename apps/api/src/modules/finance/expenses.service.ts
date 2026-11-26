@@ -193,7 +193,7 @@ export class ExpensesService {
   async create(t: TenantContext, key: string, dto: CreateExpenseDto, meta: Meta) {
     const branchId = this.branch(t);
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /expenses',
       { branchId, ...dto },
@@ -285,7 +285,7 @@ export class ExpensesService {
   async cancel(t: TenantContext, id: string, key: string, dto: CancelExpenseDto, meta: Meta) {
     const branchId = this.branch(t);
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /expenses/:id/cancel',
       { branchId, id, ...dto },
@@ -345,6 +345,7 @@ export class ExpensesService {
           cancelledAt: cancelledAt.toISOString(),
         };
       },
+      { successStatus: 200 }, // answered with HTTP 200 (FIXES F15)
     );
   }
 

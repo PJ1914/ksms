@@ -101,7 +101,7 @@ export class CashbookQueryService {
   async recordAdjustment(t: TenantContext, key: string, dto: CashbookAdjustmentDto, meta: Meta) {
     const branchId = this.branch(t);
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /cashbook/entries',
       { branchId, ...dto },

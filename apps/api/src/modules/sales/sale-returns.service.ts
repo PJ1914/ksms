@@ -54,7 +54,7 @@ export class SaleReturnsService {
   async create(t: TenantContext, key: string, dto: CreateSaleReturnDto, meta: Meta) {
     const branchId = branchOf(t);
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /sale-returns',
       { branchId, ...dto },

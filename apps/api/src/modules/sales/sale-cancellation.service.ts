@@ -46,7 +46,7 @@ export class SaleCancellationService {
     const perms = await this.rolePerms.get(t.roleId);
 
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /sales/:id/cancel',
       { branchId, saleId, ...dto },
@@ -202,6 +202,7 @@ export class SaleCancellationService {
         });
         return this.sales.view(tx, t.organizationId, saleId);
       },
+      { successStatus: 200 }, // answered with HTTP 200 (FIXES F15)
     );
   }
 }

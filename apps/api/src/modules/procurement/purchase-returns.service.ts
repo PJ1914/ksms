@@ -45,7 +45,7 @@ export class PurchaseReturnsService {
   async create(t: TenantContext, key: string, dto: CreatePurchaseReturnDto, meta: Meta) {
     const branchId = this.branch(t);
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /purchase-returns',
       { branchId, ...dto },

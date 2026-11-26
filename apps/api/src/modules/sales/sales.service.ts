@@ -70,7 +70,7 @@ export class SalesService {
     const perms = await this.rolePerms.get(t.roleId);
 
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /sales',
       { branchId, ...dto },

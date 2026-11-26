@@ -71,7 +71,7 @@ export class PurchasesService {
   async create(t: TenantContext, key: string, dto: CreatePurchaseDto, meta: Meta) {
     const branchId = this.branch(t);
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /purchases',
       { branchId, ...dto },
@@ -334,7 +334,7 @@ export class PurchasesService {
   async receive(t: TenantContext, key: string, id: string, dto: ReceivePurchaseDto, meta: Meta) {
     const branchId = this.branch(t);
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       key,
       'POST /purchases/:id/receive',
       { branchId, id, ...dto },

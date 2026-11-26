@@ -58,32 +58,55 @@ export class IdempotencyService {
   }
 
   async execute<T>(
-    organizationId: string,
+    /** The shop, and (FIXES F15) the user: a key is only ever replayed to the user who first sent it. */
+    scope: string | { organizationId: string; userId: string },
     key: string,
     endpoint: string,
     payload: unknown,
     work: (tx: Prisma.TransactionClient) => Promise<T>,
-    /** Longest the whole request may take, in milliseconds (default: the standard transaction limit). */
-    options: { timeoutMs?: number } = {},
+    options: {
+      /** Longest the whole request may take, in milliseconds (default: the standard transaction limit). */
+      timeoutMs?: number;
+      /** HTTP status of a successful first response, stored with it (default 201). */
+      successStatus?: number;
+    } = {},
   ): Promise<IdempotentResult<T>> {
+    const organizationId = typeof scope === 'string' ? scope : scope.organizationId;
+    const userId = typeof scope === 'string' ? null : scope.userId;
+    // The user is part of the hash, so another user's identical request with the same key is refused.
     const requestHash = createHash('sha256')
-      .update(`${endpoint}\n${stableStringify(payload)}`)
+      .update(
+        userId === null
+          ? `${endpoint}\n${stableStringify(payload)}`
+          : `${endpoint}\nuser:${userId}\n${stableStringify(payload)}`,
+      )
       .digest('hex');
 
     return this.prisma.$transaction(
       async (tx) => {
         const claimed = await tx.$queryRaw<{ id: string }[]>`
-        INSERT INTO idempotency_records (id, organization_id, key, endpoint, request_hash, status, expires_at)
-        VALUES (gen_random_uuid(), ${organizationId}::uuid, ${key}, ${endpoint}, ${requestHash}, 'IN_PROGRESS', now() + interval '24 hours')
+        INSERT INTO idempotency_records (id, organization_id, user_id, key, endpoint, request_hash, status, expires_at)
+        VALUES (gen_random_uuid(), ${organizationId}::uuid, ${userId}::uuid, ${key}, ${endpoint}, ${requestHash}, 'IN_PROGRESS', now() + interval '24 hours')
         ON CONFLICT (organization_id, key) DO NOTHING
         RETURNING id`;
 
         if (claimed.length === 0) {
           const existing = await tx.idempotencyRecord.findUnique({
             where: { organizationId_key: { organizationId, key } },
-            select: { endpoint: true, requestHash: true, status: true, responseBody: true },
+            select: {
+              endpoint: true,
+              requestHash: true,
+              status: true,
+              responseBody: true,
+              userId: true,
+            },
           });
-          if (!existing || existing.endpoint !== endpoint || existing.requestHash !== requestHash) {
+          if (
+            !existing ||
+            existing.endpoint !== endpoint ||
+            existing.requestHash !== requestHash ||
+            (existing.userId !== null && existing.userId !== userId)
+          ) {
             throw new AppException(
               'IDEMPOTENCY_KEY_REUSED',
               'This Idempotency-Key was already used for a different request',
@@ -113,7 +136,7 @@ export class IdempotencyService {
           where: { id: claimed[0]!.id },
           data: {
             status: 'COMPLETED',
-            responseStatus: 201,
+            responseStatus: options.successStatus ?? 201,
             responseBody: JSON.parse(body) as Prisma.InputJsonValue,
             completedAt: new Date(),
           },

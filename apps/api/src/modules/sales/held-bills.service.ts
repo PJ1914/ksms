@@ -30,7 +30,7 @@ export class HeldBillsService {
   async createIdempotent(t: TenantContext, idempotencyKey: string, dto: HeldBillDto) {
     const branchId = branchOf(t);
     return this.idempotency.execute(
-      t.organizationId,
+      { organizationId: t.organizationId, userId: t.userId },
       idempotencyKey,
       'POST /held-bills',
       { branchId, ...dto },
