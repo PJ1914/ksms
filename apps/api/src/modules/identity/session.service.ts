@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { AccessTokenService } from '../../common/auth/access-token.service';
+import { absoluteExpiry, slidingExpiry } from '../../common/auth/session-lifetime';
 import { AppException } from '../../common/errors/app.exception';
 import { ENV, type Env } from '../../config/config.module';
 import type { Db } from '../../database/db.types';
@@ -26,8 +27,9 @@ export class SessionService {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  private expiry(): Date {
-    return new Date(Date.now() + this.env.REFRESH_TTL_DAYS * 86_400_000);
+  /** Sliding expiry for a session started at `createdAt` (a new session: now). */
+  private expiry(createdAt = new Date()): Date {
+    return slidingExpiry(createdAt, this.env.REFRESH_TTL_DAYS, this.env.SESSION_ABSOLUTE_TTL_DAYS);
   }
 
   async create(db: Db, userId: string, organizationId: string, client: ClientInfo) {
@@ -129,6 +131,7 @@ export class SessionService {
         organizationId: true,
         revokedAt: true,
         expiresAt: true,
+        createdAt: true,
         user: { select: { isActive: true, tokenVersion: true } },
       },
     });
@@ -144,6 +147,13 @@ export class SessionService {
     if (session.revokedAt || session.expiresAt.getTime() <= Date.now() || !session.user.isActive) {
       throw new AppException('UNAUTHORIZED', 'Session is no longer valid', 401);
     }
+    // Absolute lifetime: a token that keeps being refreshed (e.g. a stolen one) still dies.
+    if (
+      absoluteExpiry(session.createdAt, this.env.SESSION_ABSOLUTE_TTL_DAYS).getTime() <= Date.now()
+    ) {
+      await this.revoke(session.id, 'absolute_expiry');
+      throw new AppException('UNAUTHORIZED', 'Session is no longer valid', 401);
+    }
 
     const refreshToken = newRefreshToken();
     // Conditional update: only one concurrent request can rotate a given token.
@@ -152,7 +162,7 @@ export class SessionService {
       data: {
         refreshTokenHash: sha256(refreshToken),
         previousTokenHash: hashValue,
-        expiresAt: this.expiry(),
+        expiresAt: this.expiry(session.createdAt),
         lastUsedAt: new Date(),
       },
     });

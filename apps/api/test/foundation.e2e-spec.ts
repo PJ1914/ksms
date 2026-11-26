@@ -11,6 +11,7 @@ const okSession = () => ({
   organizationId: ids.org,
   revokedAt: null,
   expiresAt: new Date(Date.now() + 3_600_000),
+  createdAt: new Date(Date.now() - 3_600_000),
   user: { isActive: true, tokenVersion: 0 },
 });
 const okMember = (branchIds: string[] = [ids.branch]) => ({
@@ -188,6 +189,14 @@ describe('API foundation (e2e, database mocked)', () => {
           prisma.userSession.findUnique.mockResolvedValue({
             ...okSession(),
             expiresAt: new Date(Date.now() - 1000),
+          }),
+      ],
+      [
+        'session older than the absolute lifetime (FIXES F5)',
+        () =>
+          prisma.userSession.findUnique.mockResolvedValue({
+            ...okSession(),
+            createdAt: new Date(Date.now() - 91 * 86_400_000),
           }),
       ],
       [

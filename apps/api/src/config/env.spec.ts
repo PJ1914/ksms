@@ -36,6 +36,13 @@ describe('parseEnv', () => {
     );
   });
 
+  it('caps sessions at 90 days and refuses a cap below the refresh TTL (FIXES F5)', () => {
+    expect(parseEnv(valid).SESSION_ABSOLUTE_TTL_DAYS).toBe(90);
+    expect(() =>
+      parseEnv({ ...valid, REFRESH_TTL_DAYS: '30', SESSION_ABSOLUTE_TTL_DAYS: '10' }),
+    ).toThrow(/SESSION_ABSOLUTE_TTL_DAYS/);
+  });
+
   it('fails when DATABASE_URL is missing', () => {
     expect(() => parseEnv({ JWT_ACCESS_SECRET: valid.JWT_ACCESS_SECRET })).toThrow(/DATABASE_URL/);
   });

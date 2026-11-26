@@ -333,6 +333,42 @@ suite('Identity, RBAC and tenant isolation (real database)', () => {
       expect(s.revokedReason).toBe('refresh_token_reuse');
     });
 
+    it('a session past its absolute lifetime cannot refresh, even if used yesterday (F5)', async () => {
+      const o = await registerOwner();
+      const s = await ctx.prisma.userSession.findFirstOrThrow({ where: { userId: o.userId } });
+      // Started 91 days ago, refreshed yesterday: the sliding expiry alone would keep it alive.
+      await ctx.prisma.userSession.update({
+        where: { id: s.id },
+        data: {
+          createdAt: new Date(Date.now() - 91 * 86_400_000),
+          lastUsedAt: new Date(Date.now() - 86_400_000),
+          expiresAt: new Date(Date.now() + 29 * 86_400_000),
+        },
+      });
+      await api(o.accessToken).get('/auth/me').expect(401);
+      await ctx
+        .http()
+        .post('/api/v1/auth/refresh')
+        .send({ refreshToken: o.refreshToken })
+        .expect(401);
+      const after = await ctx.prisma.userSession.findUniqueOrThrow({ where: { id: s.id } });
+      expect(after.revokedReason).toBe('absolute_expiry');
+    });
+
+    it('the sliding expiry never passes the absolute cap (F5)', async () => {
+      const o = await registerOwner();
+      const s = await ctx.prisma.userSession.findFirstOrThrow({ where: { userId: o.userId } });
+      const createdAt = new Date(Date.now() - 80 * 86_400_000);
+      await ctx.prisma.userSession.update({ where: { id: s.id }, data: { createdAt } });
+      await ctx
+        .http()
+        .post('/api/v1/auth/refresh')
+        .send({ refreshToken: o.refreshToken })
+        .expect(200);
+      const after = await ctx.prisma.userSession.findUniqueOrThrow({ where: { id: s.id } });
+      expect(after.expiresAt.getTime()).toBe(createdAt.getTime() + 90 * 86_400_000);
+    });
+
     it('lets only ONE of two concurrent refreshes with the same token succeed', async () => {
       const o = await registerOwner();
       const results = await Promise.all([

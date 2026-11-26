@@ -1,11 +1,13 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { ENV, type Env } from '../../config/config.module';
 import { PrismaService } from '../../database/prisma.service';
 import { AppException } from '../errors/app.exception';
 import { findMember } from '../tenant/member-lookup';
 import { AccessTokenService } from './access-token.service';
 import type { AppRequest } from './auth.types';
 import { IS_PUBLIC } from './decorators';
+import { absoluteExpiry } from './session-lifetime';
 
 /**
  * Global guard #1: authenticates the caller.
@@ -18,6 +20,7 @@ export class AuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly tokens: AccessTokenService,
     private readonly prisma: PrismaService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -44,14 +47,17 @@ export class AuthGuard implements CanActivate {
         organizationId: true,
         revokedAt: true,
         expiresAt: true,
+        createdAt: true,
         user: { select: { isActive: true, tokenVersion: true } },
       },
     });
 
+    const now = Date.now();
     const valid =
       session !== null &&
       session.revokedAt === null &&
-      session.expiresAt.getTime() > Date.now() &&
+      session.expiresAt.getTime() > now &&
+      absoluteExpiry(session.createdAt, this.env.SESSION_ABSOLUTE_TTL_DAYS).getTime() > now &&
       session.userId === claims.sub &&
       session.organizationId === claims.org &&
       session.user.isActive &&
