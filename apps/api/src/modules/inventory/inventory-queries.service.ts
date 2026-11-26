@@ -5,6 +5,7 @@ import { AppException } from '../../common/errors/app.exception';
 import { Paginated } from '../../common/pagination/paginated';
 import { timestampRange } from '../../common/utils/dates';
 import { PrismaService } from '../../database/prisma.service';
+import { descendantCategoryIds } from '../catalog/category-tree';
 import { Prisma } from '../../generated/prisma/client';
 import { isExpired, stockValue, todayInIndia } from './domain/stock';
 import type { BalancesQuery, ExpiringQuery, MovementsQuery } from './inventory.dto';
@@ -29,23 +30,8 @@ export class InventoryQueriesService {
     return t.branchId;
   }
 
-  private async categoryTreeIds(organizationId: string, rootId: string): Promise<string[]> {
-    const all = await this.prisma.productCategory.findMany({
-      where: { organizationId, deletedAt: null },
-      select: { id: true, parentId: true },
-    });
-    const ids = new Set<string>([rootId]);
-    let grew = true;
-    while (grew) {
-      grew = false;
-      for (const c of all) {
-        if (c.parentId && ids.has(c.parentId) && !ids.has(c.id)) {
-          ids.add(c.id);
-          grew = true;
-        }
-      }
-    }
-    return [...ids];
+  private categoryTreeIds(organizationId: string, rootId: string): Promise<string[]> {
+    return descendantCategoryIds(this.prisma, organizationId, rootId);
   }
 
   /** Stock per product (products without any stock appear with 0). Cost fields only when includeCost. */

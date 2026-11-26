@@ -3,6 +3,7 @@ import { AppException } from '../../common/errors/app.exception';
 import type { Db } from '../../database/db.types';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { descendantCategoryIds } from './category-tree';
 import type { CreateCategoryDto, UpdateCategoryDto } from './catalog.dto';
 import { inferCategory } from './domain/auto-category';
 
@@ -31,23 +32,8 @@ export class CategoriesService {
   }
 
   /** Returns `rootId` plus every non-deleted descendant category ID in the organization. */
-  async descendantIds(db: Db, organizationId: string, rootId: string): Promise<string[]> {
-    const all = await db.productCategory.findMany({
-      where: { organizationId, deletedAt: null },
-      select: { id: true, parentId: true },
-    });
-    const result = new Set<string>([rootId]);
-    let grew = true;
-    while (grew) {
-      grew = false;
-      for (const row of all) {
-        if (row.parentId && result.has(row.parentId) && !result.has(row.id)) {
-          result.add(row.id);
-          grew = true;
-        }
-      }
-    }
-    return [...result];
+  descendantIds(db: Db, organizationId: string, rootId: string): Promise<string[]> {
+    return descendantCategoryIds(db, organizationId, rootId);
   }
 
   /** Finds an existing category by name (case-insensitive) or creates it dynamically in the same transaction. */
