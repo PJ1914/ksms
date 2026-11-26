@@ -261,6 +261,22 @@ suite('Sales and POS (real database)', () => {
       expect((await stockOf(r.id)).quantityOnHand).toBe('98.000');
     });
 
+    it('a 20-line bill with repeated products prices every line exactly as before (F8)', async () => {
+      const r = await rice();
+      const soap = await piece('35');
+      const items = Array.from({ length: 20 }, (_, i) =>
+        i % 2 === 0 ? item(r.id, U.KG, '1') : item(soap.id, U.PCS, '1'),
+      );
+      const s = await sold({ items, payments: [cash('870')] });
+      expect(s).toMatchObject({ subtotal: '870.00', total: '870.00', roundOff: '0.00' });
+      expect(s.items.map((i: { lineTotal: string }) => i.lineTotal)).toEqual(
+        Array.from({ length: 20 }, (_, i) => (i % 2 === 0 ? '52.00' : '35.00')),
+      );
+      expect((await stockOf(r.id)).quantityOnHand).toBe('90.000');
+      expect((await stockOf(soap.id)).quantityOnHand).toBe('40.000');
+      await booksAgree();
+    });
+
     it('rounds the bill to the nearest rupee and records the round-off', async () => {
       const biscuit = await piece('10.49');
       const s = await sold({ items: [item(biscuit.id, U.PCS, '1')], payments: [cash('10')] });

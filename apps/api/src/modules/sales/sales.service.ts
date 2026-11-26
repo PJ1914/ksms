@@ -13,7 +13,7 @@ import type { Db } from '../../database/db.types';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '../../generated/prisma/client';
 import { AuditService } from '../audit/audit.service';
-import { ProductsService } from '../catalog/products.service';
+import { ProductsService, requireForSale } from '../catalog/products.service';
 import { CustomerLedgerService } from '../customers/customer-ledger.service';
 import { CashbookService } from '../finance/cashbook.service';
 import { InventoryService, type StockContext } from '../inventory/inventory.service';
@@ -552,12 +552,16 @@ export class SalesService {
     // ---- price every line from the catalogue (or an allowed typed price)
     const overrides: { line: number; catalogue: string; typed: string }[] = [];
     const lines = [];
+    // One query for every product on the bill, then each line is priced from memory (FIXES F8).
+    const products = await this.catalog.loadForSale(
+      db,
+      t.organizationId,
+      dto.items.map((i) => i.productId),
+    );
     for (const [index, item] of dto.items.entries()) {
       const quantity = new Decimal(item.quantity);
-      const price = await this.catalog.priceForSale(
-        db,
-        t.organizationId,
-        item.productId,
+      const price = this.catalog.priceLine(
+        requireForSale(products, item.productId),
         item.unitId,
         quantity,
       );

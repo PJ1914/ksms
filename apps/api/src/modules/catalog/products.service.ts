@@ -51,6 +51,23 @@ const FULL_INCLUDE = {
 } satisfies Prisma.ProductInclude;
 type ProductFull = Prisma.ProductGetPayload<{ include: typeof FULL_INCLUDE }>;
 
+/** What pricing a sale line needs: units and prices only (no category, no barcodes). */
+const SALE_INCLUDE = {
+  conversions: {
+    include: { unit: { select: { id: true, code: true, name: true, isPackaging: true } } },
+    orderBy: { createdAt: 'asc' },
+  },
+  prices: { orderBy: { createdAt: 'asc' } },
+} satisfies Prisma.ProductInclude;
+export type SaleProduct = Prisma.ProductGetPayload<{ include: typeof SALE_INCLUDE }>;
+
+/** The loaded product for a line, or the same 404 a single lookup gives. */
+export function requireForSale(products: Map<string, SaleProduct>, id: string): SaleProduct {
+  const p = products.get(id);
+  if (!p) throw new AppException('NOT_FOUND', 'Product not found', 404);
+  return p;
+}
+
 const SKU_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const dec = (v: string | number | Prisma.Decimal): Decimal => new Decimal(v.toString());
 const fx = (v: Prisma.Decimal | null | undefined, scale: number): string | null =>
@@ -147,7 +164,9 @@ export class ProductsService {
               { name: { contains: q.q, mode: 'insensitive' } },
               { localName: { contains: q.q, mode: 'insensitive' } },
               { sku: { contains: q.q, mode: 'insensitive' } },
-              { barcodes: { some: { barcode: { startsWith: q.q } } } },
+              // Barcode matches are fetched first as plain ids: a sub-query inside this OR stops
+              // PostgreSQL from using the trigram indexes on the other three (FIXES F10).
+              { id: { in: await this.idsByBarcodePrefix(organizationId, q.q) } },
             ],
           }
         : {}),
@@ -249,7 +268,29 @@ export class ProductsService {
     unitId: string,
     quantity: Decimal,
   ) {
-    const p = await this.findFull(db, organizationId, productId);
+    const products = await this.loadForSale(db, organizationId, [productId]);
+    return this.priceLine(requireForSale(products, productId), unitId, quantity);
+  }
+
+  /**
+   * Loads every product a bill needs in ONE query (FIXES F8), with only what pricing uses. Products that
+   * are missing, deleted or belong to another shop are simply absent from the map; `requireForSale`
+   * turns that into the usual 404 at the line where it is used.
+   */
+  async loadForSale(
+    db: Db,
+    organizationId: string,
+    productIds: string[],
+  ): Promise<Map<string, SaleProduct>> {
+    const rows = await db.product.findMany({
+      where: { id: { in: [...new Set(productIds)] }, organizationId, deletedAt: null },
+      include: SALE_INCLUDE,
+    });
+    return new Map(rows.map((p) => [p.id, p]));
+  }
+
+  /** Prices one sale line from an already loaded product (pure; same rules and errors as before). */
+  priceLine(p: SaleProduct, unitId: string, quantity: Decimal) {
     if (p.status !== 'ACTIVE') {
       throw new DomainError('PRODUCT_NOT_ACTIVE', `${p.name} is not active and cannot be sold`);
     }
@@ -720,6 +761,16 @@ export class ProductsService {
   }
 
   // ---------- internals ----------
+
+  /** Products of this shop with a barcode starting with `prefix` (at most 200; barcodes are near-unique). */
+  private async idsByBarcodePrefix(organizationId: string, prefix: string): Promise<string[]> {
+    const rows = await this.prisma.productBarcode.findMany({
+      where: { organizationId, barcode: { startsWith: prefix } },
+      select: { productId: true },
+      take: 200,
+    });
+    return [...new Set(rows.map((r) => r.productId))];
+  }
 
   /** Always scoped to the organization; another shop's product is simply "not found". */
   private async findFull(db: Db, organizationId: string, id: string): Promise<ProductFull> {
