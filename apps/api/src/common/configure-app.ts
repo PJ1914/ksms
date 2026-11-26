@@ -18,14 +18,25 @@ function flatten(errors: ValidationError[], parent = ''): { field: string; messa
   });
 }
 
+/**
+ * Behind Render's proxy (FIXES F17): trust exactly the hops that append to X-Forwarded-For, so `req.ip`
+ * (rate limiting, audit logs) is the real client. Trusting more would let a client spoof its IP by
+ * sending its own X-Forwarded-For. Outside production nothing is trusted.
+ */
+export function applyTrustProxy(
+  app: { set(setting: string, value: unknown): unknown },
+  env: Env,
+): void {
+  app.set('trust proxy', env.NODE_ENV === 'production' ? env.TRUST_PROXY_HOPS : false);
+}
+
 /** Responses smaller than this are sent uncompressed. */
 export const COMPRESSION_THRESHOLD_BYTES = 1024;
 
 /** Everything shared by the real server and the integration tests. */
 export function configureApp(app: INestApplication, env: Env): void {
   const express = app as NestExpressApplication;
-  // Behind Cloud Run's load balancer: use the real client IP for rate limiting.
-  if (env.NODE_ENV === 'production') express.set('trust proxy', 1);
+  applyTrustProxy(express, env);
 
   app.useLogger(app.get(Logger));
   app.use(

@@ -38,6 +38,8 @@ const envSchema = z
       .string()
       .regex(/^[a-z_][a-z0-9_]{0,62}$/)
       .optional(),
+    // Reverse proxies in front of the API that append to X-Forwarded-For (Render: 1). Production only.
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
     THROTTLE_LIMIT: z.coerce.number().int().min(1).default(120),
     THROTTLE_TTL_MS: z.coerce.number().int().min(1000).default(60_000),
     CORS_ORIGINS: csv,
