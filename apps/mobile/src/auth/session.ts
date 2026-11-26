@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from './secure-store';
 import Constants from 'expo-constants';
 import { ApiError, createApiClient } from '@ksms/api-client';
 import { trackRequest } from '@/api/slow-requests';
