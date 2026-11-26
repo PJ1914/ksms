@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { ApiError, createApiClient } from '@ksms/api-client';
+import { trackRequest } from '@/api/slow-requests';
 import { API_URL } from '@/config';
 import { randomUuid } from '@/utils/uuid';
 
@@ -38,13 +39,18 @@ let refreshing: Promise<Profile | null> | null = null;
 let onSignedOut: (() => void) | null = null;
 
 /** Used only for sign-in and refresh calls, which must not try to attach (or refresh) a token. */
-const publicApi = createApiClient({ baseUrl: API_URL, getAccessToken: async () => null });
+const publicApi = createApiClient({
+  baseUrl: API_URL,
+  getAccessToken: async () => null,
+  onRequest: trackRequest,
+});
 
 /** The client every screen uses: adds the token (refreshing it first if needed) and the branch. */
 export const api = createApiClient({
   baseUrl: API_URL,
   getAccessToken: () => validAccessToken(),
   getBranchId: () => branchId,
+  onRequest: trackRequest,
 });
 
 /** Sends an authenticated POST pinned to a specific branch (used by the outbox when uploading held bills). */
@@ -58,6 +64,7 @@ export function postForBranch<T>(
     baseUrl: API_URL,
     getAccessToken: () => validAccessToken(),
     getBranchId: () => targetBranchId,
+    onRequest: trackRequest,
   });
   return client.post<T>(path, body, idempotencyKey);
 }

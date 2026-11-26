@@ -4,6 +4,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'rea
 import { illustrations } from '@/theme/art';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import { CartProvider } from '@/cart/CartProvider';
+import { SlowServerNotice } from '@/components/SlowServerNotice';
 import { API_URL } from '@/config';
 import { draftScopeKey } from '@/sync/cache-store';
 import { SyncProvider } from '@/sync/SyncProvider';
@@ -15,6 +16,7 @@ export default function RootLayout() {
       <SyncProvider>
         <StatusBar style="dark" />
         <RootStack />
+        <SlowServerNotice />
       </SyncProvider>
     </AuthProvider>
   );

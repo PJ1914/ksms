@@ -21,6 +21,23 @@ describe('api client', () => {
     expect(init.headers['idempotency-key']).toBe('key-1');
   });
 
+  it('reports when a request starts and ends (slow-server notice, FIXES F20)', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    const events: string[] = [];
+    const client = createApiClient({
+      baseUrl: 'http://x',
+      getAccessToken: async () => null,
+      onRequest: () => {
+        events.push('start');
+        return () => events.push('end');
+      },
+    });
+    await client.get('/x');
+    expect(events).toEqual(['start', 'end']);
+  });
+
   it('throws ApiError with the server error code', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,

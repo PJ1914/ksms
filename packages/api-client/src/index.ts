@@ -19,6 +19,8 @@ export interface ApiClientOptions {
   getBranchId?: () => string | null;
   /** Request timeout in milliseconds (default 15s so unreachable LAN IPs fail fast instead of hanging). */
   timeoutMs?: number;
+  /** Called when a request starts; the returned function is called when it ends (e.g. a "slow server" notice). */
+  onRequest?: () => () => void;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -41,6 +43,7 @@ export function createApiClient(opts: ApiClientOptions) {
 
     const controller = typeof AbortController === 'function' ? new AbortController() : undefined;
     const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+    const done = opts.onRequest?.();
     let res: Response;
     try {
       res = await fetch(`${opts.baseUrl}${path}`, {
@@ -51,6 +54,7 @@ export function createApiClient(opts: ApiClientOptions) {
       });
     } finally {
       if (timer) clearTimeout(timer);
+      done?.();
     }
     const json: unknown = await res.json().catch(() => undefined);
     if (!res.ok) {
