@@ -588,6 +588,33 @@ suite('Sales and POS (real database)', () => {
       await booksAgree();
     });
 
+    it('overlapping bills at once (same products, different line order): no deadlock, no oversell (F9)', async () => {
+      const a = await piece('10', '30');
+      const b = await piece('20', '30');
+      const c = await piece('30', '30');
+      const orders = [
+        [a, b, c],
+        [c, b, a],
+        [b, a, c],
+        [c, a, b],
+      ];
+      // 12 bills x 3 units of each product = 36 wanted per product, only 30 in stock.
+      const results = await Promise.all(
+        Array.from({ length: 12 }, (_, i) =>
+          sell({
+            items: orders[i % orders.length]!.map((p) => item(p.id, U.PCS, '3')),
+            payments: [cash('180')],
+          }),
+        ),
+      );
+      const ok = results.filter((r) => r.status === 201);
+      const refused = results.filter((r) => r.status !== 201);
+      expect(ok).toHaveLength(10);
+      expect(refused.every((r) => r.body.error.code === 'INSUFFICIENT_STOCK')).toBe(true);
+      for (const p of [a, b, c]) expect((await stockOf(p.id)).quantityOnHand).toBe('0.000');
+      await booksAgree();
+    });
+
     it('five copies of one checkout (double taps) make ONE bill, one stock movement, one payment', async () => {
       const p = await piece('10', '20');
       const key = randomUUID();

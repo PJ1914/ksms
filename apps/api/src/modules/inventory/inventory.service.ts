@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { AppException } from '../../common/errors/app.exception';
 import { DomainError } from '../../common/errors/domain.error';
-import type { Prisma } from '../../generated/prisma/client';
+import { Prisma } from '../../generated/prisma/client';
+import { uuidv7 } from '../../common/utils/ids';
 import { assertStockBaseQuantity } from '../catalog/domain/units';
 import { ProductsService } from '../catalog/products.service';
 import {
@@ -90,7 +91,12 @@ interface LockedBalance {
   onHand: Decimal;
   reserved: Decimal;
   average: Decimal;
+  /** Changed in memory and still to be written. */
+  dirty?: boolean;
 }
+type StockProduct = NonNullable<
+  Awaited<ReturnType<ProductsService['stockRulesMany']>> extends Map<string, infer P> ? P : never
+>;
 interface LockedBatch {
   id: string;
   batchNumber: string;
@@ -172,9 +178,78 @@ export class InventoryService {
   }
 
   async issue(tx: Tx, ctx: StockContext, input: IssueInput): Promise<StockResult> {
-    const product = await this.catalog.stockRules(tx, ctx.organizationId, input.productId);
-    assertStockBaseQuantity(product.rules, input.baseQuantity);
-    const balance = await this.lockBalance(tx, ctx, input.productId);
+    return (await this.issueMany(tx, ctx, [input]))[0]!;
+  }
+
+  /**
+   * Issues several products in one transaction (a bill, a return to supplier...).
+   *
+   * Lock order is the same as always: every balance row in product-id order, then batch rows (a batch is
+   * only ever locked by a transaction already holding its product's balance), so concurrent bills cannot
+   * deadlock. The rules run per line in product-id order exactly as before, on the locked rows held in
+   * memory (a product on two lines sees the first line's effect). Reads and writes are batched
+   * (FIXES F9): about 6 queries for a whole bill instead of ~6 per product.
+   */
+  async issueMany(tx: Tx, ctx: StockContext, inputs: IssueInput[]): Promise<StockResult[]> {
+    if (inputs.length === 0) return [];
+    const order = inputs
+      .map((input, index) => ({ input, index }))
+      .sort((a, b) =>
+        a.input.productId < b.input.productId
+          ? -1
+          : a.input.productId > b.input.productId
+            ? 1
+            : a.index - b.index,
+      );
+    const productIds = [...new Set(order.map((o) => o.input.productId))];
+
+    const products = await this.catalog.stockRulesMany(tx, ctx.organizationId, productIds);
+    for (const { input } of order) {
+      const product = products.get(input.productId);
+      if (!product) throw new AppException('NOT_FOUND', 'Product not found', 404);
+      assertStockBaseQuantity(product.rules, input.baseQuantity);
+    }
+    const balances = await this.lockBalances(tx, ctx, productIds);
+    const trackedIds = productIds.filter((id) => {
+      const p = products.get(id)!;
+      return p.trackBatch || p.trackExpiry;
+    });
+    const batchesOf = await this.lockBatchesMany(tx, ctx, trackedIds);
+
+    const movementRows: Prisma.StockMovementCreateManyInput[] = [];
+    const touchedBatches = new Map<string, { left: Decimal; type: OutboundType }>();
+    const results: StockResult[] = new Array(inputs.length);
+    for (const { input, index } of order) {
+      results[index] = this.planIssue(
+        ctx,
+        products.get(input.productId)!,
+        balances.get(input.productId)!,
+        batchesOf.get(input.productId) ?? [],
+        input,
+        movementRows,
+        touchedBatches,
+      );
+    }
+
+    await tx.stockMovement.createMany({ data: movementRows });
+    await this.writeBatches(tx, touchedBatches);
+    await this.writeBalances(tx, ctx, balances);
+    return results;
+  }
+
+  /**
+   * The rules for one line, applied to the locked rows in memory: checks stock, picks batches (FEFO),
+   * queues the movements and updates the in-memory balance and batches for the next line.
+   */
+  private planIssue(
+    ctx: StockContext,
+    product: StockProduct,
+    balance: LockedBalance,
+    batchList: LockedBatch[],
+    input: IssueInput,
+    movementRows: Prisma.StockMovementCreateManyInput[],
+    touchedBatches: Map<string, { left: Decimal; type: OutboundType }>,
+  ): StockResult {
     const available = balance.onHand.minus(balance.reserved);
     const tracked = product.trackBatch || product.trackExpiry;
     const insufficient = (sellable: Decimal, extra: Record<string, string> = {}) =>
@@ -201,7 +276,8 @@ export class InventoryService {
       allocations = [{ batchId: null, quantity: input.baseQuantity }];
     } else {
       const today = todayInIndia();
-      let batches = await this.lockBatches(tx, ctx, input.productId);
+      // Only batches that still hold stock (an earlier line of this bill may have emptied one).
+      let batches = batchList.filter((b) => b.quantity.gt(0));
       let includeExpired = input.type === 'EXPIRY';
       if (input.batchId) {
         batches = batches.filter((b) => b.id === input.batchId);
@@ -235,21 +311,39 @@ export class InventoryService {
     let running = balance.onHand;
     const movements: MovementView[] = [];
     for (const a of allocations) {
-      if (a.batchId) await this.takeFromBatch(tx, a.batchId, a.quantity, input.type);
+      if (a.batchId) {
+        const batch = batchList.find((b) => b.id === a.batchId)!;
+        batch.quantity = batch.quantity.minus(a.quantity);
+        touchedBatches.set(batch.id, { left: batch.quantity, type: input.type });
+      }
       running = running.minus(a.quantity);
-      movements.push(
-        await this.writeMovement(tx, ctx, input.productId, {
-          batchId: a.batchId,
-          type: input.type,
-          quantity: a.quantity.negated(),
-          unitCost,
-          balanceAfter: running,
-          reference: input.reference,
-          reason: input.reason,
-        }),
-      );
+      const id = uuidv7();
+      movementRows.push({
+        id,
+        organizationId: ctx.organizationId,
+        branchId: ctx.branchId,
+        productId: input.productId,
+        batchId: a.batchId,
+        type: input.type,
+        quantity: qty(a.quantity.negated()),
+        unitCost: cost(unitCost),
+        balanceAfter: qty(running),
+        referenceType: input.reference.type,
+        referenceId: input.reference.id,
+        referenceLineId: input.reference.lineId,
+        reason: input.reason,
+        createdById: ctx.actorId,
+      });
+      movements.push({
+        id,
+        batchId: a.batchId,
+        quantity: qty(a.quantity.negated()),
+        unitCost: cost(unitCost),
+        balanceAfter: qty(running),
+      });
     }
-    await this.writeBalance(tx, ctx, input.productId, running, balance.average);
+    balance.onHand = running;
+    balance.dirty = true;
     return {
       movements,
       quantityOnHand: qty(running),
@@ -261,23 +355,118 @@ export class InventoryService {
     };
   }
 
-  /** Issues several products in one transaction, always in product-id order (deadlock-free under concurrency). */
-  async issueMany(tx: Tx, ctx: StockContext, inputs: IssueInput[]): Promise<StockResult[]> {
-    const order = inputs
-      .map((input, index) => ({ input, index }))
-      .sort((a, b) =>
-        a.input.productId < b.input.productId
-          ? -1
-          : a.input.productId > b.input.productId
-            ? 1
-            : a.index - b.index,
-      );
-    const results: StockResult[] = new Array(inputs.length);
-    for (const { input, index } of order) results[index] = await this.issue(tx, ctx, input);
-    return results;
+  // ---------- internals ----------
+
+  /** Creates missing balance rows, then locks all of them in product-id order (one statement each). */
+  private async lockBalances(
+    tx: Tx,
+    ctx: StockContext,
+    productIds: string[],
+  ): Promise<Map<string, LockedBalance>> {
+    const ids = [...productIds].sort();
+    await tx.$executeRaw`
+      INSERT INTO inventory_balances (id, organization_id, branch_id, product_id, quantity_on_hand, reserved_qty, average_cost, updated_at)
+      SELECT gen_random_uuid(), ${ctx.organizationId}::uuid, ${ctx.branchId}::uuid, p, 0, 0, 0, now()
+      FROM unnest(${ids}::uuid[]) AS p
+      ORDER BY p
+      ON CONFLICT (branch_id, product_id) DO NOTHING`;
+    const rows = await tx.$queryRaw<
+      { product_id: string; on_hand: string; reserved: string; average: string }[]
+    >`
+      SELECT product_id::text AS product_id, quantity_on_hand::text AS on_hand,
+             reserved_qty::text AS reserved, average_cost::text AS average
+      FROM inventory_balances
+      WHERE branch_id = ${ctx.branchId}::uuid AND organization_id = ${ctx.organizationId}::uuid
+        AND product_id = ANY(${ids}::uuid[])
+      ORDER BY product_id
+      FOR UPDATE`;
+    const locked = new Map(
+      rows.map((r) => [
+        r.product_id,
+        { onHand: d(r.on_hand), reserved: d(r.reserved), average: d(r.average) } as LockedBalance,
+      ]),
+    );
+    if (locked.size !== ids.length)
+      throw new AppException('INTERNAL_ERROR', 'Could not lock the stock balance', 500);
+    return locked;
   }
 
-  // ---------- internals ----------
+  /** Active batches with stock for several products, locked per product in FEFO order. */
+  private async lockBatchesMany(
+    tx: Tx,
+    ctx: StockContext,
+    productIds: string[],
+  ): Promise<Map<string, LockedBatch[]>> {
+    const byProduct = new Map<string, LockedBatch[]>();
+    if (productIds.length === 0) return byProduct;
+    const rows = await tx.$queryRaw<
+      {
+        id: string;
+        product_id: string;
+        batch_number: string;
+        expiry: string | null;
+        q: string;
+        c: string;
+      }[]
+    >`
+      SELECT id, product_id::text AS product_id, batch_number, to_char(expiry_date, 'YYYY-MM-DD') AS expiry,
+             quantity_on_hand::text AS q, unit_cost::text AS c
+      FROM inventory_batches
+      WHERE branch_id = ${ctx.branchId}::uuid AND organization_id = ${ctx.organizationId}::uuid
+        AND product_id = ANY(${[...productIds].sort()}::uuid[])
+        AND quantity_on_hand > 0
+      ORDER BY product_id, expiry_date ASC NULLS LAST, received_at ASC, id ASC
+      FOR UPDATE`;
+    for (const r of rows) {
+      const list = byProduct.get(r.product_id) ?? [];
+      list.push({
+        id: r.id,
+        batchNumber: r.batch_number,
+        expiryDate: r.expiry,
+        quantity: d(r.q),
+        unitCost: d(r.c),
+      });
+      byProduct.set(r.product_id, list);
+    }
+    return byProduct;
+  }
+
+  /** One UPDATE for every batch this call took stock from. */
+  private async writeBatches(
+    tx: Tx,
+    touched: Map<string, { left: Decimal; type: OutboundType }>,
+  ): Promise<void> {
+    if (touched.size === 0) return;
+    const values = [...touched].map(([id, t]) => {
+      const status = t.left.isZero() ? (t.type === 'EXPIRY' ? 'EXPIRED' : 'DEPLETED') : 'ACTIVE';
+      return Prisma.sql`(${id}::uuid, ${qty(t.left)}::numeric, ${status})`;
+    });
+    await tx.$executeRaw`
+      UPDATE inventory_batches AS b
+      SET quantity_on_hand = v.q, status = v.s::"BatchStatus", updated_at = now()
+      FROM (VALUES ${Prisma.join(values)}) AS v(id, q, s)
+      WHERE b.id = v.id`;
+  }
+
+  /** One UPDATE for every balance this call changed. */
+  private async writeBalances(
+    tx: Tx,
+    ctx: StockContext,
+    balances: Map<string, LockedBalance>,
+  ): Promise<void> {
+    const values = [...balances]
+      .filter(([, b]) => b.dirty)
+      .map(
+        ([productId, b]) =>
+          Prisma.sql`(${productId}::uuid, ${qty(b.onHand)}::numeric, ${cost(b.average)}::numeric)`,
+      );
+    if (values.length === 0) return;
+    await tx.$executeRaw`
+      UPDATE inventory_balances AS b
+      SET quantity_on_hand = v.q, average_cost = v.c, updated_at = now()
+      FROM (VALUES ${Prisma.join(values)}) AS v(product_id, q, c)
+      WHERE b.branch_id = ${ctx.branchId}::uuid AND b.product_id = v.product_id`;
+  }
 
   private async lockBalance(tx: Tx, ctx: StockContext, productId: string): Promise<LockedBalance> {
     await tx.$executeRaw`
@@ -305,26 +494,6 @@ export class InventoryService {
       where: { branchId_productId: { branchId: ctx.branchId, productId } },
       data: { quantityOnHand: qty(onHand), averageCost: cost(average) },
     });
-  }
-
-  /** Active batches with stock, locked in FEFO order (earliest expiry first, then oldest received). */
-  private async lockBatches(tx: Tx, ctx: StockContext, productId: string): Promise<LockedBatch[]> {
-    const rows = await tx.$queryRaw<
-      { id: string; batch_number: string; expiry: string | null; q: string; c: string }[]
-    >`
-      SELECT id, batch_number, to_char(expiry_date, 'YYYY-MM-DD') AS expiry, quantity_on_hand::text AS q, unit_cost::text AS c
-      FROM inventory_batches
-      WHERE branch_id = ${ctx.branchId}::uuid AND product_id = ${productId}::uuid AND organization_id = ${ctx.organizationId}::uuid
-        AND quantity_on_hand > 0
-      ORDER BY expiry_date ASC NULLS LAST, received_at ASC, id ASC
-      FOR UPDATE`;
-    return rows.map((r) => ({
-      id: r.id,
-      batchNumber: r.batch_number,
-      expiryDate: r.expiry,
-      quantity: d(r.q),
-      unitCost: d(r.c),
-    }));
   }
 
   private async receiveIntoBatch(
@@ -419,21 +588,6 @@ export class InventoryService {
       },
     });
     return row.id;
-  }
-
-  private async takeFromBatch(tx: Tx, batchId: string, quantity: Decimal, type: OutboundType) {
-    const batch = await tx.inventoryBatch.findUniqueOrThrow({
-      where: { id: batchId },
-      select: { quantityOnHand: true },
-    });
-    const left = d(batch.quantityOnHand).minus(quantity);
-    await tx.inventoryBatch.update({
-      where: { id: batchId },
-      data: {
-        quantityOnHand: qty(left),
-        status: left.isZero() ? (type === 'EXPIRY' ? 'EXPIRED' : 'DEPLETED') : 'ACTIVE',
-      },
-    });
   }
 
   private async writeMovement(

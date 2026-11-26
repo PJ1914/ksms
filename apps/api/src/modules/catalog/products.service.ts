@@ -742,8 +742,15 @@ export class ProductsService {
    * current unit factors. Scoped to the organization (another shop's product is "not found").
    */
   async stockRules(db: Db, organizationId: string, productId: string) {
-    const p = await db.product.findFirst({
-      where: { id: productId, organizationId, deletedAt: null },
+    const found = (await this.stockRulesMany(db, organizationId, [productId])).get(productId);
+    if (!found) throw new AppException('NOT_FOUND', 'Product not found', 404);
+    return found;
+  }
+
+  /** `stockRules` for many products in ONE query (FIXES F9). Missing products are absent from the map. */
+  async stockRulesMany(db: Db, organizationId: string, productIds: string[]) {
+    const rows = await db.product.findMany({
+      where: { id: { in: [...new Set(productIds)] }, organizationId, deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -767,29 +774,33 @@ export class ProductsService {
         },
       },
     });
-    if (!p) throw new AppException('NOT_FOUND', 'Product not found', 404);
-    return {
-      id: p.id,
-      name: p.name,
-      sku: p.sku,
-      status: p.status,
-      baseUnitId: p.baseUnitId,
-      baseUnitCode: p.baseUnit.code,
-      trackBatch: p.trackBatch,
-      trackExpiry: p.trackExpiry,
-      rules: this.rulesOf(p),
-      conversions: new Map(
-        p.conversions.map((c) => [
-          c.unitId,
-          {
-            unitCode: c.unit.code,
-            factorToBase: dec(c.factorToBase),
-            isPurchaseUnit: c.isPurchaseUnit,
-            isSaleUnit: c.isSaleUnit,
-          },
-        ]),
-      ),
-    };
+    return new Map(
+      rows.map((p) => [
+        p.id,
+        {
+          id: p.id,
+          name: p.name,
+          sku: p.sku,
+          status: p.status,
+          baseUnitId: p.baseUnitId,
+          baseUnitCode: p.baseUnit.code,
+          trackBatch: p.trackBatch,
+          trackExpiry: p.trackExpiry,
+          rules: this.rulesOf(p),
+          conversions: new Map(
+            p.conversions.map((c) => [
+              c.unitId,
+              {
+                unitCode: c.unit.code,
+                factorToBase: dec(c.factorToBase),
+                isPurchaseUnit: c.isPurchaseUnit,
+                isSaleUnit: c.isSaleUnit,
+              },
+            ]),
+          ),
+        },
+      ]),
+    );
   }
 
   // ---------- internals ----------
