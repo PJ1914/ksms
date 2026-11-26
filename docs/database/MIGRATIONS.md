@@ -85,3 +85,32 @@ Rollback: drop the constraints `invoices_number_rule` and `sale_returns_number_r
 | `20261122000100_collection_guards` | Partial unique indexes: one non-deleted collection agent per login; one ACTIVE collector per customer                                                                              |
 
 Rollback: drop the triggers `daily_closings_closed_immutable`, `daily_closings_no_truncate`, `cashbook_entries_closed_day` and the functions `ksms_closed_day_immutable()`, `ksms_cashbook_closed_day()`; drop the indexes `collection_agents_one_per_user`, `collection_assignments_one_active_per_customer`. Risk: the index migration fails (changing nothing) if existing data already breaks a rule.
+
+## Backend audit migrations (FIXES.md, 2026-11-26)
+
+- `20261126000000_retention_indexes` (F4): plain indexes on `user_sessions(expires_at)`, `user_sessions(revoked_at)` and `notifications(read_at)` for the daily purge.
+- `20261126000100_search_trigram_indexes` (F10): `CREATE EXTENSION pg_trgm WITH SCHEMA public` (Neon allows it) and GIN trigram indexes on every column used in "contains" search (products name / local name / SKU, customers name / phone / GSTIN, suppliers name / contact person / phone / GSTIN, sale and invoice numbers). Partial (`deleted_at IS NULL`) where the table soft-deletes.
+
+### Creating large indexes on production without blocking writes
+
+`CREATE INDEX` blocks writes to the table while it builds, and `CREATE INDEX CONCURRENTLY` cannot run inside the transaction `prisma migrate deploy` uses. For a big table:
+
+1. Connect with the DIRECT url and run each statement of the migration by hand with `CONCURRENTLY` added, for example `CREATE INDEX CONCURRENTLY IF NOT EXISTS "products_name_trgm_idx" ON "products" USING gin ("name" public.gin_trgm_ops) WHERE "deleted_at" IS NULL;` (same names as the migration).
+2. Check none is left `INVALID` (`SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;`); drop and retry any that is.
+3. Mark the migration applied without running it: `pnpm --filter @ksms/api exec prisma migrate resolve --applied 20261126000100_search_trigram_indexes`.
+
+With today's data (one shop, a few thousand rows) the plain migration finishes in well under a second, so `prisma migrate deploy` is fine as is.
+
+### Measured effect (F10)
+
+Throwaway schema on the production Neon project, 50,000 products and 20,000 customers in one shop, `EXPLAIN (ANALYZE, BUFFERS)`, selective search text:
+
+| Query                                                                       | Before            | After                                                                 |
+| --------------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------- |
+| product name only                                                           | 23.1 ms, Seq Scan | 0.14 ms, Bitmap Index Scan `products_name_trgm_idx`                   |
+| product name / local name / SKU                                             | 32.5 ms, Seq Scan | 0.16 ms, BitmapOr over the three trigram indexes                      |
+| product list search as the API now sends it (barcode matches fetched first) | 33.7 ms           | 1.2 ms                                                                |
+| the old API shape (barcode sub-query inside the OR)                         | 61 ms             | 59 ms: the sub-query blocks the indexes, which is why the API changed |
+| 500 product inserts                                                         | 95 ms             | 106 ms (+11 %, within network noise)                                  |
+
+Searches of one or two characters cannot use trigram indexes and fall back to a scan; that is the same cost as before.
