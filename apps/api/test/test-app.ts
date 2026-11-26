@@ -1,4 +1,5 @@
-import { Body, Controller, Get, INestApplication, Post } from '@nestjs/common';
+import { Body, Controller, Get, INestApplication, Post, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { Test } from '@nestjs/testing';
 import { IsInt, IsString, Length, Min } from 'class-validator';
 import { Public, RequirePermission } from '../src/common/auth/decorators';
@@ -41,6 +42,19 @@ export class TestController {
   @Get('ping')
   ping() {
     return { pong: true };
+  }
+
+  @Public()
+  @Get('big')
+  big() {
+    return Array.from({ length: 200 }, (_, i) => ({ id: i, name: `Product number ${i}` }));
+  }
+
+  @Public()
+  @Get('pdf')
+  pdf(@Res() res: Response) {
+    res.setHeader('Content-Type', 'application/pdf');
+    res.send(Buffer.alloc(20_000, 'a'));
   }
 
   // Authenticated route that declares no permission policy: must be denied by default.

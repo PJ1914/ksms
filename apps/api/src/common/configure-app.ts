@@ -1,6 +1,7 @@
 import { INestApplication, ValidationError, ValidationPipe } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
+import compression from 'compression';
 import helmet from 'helmet';
 import { API_PREFIX } from '@ksms/constants';
 import type { Env } from '../config/env';
@@ -17,6 +18,9 @@ function flatten(errors: ValidationError[], parent = ''): { field: string; messa
   });
 }
 
+/** Responses smaller than this are sent uncompressed. */
+export const COMPRESSION_THRESHOLD_BYTES = 1024;
+
 /** Everything shared by the real server and the integration tests. */
 export function configureApp(app: INestApplication, env: Env): void {
   const express = app as NestExpressApplication;
@@ -31,6 +35,15 @@ export function configureApp(app: INestApplication, env: Env): void {
         useDefaults: true,
         directives: { 'upgrade-insecure-requests': null },
       },
+    }),
+  );
+  // gzip large JSON (sync pages, lists, reports). Small bodies are not worth it; PDFs are already compressed.
+  app.use(
+    compression({
+      threshold: COMPRESSION_THRESHOLD_BYTES,
+      filter: (req, res) =>
+        !String(res.getHeader('Content-Type') ?? '').startsWith('application/pdf') &&
+        compression.filter(req, res),
     }),
   );
   if (env.CORS_ORIGINS.length > 0) {

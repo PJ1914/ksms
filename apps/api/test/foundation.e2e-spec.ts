@@ -44,6 +44,22 @@ describe('API foundation (e2e, database mocked)', () => {
 
   const bearer = async (c = claims) => `Bearer ${await tokens.sign(c)}`;
 
+  describe('response compression (FIXES F2)', () => {
+    it('gzips large JSON without changing its shape', async () => {
+      const res = await http().get('/api/v1/test/big').set('Accept-Encoding', 'gzip').expect(200);
+      expect(res.headers['content-encoding']).toBe('gzip');
+      expect(res.body.data).toHaveLength(200);
+      expect(res.body.data[5]).toEqual({ id: 5, name: 'Product number 5' });
+    });
+
+    it('leaves small bodies and PDFs uncompressed', async () => {
+      const small = await http().get('/api/v1/test/ping').set('Accept-Encoding', 'gzip');
+      expect(small.headers['content-encoding']).toBeUndefined();
+      const pdf = await http().get('/api/v1/test/pdf').set('Accept-Encoding', 'gzip').expect(200);
+      expect(pdf.headers['content-encoding']).toBeUndefined();
+    });
+  });
+
   describe('response and error format', () => {
     it('wraps success as { data } and exposes health publicly', async () => {
       prisma.$queryRaw.mockResolvedValue([{ '?column?': 1 }]);
