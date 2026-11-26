@@ -46,6 +46,7 @@ export const PERMISSIONS = {
   'report.inventory': 'View inventory reports',
   'report.financial': 'View financial reports and dashboard',
   'report.profit': 'View profit reports',
+  'system.reconcile': 'Run the consistency checks (stock, sales, money, khata, suppliers)',
   // administration
   'organization.read': 'View shop settings',
   'organization.manage': 'Change shop, GST and invoice settings',
@@ -82,6 +83,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<
     'role.manage',
     'backup.manage',
     'audit.read',
+    'system.reconcile',
   ),
   Cashier: [
     'product.read',

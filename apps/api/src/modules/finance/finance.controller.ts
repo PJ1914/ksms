@@ -1,4 +1,8 @@
 import {
+  ReconcileThrottled,
+  ReconciliationRunner,
+} from '../../common/reconcile/reconciliation-runner';
+import {
   Body,
   Controller,
   Get,
@@ -53,6 +57,7 @@ export class FinanceController {
     private readonly cashbook: CashbookQueryService,
     private readonly closings: DailyClosingService,
     private readonly reconciliation: FinanceReconciliationService,
+    private readonly runner: ReconciliationRunner,
     private readonly idempotency: IdempotencyService,
   ) {}
 
@@ -205,9 +210,12 @@ export class FinanceController {
 
   @Get('finance/reconciliation')
   @RequireBranch()
-  @RequirePermission('cashbook.read')
+  @ReconcileThrottled()
+  @RequirePermission('system.reconcile')
   @ApiOperation({ summary: 'Verify expenses, cashbook entries and daily closings reconcile' })
   reconcile(@Tenant() t: TenantContext) {
-    return this.reconciliation.reconcile(t.organizationId, t.branchId ?? undefined);
+    return this.runner.run('finance', t.organizationId, t.branchId, (db) =>
+      this.reconciliation.reconcile(t.organizationId, t.branchId ?? undefined, db),
+    );
   }
 }

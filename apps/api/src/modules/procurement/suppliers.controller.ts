@@ -1,4 +1,8 @@
 import {
+  ReconcileThrottled,
+  ReconciliationRunner,
+} from '../../common/reconcile/reconciliation-runner';
+import {
   Body,
   Controller,
   Get,
@@ -48,6 +52,7 @@ export class SuppliersController {
     private readonly suppliers: SuppliersService,
     private readonly payments: SupplierPaymentsService,
     private readonly reconciliation: ProcurementReconciliationService,
+    private readonly runner: ReconciliationRunner,
     private readonly idempotency: IdempotencyService,
   ) {}
 
@@ -167,11 +172,14 @@ export class SuppliersController {
   }
 
   @Get('procurement/reconciliation')
-  @RequirePermission('supplier.read')
+  @ReconcileThrottled()
+  @RequirePermission('system.reconcile')
   @ApiOperation({
     summary: 'Checks that stock, purchases, returns, payments and supplier balances all agree',
   })
   reconcile(@Tenant() t: TenantContext) {
-    return this.reconciliation.run(t);
+    return this.runner.run('procurement', t.organizationId, t.branchId, (db) =>
+      this.reconciliation.run(t, db),
+    );
   }
 }

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import Decimal from 'decimal.js';
+import type { Db } from '../../database/db.types';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '../../generated/prisma/client';
 import { DailyClosingService } from './daily-closing.service';
@@ -11,13 +12,13 @@ export class FinanceReconciliationService {
     private readonly closing: DailyClosingService,
   ) {}
 
-  async reconcile(organizationId: string, branchId?: string) {
+  async reconcile(organizationId: string, branchId?: string, db: Db = this.prisma) {
     const eBranch = branchId ? Prisma.sql`AND e.branch_id = ${branchId}::uuid` : Prisma.empty;
     const cbBranch = branchId ? Prisma.sql`AND cb.branch_id = ${branchId}::uuid` : Prisma.empty;
 
     const [expenseCashbookMismatches, cancelledExpenseMismatches, manualSignMismatches, closings] =
       await Promise.all([
-        this.prisma.$queryRaw<{ expense_id: string; expected: string; actual: string }[]>`
+        db.$queryRaw<{ expense_id: string; expected: string; actual: string }[]>`
           SELECT e.id::text AS expense_id,
                  (-e.amount)::text AS expected,
                  COALESCE(SUM(cb.amount), 0)::text AS actual
@@ -28,7 +29,7 @@ export class FinanceReconciliationService {
           GROUP BY e.id, e.amount
           HAVING (-e.amount) <> COALESCE(SUM(cb.amount), 0)`,
 
-        this.prisma.$queryRaw<{ expense_id: string; expected: string; actual: string }[]>`
+        db.$queryRaw<{ expense_id: string; expected: string; actual: string }[]>`
           SELECT e.id::text AS expense_id,
                  e.amount::text AS expected,
                  COALESCE(SUM(cb.amount), 0)::text AS actual
@@ -40,7 +41,7 @@ export class FinanceReconciliationService {
           GROUP BY e.id, e.amount
           HAVING e.amount <> COALESCE(SUM(cb.amount), 0)`,
 
-        this.prisma.$queryRaw<{ entry_id: string }[]>`
+        db.$queryRaw<{ entry_id: string }[]>`
           SELECT cb.id::text AS entry_id
           FROM cashbook_entries cb
           WHERE cb.organization_id = ${organizationId}::uuid ${cbBranch}
@@ -49,7 +50,7 @@ export class FinanceReconciliationService {
               OR (cb.kind = 'CASH_OUT' AND cb.amount >= 0)
             )`,
 
-        this.prisma.dailyClosing.findMany({
+        db.dailyClosing.findMany({
           where: {
             organizationId,
             ...(branchId ? { branchId } : {}),
@@ -78,7 +79,7 @@ export class FinanceReconciliationService {
         });
       }
 
-      const cashAgg = await this.prisma.cashbookEntry.aggregate({
+      const cashAgg = await db.cashbookEntry.aggregate({
         where: {
           organizationId,
           registerId: c.registerId,

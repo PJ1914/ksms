@@ -83,6 +83,8 @@ export async function createIntegrationApp(
     JWT_ACCESS_SECRET: 'integration-secret-integration-secret-12345',
     THROTTLE_LIMIT: '100000',
     AUTH_THROTTLE_LIMIT: '100000',
+    RECONCILE_THROTTLE_LIMIT: '100000',
+    RECONCILE_CACHE_SECONDS: '0',
     ...overrides,
   });
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();

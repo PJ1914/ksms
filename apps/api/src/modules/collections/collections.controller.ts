@@ -1,4 +1,8 @@
 import {
+  ReconcileThrottled,
+  ReconciliationRunner,
+} from '../../common/reconcile/reconciliation-runner';
+import {
   Body,
   Controller,
   Get,
@@ -51,6 +55,7 @@ export class CollectionsController {
   constructor(
     private readonly collections: CollectionsService,
     private readonly reconciliation: CollectionsReconciliationService,
+    private readonly runner: ReconciliationRunner,
     private readonly idempotency: IdempotencyService,
     private readonly rolePerms: RolePermissionService,
   ) {}
@@ -132,10 +137,13 @@ export class CollectionsController {
   }
 
   @Get('collections/reconciliation')
-  @RequirePermission('collection.read')
+  @ReconcileThrottled()
+  @RequirePermission('system.reconcile')
   @ApiOperation({ summary: 'Verify customer balances, ledger entries, cashbook and records match' })
   reconcile(@Tenant() t: TenantContext) {
-    return this.reconciliation.reconcile(t.organizationId, t.branchId ?? undefined);
+    return this.runner.run('collections', t.organizationId, t.branchId, (db) =>
+      this.reconciliation.reconcile(t.organizationId, t.branchId ?? undefined, db),
+    );
   }
 
   @Get('collections/:id')

@@ -5,6 +5,8 @@ import { LoggerModule } from 'nestjs-pino';
 import { AuthGuard } from './common/auth/auth.guard';
 import { AuthModule } from './common/auth/auth.module';
 import { AUTH_THROTTLED } from './common/auth/decorators';
+import { ReconcileModule } from './common/reconcile/reconcile.module';
+import { RECONCILE_THROTTLED } from './common/reconcile/reconciliation-runner';
 import { PermissionGuard } from './common/auth/permission.guard';
 import { loggerOptions } from './common/logging/logger.config';
 import { TenantGuard } from './common/tenant/tenant.guard';
@@ -60,10 +62,18 @@ function loginIdentifier(req: { body?: unknown }): string | null {
             loginIdentifier(ctx.switchToHttp().getRequest()) === null,
           getTracker: (req) => `identifier:${loginIdentifier(req)}`,
         },
+        {
+          // Reconciliation scans all history (FIXES F21): at most RECONCILE_THROTTLE_LIMIT a minute.
+          name: 'reconcile',
+          ttl: 60_000,
+          limit: env.RECONCILE_THROTTLE_LIMIT,
+          skipIf: (ctx) => !Reflect.getMetadata(RECONCILE_THROTTLED, ctx.getHandler()),
+        },
       ],
     }),
     DatabaseModule,
     AuthModule,
+    ReconcileModule,
     AuditModule,
     HealthModule,
     ContextModule,

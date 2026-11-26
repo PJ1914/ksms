@@ -11,6 +11,7 @@ import {
 } from '../../common/pagination/keyset';
 import { CursorPage, Paginated } from '../../common/pagination/paginated';
 import { timestampRange } from '../../common/utils/dates';
+import type { Db } from '../../database/db.types';
 import { PrismaService } from '../../database/prisma.service';
 import { descendantCategoryIds } from '../catalog/category-tree';
 import { Prisma } from '../../generated/prisma/client';
@@ -337,10 +338,10 @@ export class InventoryQueriesService {
    * Proves the cached balances match the append-only movement history (and batches add up to the balance).
    * Any row returned here is a bug or tampering and must be investigated.
    */
-  async reconciliation(t: TenantContext) {
+  async reconciliation(t: TenantContext, db: Db = this.prisma) {
     const branchId = this.branchOf(t);
     const [balanceMismatches, batchMismatches, orphanMovements] = await Promise.all([
-      this.prisma.$queryRaw<{ product_id: string; balance: string; movements: string }[]>`
+      db.$queryRaw<{ product_id: string; balance: string; movements: string }[]>`
         SELECT b.product_id, b.quantity_on_hand::text AS balance, COALESCE(s.total, 0)::text AS movements
         FROM inventory_balances b
         LEFT JOIN (SELECT product_id, sum(quantity) AS total FROM stock_movements
@@ -348,7 +349,7 @@ export class InventoryQueriesService {
           ON s.product_id = b.product_id
         WHERE b.organization_id = ${t.organizationId}::uuid AND b.branch_id = ${branchId}::uuid
           AND b.quantity_on_hand <> COALESCE(s.total, 0)`,
-      this.prisma.$queryRaw<{ batch_id: string; batch: string; movements: string }[]>`
+      db.$queryRaw<{ batch_id: string; batch: string; movements: string }[]>`
         SELECT ib.id AS batch_id, ib.quantity_on_hand::text AS batch, COALESCE(s.total, 0)::text AS movements
         FROM inventory_batches ib
         LEFT JOIN (SELECT batch_id, sum(quantity) AS total FROM stock_movements
@@ -356,7 +357,7 @@ export class InventoryQueriesService {
           ON s.batch_id = ib.id
         WHERE ib.organization_id = ${t.organizationId}::uuid AND ib.branch_id = ${branchId}::uuid
           AND ib.quantity_on_hand <> COALESCE(s.total, 0)`,
-      this.prisma.$queryRaw<{ product_id: string }[]>`
+      db.$queryRaw<{ product_id: string }[]>`
         SELECT DISTINCT m.product_id FROM stock_movements m
         LEFT JOIN inventory_balances b ON b.product_id = m.product_id AND b.branch_id = m.branch_id
         WHERE m.organization_id = ${t.organizationId}::uuid AND m.branch_id = ${branchId}::uuid AND b.id IS NULL`,

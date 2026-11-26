@@ -1,4 +1,8 @@
 import {
+  ReconcileThrottled,
+  ReconciliationRunner,
+} from '../../common/reconcile/reconciliation-runner';
+import {
   Body,
   Controller,
   Delete,
@@ -58,6 +62,7 @@ export class SalesController {
     private readonly heldBills: HeldBillsService,
     private readonly invoices: InvoicesService,
     private readonly reconciliation: SalesReconciliationService,
+    private readonly runner: ReconciliationRunner,
     private readonly idempotency: IdempotencyService,
   ) {}
 
@@ -101,12 +106,15 @@ export class SalesController {
   }
 
   @Get('sales/reconciliation')
-  @RequirePermission('report.sales')
+  @ReconcileThrottled()
+  @RequirePermission('system.reconcile')
   @ApiOperation({
     summary: 'Checks that bills, stock, payments, cashbook and customer accounts all agree',
   })
   reconcile(@Tenant() t: TenantContext) {
-    return this.reconciliation.run(t);
+    return this.runner.run('sales', t.organizationId, t.branchId, (db) =>
+      this.reconciliation.run(t, db),
+    );
   }
 
   @Get('sales')

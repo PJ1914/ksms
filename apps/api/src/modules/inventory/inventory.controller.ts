@@ -1,4 +1,8 @@
 import {
+  ReconcileThrottled,
+  ReconciliationRunner,
+} from '../../common/reconcile/reconciliation-runner';
+import {
   Body,
   Controller,
   Get,
@@ -42,6 +46,7 @@ const IDEMPOTENCY_DOC = {
 export class InventoryController {
   constructor(
     private readonly queries: InventoryQueriesService,
+    private readonly runner: ReconciliationRunner,
     private readonly adjustments: StockAdjustmentsService,
     private readonly idempotency: IdempotencyService,
     private readonly roles: RolePermissionService,
@@ -94,12 +99,15 @@ export class InventoryController {
   }
 
   @Get('reconciliation')
-  @RequirePermission('stock.adjust')
+  @ReconcileThrottled()
+  @RequirePermission('system.reconcile')
   @ApiOperation({
     summary: 'Checks that balances equal the sum of movements (empty lists = consistent)',
   })
   reconciliation(@Tenant() t: TenantContext) {
-    return this.queries.reconciliation(t);
+    return this.runner.run('inventory', t.organizationId, t.branchId, (db) =>
+      this.queries.reconciliation(t, db),
+    );
   }
 
   @Post('opening-stock')

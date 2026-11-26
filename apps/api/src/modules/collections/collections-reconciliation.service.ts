@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Db } from '../../database/db.types';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '../../generated/prisma/client';
 
@@ -6,7 +7,7 @@ import { Prisma } from '../../generated/prisma/client';
 export class CollectionsReconciliationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async reconcile(organizationId: string, branchId?: string) {
+  async reconcile(organizationId: string, branchId?: string, db: Db = this.prisma) {
     const pBranch = branchId ? Prisma.sql`AND p.branch_id = ${branchId}::uuid` : Prisma.empty;
     const crBranch = branchId ? Prisma.sql`AND cr.branch_id = ${branchId}::uuid` : Prisma.empty;
 
@@ -17,7 +18,7 @@ export class CollectionsReconciliationService {
       reversalMismatches,
       recordMismatches,
     ] = await Promise.all([
-      this.prisma.$queryRaw<{ customer_id: string; cached: string; sum_ledger: string }[]>`
+      db.$queryRaw<{ customer_id: string; cached: string; sum_ledger: string }[]>`
         SELECT c.id::text AS customer_id,
                c.balance::text AS cached,
                COALESCE(SUM(l.amount), 0)::text AS sum_ledger
@@ -28,7 +29,7 @@ export class CollectionsReconciliationService {
         GROUP BY c.id, c.balance
         HAVING c.balance <> COALESCE(SUM(l.amount), 0)`,
 
-      this.prisma.$queryRaw<{ payment_id: string; expected: string; actual: string }[]>`
+      db.$queryRaw<{ payment_id: string; expected: string; actual: string }[]>`
         SELECT p.id::text AS payment_id,
                (-p.amount)::text AS expected,
                COALESCE(SUM(l.amount), 0)::text AS actual
@@ -41,7 +42,7 @@ export class CollectionsReconciliationService {
         GROUP BY p.id, p.amount
         HAVING (-p.amount) <> COALESCE(SUM(l.amount), 0)`,
 
-      this.prisma.$queryRaw<{ payment_id: string; expected: string; actual: string }[]>`
+      db.$queryRaw<{ payment_id: string; expected: string; actual: string }[]>`
         SELECT p.id::text AS payment_id,
                p.amount::text AS expected,
                COALESCE(SUM(cb.amount), 0)::text AS actual
@@ -54,7 +55,7 @@ export class CollectionsReconciliationService {
         GROUP BY p.id, p.amount
         HAVING p.amount <> COALESCE(SUM(cb.amount), 0)`,
 
-      this.prisma.$queryRaw<{ payment_id: string }[]>`
+      db.$queryRaw<{ payment_id: string }[]>`
         SELECT p.id::text AS payment_id
         FROM payments p
         WHERE p.organization_id = ${organizationId}::uuid
@@ -69,7 +70,7 @@ export class CollectionsReconciliationService {
             WHERE rev.reversal_of_id = p.id AND rev.organization_id = p.organization_id
           )`,
 
-      this.prisma.$queryRaw<{ record_id: string }[]>`
+      db.$queryRaw<{ record_id: string }[]>`
         SELECT cr.id::text AS record_id
         FROM collection_records cr
         JOIN payments p ON p.id = cr.payment_id

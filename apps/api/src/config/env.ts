@@ -40,6 +40,9 @@ const envSchema = z
       .optional(),
     // Reverse proxies in front of the API that append to X-Forwarded-For (Render: 1). Production only.
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
+    // Reconciliation endpoints (FIXES F21): calls per minute per IP, and how long a result is reused.
+    RECONCILE_THROTTLE_LIMIT: z.coerce.number().int().min(1).default(2),
+    RECONCILE_CACHE_SECONDS: z.coerce.number().int().min(0).max(3600).default(300),
     THROTTLE_LIMIT: z.coerce.number().int().min(1).default(120),
     THROTTLE_TTL_MS: z.coerce.number().int().min(1000).default(60_000),
     CORS_ORIGINS: csv,
