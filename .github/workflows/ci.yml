@@ -17,9 +17,9 @@ jobs:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -53,9 +53,9 @@ jobs:
       # CI-only throwaway database; not a secret.
       DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -75,9 +75,9 @@ jobs:
     name: Mobile bundle validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -86,3 +86,73 @@ jobs:
         run: pnpm --filter "./packages/*" build
       - run: pnpm --filter @ksms/mobile typecheck
       - run: pnpm --filter @ksms/mobile export:check
+
+  security:
+    name: Dependency audit and secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # the secret scan reads the commits being pushed
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      # Fails on high or critical advisories in production dependencies. Known, accepted advisories are
+      # listed with a reason and a review date in pnpm-workspace.yaml (auditConfig) and docs/security/AUDIT_ALLOWLIST.md.
+      - name: pnpm audit (production, high and critical)
+        run: pnpm audit --prod --audit-level=high
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    name: Build the API image and smoke-test it
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # CI-only throwaway database; not a secret.
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Apply migrations (from CI, never from the container)
+        run: |
+          pnpm install --frozen-lockfile --filter "@ksms/api..."
+          pnpm --filter "./packages/*" build
+          pnpm db:migrate:deploy
+      - name: Build image
+        run: docker build -t ksms-api:ci .
+      - name: Image size and user
+        run: |
+          docker image ls ksms-api:ci
+          test "$(docker run --rm --entrypoint id ksms-api:ci -u)" != "0"
+      - name: Boot, readiness and a real login (argon2 native module)
+        run: |
+          docker run -d --name api --network host             -e DATABASE_URL=postgresql://ci:ci@localhost:5432/ci             -e JWT_ACCESS_SECRET=ci-only-secret-ci-only-secret-0000000             -e PORT=3000 ksms-api:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:3000/api/v1/health/ready && break
+            sleep 2
+          done
+          curl -fsS http://localhost:3000/api/v1/health/ready
+          curl -fsS -X POST http://localhost:3000/api/v1/auth/register-owner             -H 'Content-Type: application/json'             -d '{"fullName":"CI Owner","phone":"9876500001","password":"Ci-Passw0rd!","shopName":"CI Shop","deviceUid":"ci-device-0001"}' > /dev/null
+          curl -fsS -X POST http://localhost:3000/api/v1/auth/login             -H 'Content-Type: application/json'             -d '{"identifier":"9876500001","password":"Ci-Passw0rd!","deviceUid":"ci-device-0001"}' > /dev/null
+          echo "image boots, database ready, login works"
+      - name: Container logs
+        if: always()
+        run: docker logs api || true

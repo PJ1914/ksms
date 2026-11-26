@@ -1,0 +1,16 @@
+# FIXES F19: gitleaks with the default rules, plus an allowlist for known placeholder values only.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures, example env files and CI throwaway credentials are placeholders"
+paths = [
+  '''(^|/)apps/api/test/''',
+  '''\.spec\.ts$''',
+  '''(^|/)\.env\.example$''',
+]
+regexes = [
+  '''postgresql://ci:ci@localhost''',
+  '''ci-only-secret-ci-only-secret''',
+  '''retention-job-does-not-sign-tokens''',
+]
