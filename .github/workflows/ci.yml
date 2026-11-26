@@ -98,7 +98,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
-          cache: pnpm
       # Fails on high or critical advisories in production dependencies. Known, accepted advisories are
       # listed with a reason and a review date in pnpm-workspace.yaml (auditConfig) and docs/security/AUDIT_ALLOWLIST.md.
       - name: pnpm audit (production, high and critical)
