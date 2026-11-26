@@ -89,8 +89,7 @@ export function keysetPage<R extends { id: string }>(
 export const COUNT_CAP = 10_000;
 
 /** `total` for page-style lists from a count taken with `take: COUNT_CAP + 1`. */
-export function cappedTotal(counted: number): { total: number; totalCapped: boolean } {
-  return counted > COUNT_CAP
-    ? { total: COUNT_CAP, totalCapped: true }
-    : { total: counted, totalCapped: false };
+/** `totalCapped: true` is added only when the cap was hit, so normal answers keep their old shape. */
+export function cappedTotal(counted: number): { total: number; totalCapped?: true } {
+  return counted > COUNT_CAP ? { total: COUNT_CAP, totalCapped: true } : { total: counted };
 }

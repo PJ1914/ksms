@@ -17,7 +17,7 @@ RUN npm install -g pnpm@12.21.0
 WORKDIR /app
 COPY . .
 RUN pnpm install --frozen-lockfile --prod --filter "@ksms/api..." \
- && mkdir -p apps/api/node_modules
+ && mkdir -p apps/api/node_modules packages/constants/node_modules packages/shared-types/node_modules packages/validation/node_modules
 
 # ---- runtime
 FROM node:24-slim AS runtime
@@ -30,6 +30,10 @@ WORKDIR /app
 # node_modules/@ksms/* to packages/*, so their package.json and dist come along at the same paths.
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/apps/api/node_modules ./apps/api/node_modules
+# A package may keep its own copy of a dependency that is not hoisted (validation -> zod).
+COPY --from=prod-deps /app/packages/constants/node_modules ./packages/constants/node_modules
+COPY --from=prod-deps /app/packages/shared-types/node_modules ./packages/shared-types/node_modules
+COPY --from=prod-deps /app/packages/validation/node_modules ./packages/validation/node_modules
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/packages/constants/package.json ./packages/constants/package.json
 COPY --from=build /app/packages/constants/dist ./packages/constants/dist

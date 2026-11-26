@@ -6,9 +6,9 @@ export interface ApiSuccess<T> {
   meta?: {
     page?: number;
     pageSize?: number;
-    /** Page-style lists: capped at 10,000 (`totalCapped` is then true). */
+    /** Page-style lists: capped at 10,000 (`totalCapped: true` is added only then). */
     total?: number;
-    totalCapped?: boolean;
+    totalCapped?: true;
     /** Keyset lists (`?paging=cursor`, then `?cursor=`): no total. */
     limit?: number;
     hasMore?: boolean;

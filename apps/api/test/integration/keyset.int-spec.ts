@@ -73,7 +73,7 @@ suite('Keyset pagination (real database)', () => {
 
     for (const order of ['asc', 'desc']) {
       const all = (await get(s, `/products?pageSize=100&order=${order}`).expect(200)).body;
-      expect(all.meta).toMatchObject({ total: 8, totalCapped: false });
+      expect(all.meta).toEqual({ page: 1, pageSize: 100, total: 8 }); // no totalCapped below the cap
 
       const seen: string[] = [];
       let res = (await get(s, `/products?paging=cursor&pageSize=3&order=${order}`).expect(200))
@@ -114,7 +114,7 @@ suite('Keyset pagination (real database)', () => {
       const res = (await get(s, `${path}?paging=cursor&pageSize=5`).expect(200)).body;
       expect(res.meta).toMatchObject({ limit: 5, hasMore: false, nextCursor: null });
       const paged = (await get(s, `${path}?page=1&pageSize=5`).expect(200)).body;
-      expect(paged.meta).toMatchObject({ page: 1, pageSize: 5, totalCapped: false });
+      expect(paged.meta).toEqual({ page: 1, pageSize: 5, total: 0 });
     }
   });
 });
