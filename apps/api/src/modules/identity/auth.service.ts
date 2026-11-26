@@ -12,6 +12,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BranchService } from '../organization/branch.service';
 import type { ChangePasswordDto, LoginDto, RegisterOwnerDto } from './auth.dto';
+import { LoginLockoutService } from './login-lockout.service';
 import { PasswordService } from './password.service';
 import { type ClientInfo, SessionService } from './session.service';
 
@@ -37,6 +38,7 @@ export class AuthService {
     private readonly sessions: SessionService,
     private readonly branches: BranchService,
     private readonly audit: AuditService,
+    private readonly lockout: LoginLockoutService,
   ) {}
 
   /** Creates the organization, first branch, system roles, the owner account and a first session in ONE transaction. */
@@ -129,16 +131,25 @@ export class AuthService {
         id: true,
         passwordHash: true,
         isActive: true,
+        failedLoginCount: true,
+        lockedUntil: true,
         memberships: {
           where: { status: 'ACTIVE', organization: { deletedAt: null } },
           select: { organizationId: true, organization: { select: { name: true } } },
         },
       },
     });
-    const passwordOk = await this.passwords.verifyOrDummy(user?.passwordHash, dto.password);
-    if (!user || !passwordOk || !user.isActive) {
+    // A locked account still pays for a full hash check, so timing and answer match a wrong password.
+    const locked = user !== null && this.lockout.isLocked(user);
+    const passwordOk = await this.passwords.verifyOrDummy(
+      locked ? null : user?.passwordHash,
+      dto.password,
+    );
+    if (!user || locked || !passwordOk || !user.isActive) {
+      if (user && !locked && !passwordOk) await this.lockout.recordFailure(user.id, meta);
       throw new AppException('INVALID_CREDENTIALS', 'Invalid mobile number/email or password', 401);
     }
+    await this.lockout.recordSuccess(user);
     if (user.memberships.length === 0) {
       throw new AppException('NO_ACTIVE_MEMBERSHIP', 'Your account is not active in any shop', 403);
     }

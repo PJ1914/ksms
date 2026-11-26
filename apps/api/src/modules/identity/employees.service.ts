@@ -164,6 +164,28 @@ export class EmployeesService {
     });
   }
 
+  /** Clears a temporary login lockout (FIXES F13) so the person can try again at once. */
+  async unlockLogin(t: TenantContext, id: string, meta: Meta) {
+    return this.prisma.$transaction(async (tx) => {
+      const before = await this.find(tx, t.organizationId, id);
+      const user = await tx.user.update({
+        where: { id: before.user.id },
+        data: { failedLoginCount: 0, lastFailedLoginAt: null, lockedUntil: null },
+        select: { id: true },
+      });
+      await this.audit.record(tx, {
+        organizationId: t.organizationId,
+        actorId: t.userId,
+        action: 'employee.unlock_login',
+        entityType: 'employee',
+        entityId: id,
+        after: { userId: user.id },
+        ...meta,
+      });
+      return view(await this.find(tx, t.organizationId, id));
+    });
+  }
+
   /** Always scoped by organization: another shop's member id is simply "not found". */
   private async find(
     db: Pick<PrismaService, 'organizationMember'>,

@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { DevicesService } from './devices.service';
 import { EmployeesService } from './employees.service';
 import { InvitationsService } from './invitations.service';
+import { LoginLockoutService } from './login-lockout.service';
 import { PasswordService } from './password.service';
 import { RolesService } from './roles.service';
 import { SessionService } from './session.service';
@@ -27,6 +28,7 @@ import {
   providers: [
     AuthService,
     PasswordService,
+    LoginLockoutService,
     SessionService,
     DevicesService,
     RolesService,

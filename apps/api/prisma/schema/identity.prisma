@@ -71,6 +71,10 @@ model User {
   isActive     Boolean   @default(true) @map("is_active")
   tokenVersion Int       @default(0) @map("token_version")
   lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(3)
+  // Failed-login tracking (FIXES F13): the database is the source of truth across API instances.
+  failedLoginCount  Int       @default(0) @map("failed_login_count")
+  lastFailedLoginAt DateTime? @map("last_failed_login_at") @db.Timestamptz(3)
+  lockedUntil       DateTime? @map("locked_until") @db.Timestamptz(3)
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 

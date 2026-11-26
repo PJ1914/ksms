@@ -28,6 +28,12 @@ import { HealthModule } from './modules/health/health.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { OrganizationModule } from './modules/organization/organization.module';
 
+/** The sign-in identifier of a login request, normalised; null for other requests. */
+function loginIdentifier(req: { body?: unknown }): string | null {
+  const id = (req.body as { identifier?: unknown } | undefined)?.identifier;
+  return typeof id === 'string' && id.trim() !== '' ? id.trim().toLowerCase().slice(0, 100) : null;
+}
+
 @Module({
   imports: [
     ConfigModule,
@@ -42,6 +48,17 @@ import { OrganizationModule } from './modules/organization/organization.module';
           ttl: 60_000,
           limit: env.AUTH_THROTTLE_LIMIT,
           skipIf: (ctx) => !Reflect.getMetadata(AUTH_THROTTLED, ctx.getHandler()),
+        },
+        {
+          // Same limit per sign-in identifier, whatever the IP, so one account cannot be sprayed from
+          // many addresses (FIXES F13). Unknown and known identifiers are treated alike.
+          name: 'auth-identifier',
+          ttl: 60_000,
+          limit: env.AUTH_THROTTLE_LIMIT,
+          skipIf: (ctx) =>
+            !Reflect.getMetadata(AUTH_THROTTLED, ctx.getHandler()) ||
+            loginIdentifier(ctx.switchToHttp().getRequest()) === null,
+          getTracker: (req) => `identifier:${loginIdentifier(req)}`,
         },
       ],
     }),

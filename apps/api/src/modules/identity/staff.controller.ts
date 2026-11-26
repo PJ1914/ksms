@@ -73,6 +73,14 @@ export class EmployeesController {
     return this.employees.deactivate(t, id, dto.reason, meta(req));
   }
 
+  @Post(':id/unlock-login')
+  @HttpCode(200)
+  @RequirePermission('employee.manage')
+  @ApiOperation({ summary: 'Clear a temporary lockout after too many wrong passwords' })
+  unlockLogin(@Tenant() t: TenantContext, @Param('id', uuid()) id: string, @Req() req: AppRequest) {
+    return this.employees.unlockLogin(t, id, meta(req));
+  }
+
   @Post(':id/reactivate')
   @HttpCode(200)
   @RequirePermission('employee.manage')
