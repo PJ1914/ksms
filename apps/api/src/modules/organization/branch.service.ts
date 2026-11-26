@@ -1,3 +1,4 @@
+import { SessionCache } from '../../common/auth/session-cache';
 import { DEFAULT_CASH_REGISTER_NAME } from '@ksms/constants';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
@@ -47,6 +48,7 @@ export class BranchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly cache: SessionCache,
   ) {}
 
   /**
@@ -93,6 +95,7 @@ export class BranchService {
   ) {
     return this.prisma.$transaction(async (tx) => {
       const branch = await this.createInTx(tx, organizationId, input);
+      this.cache.invalidateAll(); // owners now have one more branch
       await this.audit.record(tx, {
         organizationId,
         branchId: branch.id,
@@ -134,6 +137,9 @@ export class BranchService {
       });
       if (!before) throw new AppException('NOT_FOUND', 'Branch not found', 404);
       const after = await tx.branch.update({ where: { id }, data: input, select: BRANCH_SELECT });
+      // Switching a branch off must stop everyone working in it at once.
+      if (input.isActive !== undefined && input.isActive !== before.isActive)
+        this.cache.invalidateAll();
       await this.audit.record(tx, {
         organizationId,
         branchId: id,

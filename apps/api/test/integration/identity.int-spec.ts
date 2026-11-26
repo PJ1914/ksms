@@ -333,6 +333,22 @@ suite('Identity, RBAC and tenant isolation (real database)', () => {
       expect(s.revokedReason).toBe('refresh_token_reuse');
     });
 
+    it('the read cache never outlives logout or deactivation on this instance (F7)', async () => {
+      const o = await registerOwner();
+      await api(o.accessToken).get('/auth/me').expect(200); // fills the cache
+      await api(o.accessToken).get('/auth/me').expect(200); // served from it
+      await api(o.accessToken).post('/auth/logout').expect(204);
+      await api(o.accessToken).get('/auth/me').expect(401);
+
+      const owner = await registerOwner();
+      const cashier = await hire(owner, 'Cashier');
+      await api(cashier.accessToken).get('/auth/me').expect(200);
+      await api(cashier.accessToken).get('/auth/me').expect(200);
+      const memberId = await memberIdOf(owner, cashier.userId);
+      await api(owner.accessToken).post(`/employees/${memberId}/deactivate`, {}).expect(200);
+      await api(cashier.accessToken).get('/auth/me').expect(401);
+    });
+
     it('a session past its absolute lifetime cannot refresh, even if used yesterday (F5)', async () => {
       const o = await registerOwner();
       const s = await ctx.prisma.userSession.findFirstOrThrow({ where: { userId: o.userId } });

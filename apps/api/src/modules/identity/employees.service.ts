@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import type { TenantContext } from '../../common/auth/auth.types';
+import { SessionCache } from '../../common/auth/session-cache';
 import { AppException } from '../../common/errors/app.exception';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -54,6 +55,7 @@ export class EmployeesService {
     private readonly branches: BranchService,
     private readonly roles: RolesService,
     private readonly sessions: SessionService,
+    private readonly cache: SessionCache,
   ) {}
 
   async list(organizationId: string) {
@@ -99,6 +101,8 @@ export class EmployeesService {
         });
       }
 
+      // Role or branches changed: the cached membership must not serve this person's next requests.
+      this.cache.invalidateUser(before.user.id);
       const after = await this.find(tx, t.organizationId, id);
       await this.audit.record(tx, {
         organizationId: t.organizationId,

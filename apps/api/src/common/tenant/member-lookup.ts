@@ -17,4 +17,5 @@ export function findMember(prisma: PrismaService, organizationId: string, userId
   });
 }
 
-export type MemberLookup = ReturnType<typeof findMember>;
+export type MemberRow = Awaited<ReturnType<typeof findMember>>;
+export type MemberLookup = Promise<MemberRow>;

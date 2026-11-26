@@ -3,6 +3,7 @@ import { SignJWT } from 'jose';
 import request from 'supertest';
 import { AccessTokenService } from '../src/common/auth/access-token.service';
 import { RolePermissionService } from '../src/common/auth/role-permission.service';
+import { SessionCache } from '../src/common/auth/session-cache';
 import { PrismaMock, createPrismaMock, createTestApp, ids } from './test-app';
 
 const claims = { sub: ids.user, sid: ids.session, org: ids.org, v: 0 };
@@ -39,11 +40,48 @@ describe('API foundation (e2e, database mocked)', () => {
   });
   beforeEach(() => {
     jest.resetAllMocks();
+    app.get(SessionCache).reset();
     prisma.userSession.findUnique.mockResolvedValue(okSession());
     prisma.organizationMember.findUnique.mockResolvedValue(okMember());
   });
 
   const bearer = async (c = claims) => `Bearer ${await tokens.sign(c)}`;
+
+  describe('auth cache (FIXES F7)', () => {
+    it('a repeated GET with the same session runs no session or member query', async () => {
+      prisma.role.findUnique.mockResolvedValue({ name: 'X', isSystem: false, permissions: [] });
+      const auth = await bearer();
+      await http().get('/api/v1/test/no-policy').set('Authorization', auth); // fills the cache
+      await new Promise((r) => setImmediate(r));
+      prisma.userSession.findUnique.mockClear();
+      prisma.organizationMember.findUnique.mockClear();
+      await http().get('/api/v1/test/no-policy').set('Authorization', auth);
+      expect(prisma.userSession.findUnique).not.toHaveBeenCalled();
+      expect(prisma.organizationMember.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('writes always check the database', async () => {
+      const auth = await bearer();
+      await http().get('/api/v1/test/no-policy').set('Authorization', auth);
+      await new Promise((r) => setImmediate(r));
+      prisma.userSession.findUnique.mockClear();
+      // The session was revoked elsewhere: a write sees it at once, the cache notwithstanding.
+      prisma.userSession.findUnique.mockResolvedValue({ ...okSession(), revokedAt: new Date() });
+      await http().post('/api/v1/test/no-policy').set('Authorization', auth).expect(401);
+      expect(prisma.userSession.findUnique).toHaveBeenCalled();
+    });
+
+    it('an expired cached session is still refused', async () => {
+      const auth = await bearer();
+      prisma.userSession.findUnique.mockResolvedValue({
+        ...okSession(),
+        expiresAt: new Date(Date.now() + 200),
+      });
+      await http().get('/api/v1/test/no-policy').set('Authorization', auth);
+      await new Promise((r) => setTimeout(r, 250));
+      await http().get('/api/v1/test/no-policy').set('Authorization', auth).expect(401);
+    });
+  });
 
   describe('response compression (FIXES F2)', () => {
     it('gzips large JSON without changing its shape', async () => {

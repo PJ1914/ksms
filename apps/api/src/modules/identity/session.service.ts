@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { AccessTokenService } from '../../common/auth/access-token.service';
+import { SessionCache } from '../../common/auth/session-cache';
 import { absoluteExpiry, slidingExpiry } from '../../common/auth/session-lifetime';
 import { AppException } from '../../common/errors/app.exception';
 import { ENV, type Env } from '../../config/config.module';
@@ -25,6 +26,7 @@ export class SessionService {
     private readonly prisma: PrismaService,
     private readonly tokens: AccessTokenService,
     @Inject(ENV) private readonly env: Env,
+    private readonly cache: SessionCache,
   ) {}
 
   /** Sliding expiry for a session started at `createdAt` (a new session: now). */
@@ -178,6 +180,7 @@ export class SessionService {
   }
 
   async revoke(sessionId: string, reason: string, db: Db = this.prisma): Promise<void> {
+    this.cache.invalidateSession(sessionId);
     await db.userSession.updateMany({
       where: { id: sessionId, revokedAt: null },
       data: { revokedAt: new Date(), revokedReason: reason },
@@ -186,6 +189,7 @@ export class SessionService {
 
   /** Revokes every live session on one device. */
   async revokeAllForDevice(db: Db, deviceId: string, reason: string): Promise<number> {
+    this.cache.invalidateAll();
     const res = await db.userSession.updateMany({
       where: { deviceId, revokedAt: null },
       data: { revokedAt: new Date(), revokedReason: reason },
@@ -200,6 +204,7 @@ export class SessionService {
     reason: string,
     organizationId?: string,
   ): Promise<number> {
+    this.cache.invalidateUser(userId);
     const res = await db.userSession.updateMany({
       where: { userId, revokedAt: null, ...(organizationId ? { organizationId } : {}) },
       data: { revokedAt: new Date(), revokedReason: reason },

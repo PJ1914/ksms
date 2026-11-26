@@ -3,10 +3,11 @@ import { Reflector } from '@nestjs/core';
 import { ENV, type Env } from '../../config/config.module';
 import { PrismaService } from '../../database/prisma.service';
 import { AppException } from '../errors/app.exception';
-import { findMember } from '../tenant/member-lookup';
+import { findMember, type MemberLookup } from '../tenant/member-lookup';
 import { AccessTokenService } from './access-token.service';
 import type { AppRequest } from './auth.types';
 import { IS_PUBLIC } from './decorators';
+import { type CachedSession, SessionCache } from './session-cache';
 import { absoluteExpiry } from './session-lifetime';
 
 /**
@@ -21,6 +22,7 @@ export class AuthGuard implements CanActivate {
     private readonly tokens: AccessTokenService,
     private readonly prisma: PrismaService,
     @Inject(ENV) private readonly env: Env,
+    private readonly cache: SessionCache,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -37,21 +39,33 @@ export class AuthGuard implements CanActivate {
 
     const claims = await this.tokens.verify(match[1]);
 
-    // Membership is needed by the next guard; start it now so both queries run at the same time.
-    const memberLookup = findMember(this.prisma, claims.org, claims.sub);
-    memberLookup.catch(() => undefined); // errors surface where it is awaited (or are moot if auth fails)
-    const session = await this.prisma.userSession.findUnique({
-      where: { id: claims.sid },
-      select: {
-        userId: true,
-        organizationId: true,
-        revokedAt: true,
-        expiresAt: true,
-        createdAt: true,
-        user: { select: { isActive: true, tokenVersion: true } },
-      },
-    });
+    // Reads may use the short-lived cache; writes always check the database (see SessionCache).
+    const cacheable = req.method === 'GET' || req.method === 'HEAD';
+    const cached = cacheable ? this.cache.get(claims.sid) : undefined;
 
+    let session: CachedSession | null;
+    let memberLookup: MemberLookup;
+    if (cached) {
+      session = cached.session;
+      memberLookup = Promise.resolve(cached.member);
+    } else {
+      // Membership is needed by the next guard; start it now so both queries run at the same time.
+      memberLookup = findMember(this.prisma, claims.org, claims.sub);
+      memberLookup.catch(() => undefined); // errors surface where it is awaited (or are moot if auth fails)
+      session = await this.prisma.userSession.findUnique({
+        where: { id: claims.sid },
+        select: {
+          userId: true,
+          organizationId: true,
+          revokedAt: true,
+          expiresAt: true,
+          createdAt: true,
+          user: { select: { isActive: true, tokenVersion: true } },
+        },
+      });
+    }
+
+    // Every check runs on every request, cached or not.
     const now = Date.now();
     const valid =
       session !== null &&
@@ -63,6 +77,18 @@ export class AuthGuard implements CanActivate {
       session.user.isActive &&
       session.user.tokenVersion === claims.v;
     if (!valid) throw new AppException('UNAUTHORIZED', 'Session is no longer valid', 401);
+
+    if (!cached) {
+      // Cache only positive results: a valid session AND an active membership.
+      const validSession = session!;
+      memberLookup
+        .then((member) => {
+          if (member?.status === 'ACTIVE') {
+            this.cache.set(claims.sid, { session: validSession, member });
+          }
+        })
+        .catch(() => undefined);
+    }
 
     req.memberLookup = memberLookup;
     req.principal = { userId: claims.sub, sessionId: claims.sid, organizationId: claims.org };

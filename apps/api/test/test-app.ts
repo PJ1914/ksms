@@ -63,6 +63,11 @@ export class TestController {
     return { reached: true };
   }
 
+  @Post('no-policy')
+  noPolicyWrite() {
+    return { reached: true };
+  }
+
   @RequirePermission('sale.create')
   @Get('needs-sale')
   needsSale() {
