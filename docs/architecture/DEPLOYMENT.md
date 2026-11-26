@@ -33,6 +33,12 @@ flowchart LR
 - Migrations and backups use the **direct** URL from a CI job, never at app startup.
 - Phase 4 includes a concurrency test through the pooled URL; if it fails, checkout switches to the direct URL (ADR).
 
+## Connection pool (FIXES F3)
+
+Each API instance keeps its own `pg` pool, set by `DB_POOL_MAX` (default 5, 1–20), `DB_POOL_IDLE_MS` (default 10 s) and `DB_POOL_CONNECT_TIMEOUT_MS` (default 10 s; a request fails after this instead of hanging when the database cannot be reached).
+
+Tuning: `DB_POOL_MAX ≈ Neon pooler limit ÷ number of API instances`, leaving room for migrations, the retention cron and manual `psql`. On the free plan with one Render instance the default 5 is enough: a checkout holds one connection for its transaction and queues for up to `TRANSACTION_OPTIONS.maxWait` (15 s) when all are busy. Raise it only if logs show `Timed out fetching a new connection`.
+
 ## Runtime settings (decided in Phase 17)
 
 Min instances 1 (avoid cold start at the counter), concurrency ~40, graceful SIGTERM shutdown, `/api/v1/health` (liveness) and `/api/v1/health/ready` (DB check), secrets from Secret Manager, structured JSON logs to Cloud Logging.

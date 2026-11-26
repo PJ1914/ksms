@@ -23,6 +23,19 @@ describe('parseEnv', () => {
     expect(env.CORS_ORIGINS).toEqual(['http://a.com', 'http://b.com']);
   });
 
+  it('has bounded database pool settings (FIXES F3)', () => {
+    const env = parseEnv(valid);
+    expect(env.DB_POOL_MAX).toBe(5);
+    expect(env.DB_POOL_IDLE_MS).toBe(10_000);
+    expect(env.DB_POOL_CONNECT_TIMEOUT_MS).toBe(10_000);
+    expect(parseEnv({ ...valid, DB_POOL_MAX: '20' }).DB_POOL_MAX).toBe(20);
+    expect(() => parseEnv({ ...valid, DB_POOL_MAX: '0' })).toThrow(/DB_POOL_MAX/);
+    expect(() => parseEnv({ ...valid, DB_POOL_MAX: '21' })).toThrow(/DB_POOL_MAX/);
+    expect(() => parseEnv({ ...valid, DB_POOL_CONNECT_TIMEOUT_MS: '10' })).toThrow(
+      /DB_POOL_CONNECT_TIMEOUT_MS/,
+    );
+  });
+
   it('fails when DATABASE_URL is missing', () => {
     expect(() => parseEnv({ JWT_ACCESS_SECRET: valid.JWT_ACCESS_SECRET })).toThrow(/DATABASE_URL/);
   });

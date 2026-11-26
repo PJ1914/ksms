@@ -20,6 +20,10 @@ const envSchema = z.object({
     .refine((v) => v.startsWith('postgresql://') || v.startsWith('postgres://'), {
       message: 'DATABASE_URL must be a PostgreSQL connection string',
     }),
+  // Connection pool per API instance. Keep DB_POOL_MAX x instances under the Neon pooler's limit.
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(20).default(5),
+  DB_POOL_IDLE_MS: z.coerce.number().int().min(1000).max(600_000).default(10_000),
+  DB_POOL_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(10_000),
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
   REFRESH_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),

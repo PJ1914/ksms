@@ -13,6 +13,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       adapter: new PrismaPg(
         {
           connectionString: env.DATABASE_URL,
+          // Explicit pool limits: pg's defaults (10 connections, wait forever to connect) waste Neon
+          // connections and let a stuck connect hang a request.
+          max: env.DB_POOL_MAX,
+          idleTimeoutMillis: env.DB_POOL_IDLE_MS,
+          connectionTimeoutMillis: env.DB_POOL_CONNECT_TIMEOUT_MS,
           // The adapter's `schema` option only qualifies Prisma's own queries; raw SQL (row locks, idempotency
           // claims) would still hit "public". Setting search_path on the connection makes BOTH use the schema.
           // DATABASE_SCHEMA is for isolated test schemas and needs a direct (non-pooled) connection.
