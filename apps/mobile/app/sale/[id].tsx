@@ -82,7 +82,15 @@ export default function SaleScreen() {
   }
 
   return (
-    <Screen onRefresh={() => void reload(true)} refreshing={refreshing}>
+    <Screen
+      onRefresh={() => void reload(true)}
+      refreshing={refreshing}
+      footer={
+        can('sale.create') ? (
+          <Button title="Next bill" icon="add" onPress={() => router.replace('/sale/new')} />
+        ) : undefined
+      }
+    >
       <Stack.Screen options={{ title: s.saleNumber }} />
 
       {!cancelled ? (
@@ -212,8 +220,6 @@ export default function SaleScreen() {
           <Button title="Cancel this bill" variant="danger" onPress={() => setAsking(true)} />
         )
       ) : null}
-
-      <Button title="Start a new bill" onPress={() => router.replace('/sale/new')} />
     </Screen>
   );
 }

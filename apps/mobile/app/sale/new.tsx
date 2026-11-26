@@ -27,6 +27,8 @@ import { deleteData, newKey, postData } from '@/api/client';
 import type { SalePreview } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
 import { useCart } from '@/cart/CartProvider';
+import { ProductPicker } from './add-item';
+import { useShortcut } from '@/hooks/useShortcut';
 import {
   Avatar,
   Badge,
@@ -41,6 +43,7 @@ import {
   Screen,
   SectionTitle,
   MAX_FONT_SCALE,
+  useLayout,
 } from '@/components/ui';
 import { icons, illustrations } from '@/theme/art';
 import { isNetworkFailure } from '@/sync/backoff';
@@ -60,6 +63,8 @@ const METHODS = [
 
 export default function NewBillScreen() {
   const { can, branch } = useAuth();
+  const layout = useLayout();
+  const desktop = layout.mode === 'desktop';
   const { cart, update, remove, setBillDiscount, clear, checkoutKey } = useCart();
   const { db, holdBill } = useSync();
   const [payments, setPayments] = useState<PaymentEntry[]>([]);
@@ -204,7 +209,13 @@ export default function NewBillScreen() {
             : 'SPLIT'
         : 'SPLIT';
 
-  return (
+  // Desktop POS shortcuts: F4 customer, F8 hold, F9 or Ctrl+Enter take payment, F2 search.
+  useShortcut('F4', desktop ? () => router.push('/sale/customer') : undefined);
+  useShortcut('F8', desktop && !busy ? () => void hold() : undefined);
+  useShortcut('F9', desktop && !blocker ? () => void pay() : undefined);
+  useShortcut('Ctrl+Enter', desktop && !blocker ? () => void pay() : undefined);
+
+  const bill = (
     <Screen
       footer={
         <View>
@@ -283,8 +294,8 @@ export default function NewBillScreen() {
         </Text>
       </Pressable>
 
-      {/* Add items */}
-      <View style={styles.addRow}>
+      {/* Add items (on desktop the product list is already beside the bill) */}
+      <View style={[styles.addRow, desktop && { display: 'none' }]}>
         <Pressable
           accessibilityRole="button"
           onPress={() => router.push('/sale/add-item')}
@@ -653,6 +664,27 @@ export default function NewBillScreen() {
         </>
       )}
     </Screen>
+  );
+
+  if (!desktop) return bill;
+  return (
+    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: colors.background }}>
+      <View style={{ flex: 3, minWidth: 0 }}>
+        <ProductPicker embedded />
+      </View>
+      <View
+        style={{
+          flex: 2,
+          minWidth: 420,
+          maxWidth: 560,
+          borderLeftWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.surface,
+        }}
+      >
+        {bill}
+      </View>
+    </View>
   );
 }
 

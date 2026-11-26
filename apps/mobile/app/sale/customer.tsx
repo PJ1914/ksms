@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { FlatList, Text, View } from 'react-native';
 import { query } from '@/api/client';
 import type { CustomerRow } from '@/api/types';
+import { useAuth } from '@/auth/AuthProvider';
 import { useCart } from '@/cart/CartProvider';
 import {
   Avatar,
@@ -25,6 +26,7 @@ import { formatINR, isPositive } from '@/utils/currency';
 /** Choose who the bill is for. Walk-in customers must pay in full; a named customer can take credit (khata). */
 export default function ChooseCustomerScreen() {
   const { setCustomer, cart } = useCart();
+  const { can } = useAuth();
   const { db } = useSync();
   const [search, setSearch] = useState('');
   const list = usePagedList<CustomerRow>(
@@ -67,21 +69,46 @@ export default function ChooseCustomerScreen() {
             onEndReachedThreshold={0.5}
             onEndReached={() => void list.loadMore()}
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+            ListHeaderComponent={
+              search.trim() && can('customer.manage') ? (
+                <View style={{ marginBottom: 8 }}>
+                  <ListRow
+                    icon="person-add-outline"
+                    tint="green"
+                    title={`Add “${search.trim()}” as a new customer`}
+                    subtitle="Saves them and puts them on this bill"
+                    onPress={() =>
+                      router.push({
+                        pathname: '/customer-new',
+                        params: { name: search.trim(), forBill: '1' },
+                      })
+                    }
+                  />
+                </View>
+              ) : undefined
+            }
             ListEmptyComponent={
-              <EmptyState
-                art={illustrations.emptyCustomers}
-                title="No customers found"
-                note="Add the customer first, then choose them here."
-              />
+              search.trim() ? undefined : (
+                <EmptyState
+                  art={illustrations.emptyCustomers}
+                  title="No customers yet"
+                  note="Type a name above to add one."
+                />
+              )
             }
             ListFooterComponent={
-              <View style={{ marginTop: 12, marginBottom: 24 }}>
-                <Button
-                  title="Add a new customer"
-                  variant="secondary"
-                  onPress={() => router.push('/customer-new')}
-                />
-              </View>
+              can('customer.manage') ? (
+                <View style={{ marginTop: 12, marginBottom: 24 }}>
+                  <Button
+                    title="Add a new customer"
+                    icon="person-add-outline"
+                    variant="secondary"
+                    onPress={() =>
+                      router.push({ pathname: '/customer-new', params: { forBill: '1' } })
+                    }
+                  />
+                </View>
+              ) : undefined
             }
             renderItem={({ item }) => (
               <ListRow

@@ -1,6 +1,7 @@
 import { router, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { FlatList, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { quantityString } from '@ksms/validation';
 import { getData, query } from '@/api/client';
 import type { ProductDetail, ProductRow } from '@/api/types';
@@ -8,6 +9,7 @@ import { useCart } from '@/cart/CartProvider';
 import { CategoryChips, type CategoryChipItem } from '@/components/CategoryChips';
 import { ListFooter } from '@/components/ListFooter';
 import {
+  Badge,
   Button,
   Card,
   Choice,
@@ -30,7 +32,7 @@ import {
   searchCachedProducts,
 } from '@/sync/cache-store';
 import { useSync } from '@/sync/SyncProvider';
-import { colors } from '@/theme/colors';
+import { colors, radius, shadow } from '@/theme/colors';
 import { formatINR, isPositive } from '@/utils/currency';
 import { friendlyError } from '@/utils/errors';
 import { trimZeros } from '@/utils/format';
@@ -40,7 +42,16 @@ interface Quote {
   rounded: boolean;
 }
 
+/** Loose goods (weighed or measured) need a quantity; packets and pieces are added one at a time. */
+const LOOSE_UNITS = new Set(['kg', 'g', 'gm', 'l', 'ml', 'ltr', 'litre']);
+const isLoose = (unitCode: string) => LOOSE_UNITS.has(unitCode.toLowerCase());
+
 export default function AddItemScreen() {
+  return <ProductPicker />;
+}
+
+/** The product search + add list. `embedded` is the desktop POS: it sits beside the bill. */
+export function ProductPicker({ embedded }: { embedded?: boolean }) {
   const { cart, add } = useCart();
   const { db } = useSync();
   const [search, setSearch] = useState('');
@@ -60,27 +71,26 @@ export default function AddItemScreen() {
     }
   }, [db]);
 
+  /** How much of each product is already on the bill (shown on its row). */
+  const inBill = new Map<string, string>();
+  for (const l of cart.lines) {
+    inBill.set(l.productId, `${trimZeros(l.quantity)} ${l.unitCode}`);
+  }
+
+  function quickAdd(item: ProductRow) {
+    add({
+      productId: item.id,
+      name: item.name,
+      unitId: item.baseUnit.id,
+      unitCode: item.baseUnit.code,
+      quantity: '1',
+    });
+    setAdded(item.name);
+  }
+
   return (
-    <View style={pageStyle}>
-      <Stack.Screen
-        options={{
-          title: 'Add items',
-          headerRight: () => (
-            <Text
-              accessibilityRole="button"
-              onPress={() => router.back()}
-              style={{ color: colors.primary, fontWeight: '700', fontSize: 16 }}
-            >
-              Done ({cart.lines.length})
-            </Text>
-          ),
-        }}
-      />
-      {added ? (
-        <Card style={{ backgroundColor: colors.successSoft, borderColor: colors.success }}>
-          <Text style={{ color: colors.success, fontWeight: '600' }}>Added: {added}</Text>
-        </Card>
-      ) : null}
+    <View style={embedded ? styles.embedded : pageStyle}>
+      {embedded ? null : <Stack.Screen options={{ title: 'Add items' }} />}
       {selected ? (
         <Picker
           productId={selected}
@@ -98,11 +108,43 @@ export default function AddItemScreen() {
             onChangeText={setSearch}
             placeholder="Search name, SKU or barcode"
             onScan={() => router.push('/sale/scan')}
+            autoFocus={embedded}
           />
           <CategoryChips categories={cats.data ?? []} value={categoryId} onChange={setCategoryId} />
-          <Results search={search} categoryId={categoryId} onPick={setSelected} />
+          <Results
+            search={search}
+            categoryId={categoryId}
+            inBill={inBill}
+            onTap={(item) =>
+              item.basePrice && !isLoose(item.baseUnit.code) ? quickAdd(item) : setSelected(item.id)
+            }
+            onQuantity={(item) => setSelected(item.id)}
+          />
         </>
       )}
+
+      {!embedded && cart.lines.length > 0 ? (
+        <View style={styles.bar}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.barTitle}>
+              {cart.lines.length} item{cart.lines.length === 1 ? '' : 's'} on the bill
+            </Text>
+            {added ? (
+              <Text style={styles.barSub} numberOfLines={1}>
+                Added {added}
+              </Text>
+            ) : null}
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.back()}
+            style={({ pressed }) => [styles.barBtn, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={styles.barBtnText}>View bill</Text>
+            <Ionicons name="arrow-forward" size={18} color={colors.onPrimary} />
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -110,11 +152,15 @@ export default function AddItemScreen() {
 function Results({
   search,
   categoryId,
-  onPick,
+  inBill,
+  onTap,
+  onQuantity,
 }: {
   search: string;
   categoryId: string | null;
-  onPick: (id: string) => void;
+  inBill: Map<string, string>;
+  onTap: (item: ProductRow) => void;
+  onQuantity: (item: ProductRow) => void;
 }) {
   const { db } = useSync();
   const list = usePagedList<ProductRow>(
@@ -130,11 +176,13 @@ function Results({
           Offline — showing saved products from this phone.
         </Text>
       ) : null}
+      <Text style={styles.tip}>Tap a packet to add one. Tap again to add more.</Text>
       <ErrorText message={list.error} />
       <FlatList
         data={list.items}
         keyExtractor={(p) => p.id}
         keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: 96 }}
         onEndReachedThreshold={0.5}
         onEndReached={() => void list.loadMore()}
         ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
@@ -154,29 +202,57 @@ function Results({
             note="Check the spelling, or scan the barcode."
           />
         }
-        renderItem={({ item }) => (
-          <ListRow
-            leading={<IconTile art={categoryArt(item.name)} tint="mango" size={48} />}
-            title={item.name}
-            subtitle={item.sku}
-            right={
-              item.basePrice ? (
-                <Text style={{ fontWeight: '700' }}>
-                  {formatINR(item.basePrice)} / {item.baseUnit.code}
-                </Text>
-              ) : (
-                <Text style={{ color: colors.danger }}>No price</Text>
-              )
-            }
-            onPress={() => onPick(item.id)}
-          />
-        )}
+        renderItem={({ item }) => {
+          const qty = inBill.get(item.id);
+          const loose = isLoose(item.baseUnit.code);
+          return (
+            <ListRow
+              leading={<IconTile art={categoryArt(item.name)} tint="mango" size={48} />}
+              title={item.name}
+              subtitle={
+                item.basePrice
+                  ? `${formatINR(item.basePrice)} / ${item.baseUnit.code}`
+                  : 'No price set'
+              }
+              right={
+                <View style={styles.rowRight}>
+                  {qty ? <Badge text={`On bill: ${qty}`} tone="good" /> : null}
+                  {item.basePrice && !loose ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Choose quantity for ${item.name}`}
+                      onPress={() => onQuantity(item)}
+                      hitSlop={8}
+                      style={styles.qtyBtn}
+                    >
+                      <Text style={styles.qtyBtnText}>Qty</Text>
+                    </Pressable>
+                  ) : null}
+                  <View style={[styles.addBtn, !item.basePrice && { opacity: 0.4 }]}>
+                    <Ionicons
+                      name={loose ? 'scale-outline' : 'add'}
+                      size={22}
+                      color={colors.onPrimary}
+                    />
+                  </View>
+                </View>
+              }
+              onPress={() => onTap(item)}
+            />
+          );
+        }}
       />
     </>
   );
 }
 
-/** Choose the unit and the quantity; the price shown is the server's price for exactly that quantity. */
+const QUICK_LOOSE = ['0.25', '0.5', '1', '2', '5'] as const;
+const QUICK_COUNT = ['1', '2', '3', '5', '10'] as const;
+
+/**
+ * Choose the unit and the quantity. Adding does not wait for the price: the bill screen asks the
+ * server to price every line (the same code checkout uses), so the quote here is only a preview.
+ */
 function Picker({
   productId,
   onAdd,
@@ -209,17 +285,15 @@ function Picker({
   const [quantity, setQuantity] = useState('1');
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
-  const [quoteOffline, setQuoteOffline] = useState(false);
 
   const saleUnits = p?.conversions.filter((c) => c.isSaleUnit) ?? [];
   const chosen = unitId ?? saleUnits.find((c) => c.isBase)?.unitId ?? saleUnits[0]?.unitId ?? null;
   const qtyOk = quantityString.safeParse(quantity.trim()).success && isPositive(quantity);
 
-  // The price comes from the server's own pricing rules for this exact quantity.
+  // A live price preview from the server's pricing rules for this exact quantity.
   useEffect(() => {
     setQuote(null);
     setQuoteError(null);
-    setQuoteOffline(false);
     if (!chosen || !qtyOk) return;
     let alive = true;
     const t = setTimeout(() => {
@@ -228,15 +302,9 @@ function Picker({
       )
         .then((q) => alive && setQuote(q))
         .catch((e) => {
-          if (!alive) return;
-          if (isNetworkFailure(e)) {
-            setQuoteOffline(true);
-            setQuoteError(null);
-          } else {
-            setQuoteError(friendlyError(e));
-          }
+          if (alive && !isNetworkFailure(e)) setQuoteError(friendlyError(e));
         });
-    }, 300);
+    }, 250);
     return () => {
       alive = false;
       clearTimeout(t);
@@ -246,11 +314,29 @@ function Picker({
   if (loading) return <Loading />;
   if (!p) return <ErrorText message={error ?? 'Could not load this product.'} />;
   const unit = saleUnits.find((c) => c.unitId === chosen);
+  const quick = unit && isLoose(unit.unitCode) ? QUICK_LOOSE : QUICK_COUNT;
+
+  const addNow = () =>
+    onAdd(
+      {
+        productId: p.id,
+        name: p.name,
+        unitId: chosen!,
+        unitCode: unit!.unitCode,
+        quantity: quantity.trim(),
+      },
+      `${p.name}, ${trimZeros(quantity.trim())} ${unit!.unitCode}`,
+    );
 
   return (
     <Card>
-      <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>{p.name}</Text>
-      <Text style={{ color: colors.textMuted, marginBottom: 12 }}>{p.sku}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        <IconTile art={categoryArt(p.name)} tint="mango" size={52} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{p.name}</Text>
+          <Text style={{ color: colors.textMuted }}>{p.sku}</Text>
+        </View>
+      </View>
       {saleUnits.length === 0 ? (
         <ErrorText message="This product has no unit set up for selling." />
       ) : (
@@ -263,12 +349,28 @@ function Picker({
               onChange={setUnitId}
             />
           ) : null}
+          <View style={styles.chips}>
+            {quick.map((q) => (
+              <Pressable
+                key={q}
+                accessibilityRole="button"
+                accessibilityState={{ selected: quantity.trim() === q }}
+                onPress={() => setQuantity(q)}
+                style={[styles.chip, quantity.trim() === q && styles.chipOn]}
+              >
+                <Text style={[styles.chipText, quantity.trim() === q && styles.chipTextOn]}>
+                  {q} {unit?.unitCode ?? ''}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
           <Field
-            label={`Quantity${unit ? ` (${unit.unitCode})` : ''}`}
+            label={`Or type the quantity${unit ? ` (${unit.unitCode})` : ''}`}
             value={quantity}
             onChangeText={setQuantity}
             keyboardType="decimal-pad"
-            autoFocus
+            selectTextOnFocus
+            onSubmitEditing={() => qtyOk && chosen && addNow()}
             hint={
               unit && !unit.isBase
                 ? `1 ${unit.unitCode} = ${trimZeros(unit.factorToBase)} ${p.baseUnit.code}`
@@ -277,36 +379,78 @@ function Picker({
           />
           {quote ? (
             <Text
-              style={{ fontSize: 22, fontWeight: '700', color: colors.primary, marginBottom: 8 }}
+              style={{ fontSize: 22, fontWeight: '800', color: colors.primary, marginBottom: 4 }}
             >
               <Money value={quote.amount} />
             </Text>
-          ) : quoteOffline ? (
-            <Text style={{ color: colors.warning, fontSize: 13, marginBottom: 8 }}>
-              Offline — item will be saved on your draft bill and priced by the server before
-              checkout.
-            </Text>
           ) : null}
           <ErrorText message={quoteError ?? (qtyOk ? null : 'Enter a quantity, like 1 or 0.5.')} />
-          <Button
-            title="Add to bill"
-            disabled={(!quote && !quoteOffline) || !chosen || !qtyOk}
-            onPress={() =>
-              onAdd(
-                {
-                  productId: p.id,
-                  name: p.name,
-                  unitId: chosen!,
-                  unitCode: unit!.unitCode,
-                  quantity: quantity.trim(),
-                },
-                `${p.name}, ${trimZeros(quantity.trim())} ${unit!.unitCode}`,
-              )
-            }
-          />
+          <Button title="Add to bill" icon="add" disabled={!chosen || !qtyOk} onPress={addNow} />
         </>
       )}
-      <Button title="Choose another item" variant="secondary" onPress={onCancel} />
+      <Button title="Back to items" variant="secondary" onPress={onCancel} />
     </Card>
   );
 }
+
+const styles = StyleSheet.create({
+  embedded: { flex: 1, minWidth: 0, paddingHorizontal: 24, paddingTop: 16 },
+  tip: { fontSize: 12, color: colors.textMuted, marginBottom: 8 },
+  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  qtyBtn: {
+    minHeight: 40,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: colors.primarySoft,
+    justifyContent: 'center',
+  },
+  qtyBtnText: { color: colors.primary, fontWeight: '800', fontSize: 13 },
+  addBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bar: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.text,
+    borderRadius: radius.lg,
+    paddingVertical: 10,
+    paddingLeft: 16,
+    paddingRight: 10,
+    ...shadow.raised,
+  },
+  barTitle: { color: colors.surface, fontWeight: '800', fontSize: 15 },
+  barSub: { color: '#B8C7BE', fontSize: 12, marginTop: 1 },
+  barBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 48,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+  },
+  barBtnText: { color: colors.onPrimary, fontWeight: '800', fontSize: 15 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  chip: {
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+  },
+  chipOn: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  chipText: { fontSize: 15, fontWeight: '700', color: colors.text },
+  chipTextOn: { color: colors.primary },
+});

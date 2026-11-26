@@ -72,7 +72,8 @@ function Chip({
 }
 
 const styles = StyleSheet.create({
-  bar: { flexGrow: 0, marginBottom: 12 },
+  // flexShrink: 0 stops the flex:1 list below from squashing the row and clipping the chips.
+  bar: { flexGrow: 0, flexShrink: 0, minHeight: 48, marginBottom: 12 },
   content: { gap: 8, paddingVertical: 2, paddingRight: 8 },
   chip: {
     flexDirection: 'row',

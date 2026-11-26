@@ -607,11 +607,13 @@ export function SearchBox({
   onChangeText,
   placeholder,
   onScan,
+  autoFocus,
 }: {
   value: string;
   onChangeText: (t: string) => void;
   placeholder: string;
   onScan?: () => void;
+  autoFocus?: boolean;
 }) {
   return (
     <View style={styles.searchRow}>
@@ -624,6 +626,7 @@ export function SearchBox({
           placeholder={placeholder}
           placeholderTextColor={colors.textMuted}
           style={styles.search}
+          autoFocus={autoFocus}
           autoCorrect={false}
           returnKeyType="search"
           accessibilityLabel={placeholder}
