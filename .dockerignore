@@ -2,5 +2,17 @@ node_modules
 **/node_modules
 **/dist
 .git
+.github
 .env
 **/.env
+**/.env.*
+!**/.env.example
+docs
+**/*.md
+**/test
+**/*.spec.ts
+**/coverage
+apps/api/src/generated
+apps/mobile/assets
+apps/mobile/android
+apps/mobile/ios
