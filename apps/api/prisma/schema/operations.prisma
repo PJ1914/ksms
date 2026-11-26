@@ -99,6 +99,7 @@ model Notification {
 
   @@index([organizationId, userId, readAt])
   @@index([organizationId, createdAt])
+  @@index([readAt]) // retention purge (FIXES F4)
   @@map("notifications")
 }
 

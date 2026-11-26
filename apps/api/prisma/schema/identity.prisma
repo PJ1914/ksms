@@ -202,6 +202,8 @@ model UserSession {
 
   @@index([userId, revokedAt])
   @@index([previousTokenHash])
+  @@index([expiresAt]) // retention purge (FIXES F4)
+  @@index([revokedAt]) // retention purge (FIXES F4)
   @@map("user_sessions")
 }
 

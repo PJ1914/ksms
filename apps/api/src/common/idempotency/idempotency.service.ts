@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Prisma } from '../../generated/prisma/client';
@@ -6,6 +6,8 @@ import { PrismaService, TRANSACTION_OPTIONS } from '../../database/prisma.servic
 import { AppException } from '../errors/app.exception';
 
 const keySchema = z.uuid();
+/** Stored replay bodies above this size are logged (they are kept until the retention purge). */
+const LARGE_RESPONSE_BYTES = 50 * 1024;
 
 /** Stable JSON (sorted keys) so the same logical request always hashes the same. */
 function stableStringify(value: unknown): string {
@@ -36,6 +38,8 @@ export interface IdempotentResult<T> {
  */
 @Injectable()
 export class IdempotencyService {
+  private readonly logger = new Logger(IdempotencyService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /** Validates the client's Idempotency-Key header value. */
@@ -97,12 +101,20 @@ export class IdempotencyService {
         }
 
         const result = await work(tx);
+        const body = JSON.stringify(result ?? null);
+        if (body.length > LARGE_RESPONSE_BYTES) {
+          this.logger.warn({
+            msg: 'large idempotency response stored',
+            endpoint,
+            bytes: body.length,
+          });
+        }
         await tx.idempotencyRecord.update({
           where: { id: claimed[0]!.id },
           data: {
             status: 'COMPLETED',
             responseStatus: 201,
-            responseBody: JSON.parse(JSON.stringify(result ?? null)) as Prisma.InputJsonValue,
+            responseBody: JSON.parse(body) as Prisma.InputJsonValue,
             completedAt: new Date(),
           },
         });

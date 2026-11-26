@@ -27,6 +27,7 @@ const ALLOWED: Record<string, string[]> = {
   notifications: [],
   context: ['audit', 'organization', 'identity'],
   health: [],
+  retention: [],
 };
 
 function sourceFiles(dir: string): string[] {

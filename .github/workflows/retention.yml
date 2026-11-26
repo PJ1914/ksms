@@ -1,0 +1,57 @@
+name: Retention purge
+
+# FIXES F4: deletes expired idempotency keys, old sessions, old read notifications and finished sync
+# operations. Runs daily at 03:00 IST (21:30 UTC). Runs here (free) rather than as a Render cron job (paid),
+# and never inside the web server, which may be asleep or run several instances.
+#
+# Needs the repository secret RETENTION_DATABASE_URL (Neon POOLED url of production).
+# Settings > Secrets and variables > Actions > New repository secret.
+
+on:
+  schedule:
+    - cron: '30 21 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: retention
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  purge:
+    name: Purge expired rows
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: ${{ secrets.RETENTION_DATABASE_URL }}
+      # Not used by the purge, but the shared env validation requires a value.
+      JWT_ACCESS_SECRET: retention-job-does-not-sign-tokens-000000
+      NODE_ENV: production
+      DB_POOL_MAX: '2'
+    steps:
+      - name: Check the secret is configured
+        id: guard
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning::RETENTION_DATABASE_URL is not set; nothing was purged."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.skip != 'true'
+      - uses: pnpm/action-setup@v4
+        if: steps.guard.outputs.skip != 'true'
+      - uses: actions/setup-node@v4
+        if: steps.guard.outputs.skip != 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - if: steps.guard.outputs.skip != 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.guard.outputs.skip != 'true'
+        run: pnpm build
+      - name: Run the purge
+        if: steps.guard.outputs.skip != 'true'
+        working-directory: apps/api
+        run: node dist/purge.js
