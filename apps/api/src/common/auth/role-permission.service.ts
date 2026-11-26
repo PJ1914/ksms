@@ -7,7 +7,12 @@ export interface RolePermissions {
   keys: ReadonlySet<string>;
 }
 
-const TTL_MS = 30_000;
+/**
+ * Cache lifetime (FIXES F16). A role change is immediate on the instance that made it (`invalidate`)
+ * and on every instance for writes (the permission guard asks for `fresh` on POST/PUT/PATCH/DELETE);
+ * another instance may answer READS from the old permissions for at most this long.
+ */
+export const ROLE_CACHE_TTL_MS = 10_000;
 
 /** Loads a role's permissions with a short in-memory cache; invalidated immediately when a role changes. */
 @Injectable()
@@ -16,9 +21,12 @@ export class RolePermissionService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async get(roleId: string): Promise<RolePermissions> {
-    const hit = this.cache.get(roleId);
-    if (hit && hit.expires > Date.now()) return hit.value;
+  /** `fresh: true` skips the cache (and refreshes it): used for every write and other sensitive checks. */
+  async get(roleId: string, options: { fresh?: boolean } = {}): Promise<RolePermissions> {
+    if (!options.fresh) {
+      const hit = this.cache.get(roleId);
+      if (hit && hit.expires > Date.now()) return hit.value;
+    }
 
     const role = await this.prisma.role.findUnique({
       where: { id: roleId },
@@ -32,7 +40,7 @@ export class RolePermissionService {
       isOwner: role?.isSystem === true && role.name === 'Owner',
       keys: new Set(role?.permissions.map((p) => p.permission.key) ?? []),
     };
-    this.cache.set(roleId, { value, expires: Date.now() + TTL_MS });
+    this.cache.set(roleId, { value, expires: Date.now() + ROLE_CACHE_TTL_MS });
     return value;
   }
 

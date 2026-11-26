@@ -35,10 +35,14 @@ export class PermissionGuard implements CanActivate {
       throw new AppException('FORBIDDEN', 'This action is not available', 403);
     }
 
-    const tenant = ctx.switchToHttp().getRequest<AppRequest>().tenant;
+    const req = ctx.switchToHttp().getRequest<AppRequest>();
+    const tenant = req.tenant;
     if (!tenant) throw new AppException('FORBIDDEN', 'Tenant context missing', 403);
 
-    const perms = await this.roles.get(tenant.roleId);
+    // Writes always use the role as it is in the database now (FIXES F16); the fresh value also
+    // refreshes the cache, so permission checks later in the same request see it too.
+    const write = req.method !== 'GET' && req.method !== 'HEAD';
+    const perms = await this.roles.get(tenant.roleId, { fresh: write });
     if (!perms.isOwner && !required.every((k) => perms.keys.has(k))) {
       throw new AppException('FORBIDDEN', 'You do not have permission to do this', 403, {
         required,

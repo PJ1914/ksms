@@ -70,7 +70,7 @@ Online-first. Reads cached in SQLite with `updated_since` pull. Writes of non-fi
 
 ## 7. Auth
 
-Argon2id password hashes; 15-min JWT access tokens; rotating opaque refresh tokens stored hashed per device session; revocation by session. Guards: authentication → org/branch context → permission check.
+Argon2id password hashes; 15-min JWT access tokens; rotating opaque refresh tokens stored hashed per device session; revocation by session. Guards: authentication → org/branch context → permission check. Caches (FIXES F7, F16): the session and membership rows are cached for 15 s and role permissions for 10 s, per API instance, for reads only; every write re-reads both from the database. Changes are immediate on the instance that made them; another instance may serve reads from the old values for at most those times (TD-138, TD-144).
 
 ## 8. Deployment
 
