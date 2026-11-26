@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/auth/AuthProvider';
 import { colors, shadow } from '@/theme/colors';
+import { useLayout } from '@/components/ui';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -23,6 +24,7 @@ const TABS: { name: string; title: string; icon: IconName; active: IconName }[] 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const { can } = useAuth();
+  const layout = useLayout();
   return (
     <Tabs
       screenOptions={{
@@ -32,6 +34,7 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
         tabBarStyle: [
           styles.bar,
+          layout.mode !== 'phone' && styles.desktopHidden,
           { height: 68 + insets.bottom, paddingBottom: Math.max(insets.bottom, 10) },
         ],
         sceneStyle: { backgroundColor: colors.background },
@@ -107,4 +110,5 @@ const styles = StyleSheet.create({
     ...shadow.raised,
   },
   centerLabel: { fontSize: 11, fontWeight: '700', color: colors.primary, marginTop: 4 },
+  desktopHidden: { display: 'none' },
 });

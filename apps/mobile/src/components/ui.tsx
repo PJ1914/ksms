@@ -1,3 +1,5 @@
+import { createContext, useContext } from 'react';
+import { layoutMode } from './layout';
 import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
@@ -30,17 +32,22 @@ type IconName = React.ComponentProps<typeof Ionicons>['name'];
  * - text follows the phone's text-size setting, capped at MAX_FONT_SCALE so layouts stay readable.
  */
 export const CONTENT_MAX = 720;
-export const TABLET_MIN = 768;
+export const DESKTOP_CONTENT_MAX = 1440;
+export const NavigationWidth = createContext(0);
 export const MAX_FONT_SCALE = 1.35;
 
 export function useLayout() {
   const { width, height, fontScale } = useWindowDimensions();
-  const contentWidth = Math.min(width, CONTENT_MAX) - 40; // 20 dp side padding
+  const mode = layoutMode(width);
+  const navWidth = useContext(NavigationWidth);
+  const contentWidth =
+    Math.min(width - navWidth, mode === 'phone' ? CONTENT_MAX : DESKTOP_CONTENT_MAX) -
+    (mode === 'phone' ? 40 : 64);
   return {
     width,
     height,
     fontScale,
-    isTablet: Math.min(width, height) >= 600 || width >= TABLET_MIN,
+    mode,
     isSmall: width < 360,
     contentWidth,
     /** How many tiles of at least `minTile` dp fit in a row (clamped to [min, max]). */
@@ -68,7 +75,17 @@ export const pageStyle: ViewStyle = {
 
 /** Centres its children and caps their width on tablets. Use around FlatList pages. */
 export function Page({ children }: { children: React.ReactNode }) {
-  return <View style={styles.page}>{children}</View>;
+  const layout = useLayout();
+  return (
+    <View
+      style={[
+        styles.page,
+        layout.mode !== 'phone' && { maxWidth: DESKTOP_CONTENT_MAX, paddingHorizontal: 32 },
+      ]}
+    >
+      {children}
+    </View>
+  );
 }
 
 export function Field({
@@ -175,10 +192,15 @@ export function Screen({
   footer?: React.ReactNode;
   padded?: boolean;
 }) {
+  const layout = useLayout();
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
-        contentContainerStyle={padded ? styles.screenPad : { paddingBottom: 32 }}
+        contentContainerStyle={
+          padded
+            ? [styles.screenPad, layout.mode !== 'phone' && styles.desktopScreenPad]
+            : { paddingBottom: 32 }
+        }
         keyboardShouldPersistTaps="handled"
         refreshControl={
           onRefresh ? (
@@ -191,7 +213,9 @@ export function Screen({
           ) : undefined
         }
       >
-        <View style={styles.column}>{children}</View>
+        <View style={[styles.column, layout.mode !== 'phone' && styles.desktopColumn]}>
+          {children}
+        </View>
       </ScrollView>
       {footer ? (
         <View style={styles.footer}>
@@ -665,14 +689,16 @@ export function TabHeader({
   action?: { label: string; icon?: IconName; onPress: () => void };
 }) {
   const insets = useSafeAreaInsets();
+  const layout = useLayout();
   return (
     <View
       style={[
         styles.tabHeader,
+        layout.mode !== 'phone' && styles.desktopTabHeader,
         {
           paddingTop: insets.top + 14,
-          paddingLeft: 20 + insets.left,
-          paddingRight: 20 + insets.right,
+          paddingLeft: (layout.mode !== 'phone' ? 32 : 20) + insets.left,
+          paddingRight: (layout.mode !== 'phone' ? 32 : 20) + insets.right,
         },
       ]}
     >
@@ -955,6 +981,7 @@ const noShadow = { shadowOpacity: 0, elevation: 0 };
 
 const styles = StyleSheet.create({
   screenPad: { padding: 20, paddingBottom: 40 },
+  desktopScreenPad: { padding: 32, paddingBottom: 48 },
   field: { marginBottom: 16 },
   label: { fontSize: 13, fontWeight: '700', color: '#3D4C43', marginBottom: 8 },
   hint: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
@@ -1134,7 +1161,9 @@ const styles = StyleSheet.create({
     maxWidth: CONTENT_MAX,
     alignSelf: 'center',
   },
+  desktopTabHeader: { maxWidth: DESKTOP_CONTENT_MAX, paddingBottom: 20 },
   column: { width: '100%', maxWidth: CONTENT_MAX - 40, alignSelf: 'center' },
+  desktopColumn: { maxWidth: DESKTOP_CONTENT_MAX - 64 },
   hero: { borderRadius: radius.xl, padding: 18, marginBottom: 12 },
   heroLabel: { fontSize: 13, fontWeight: '700' },
   heroValue: { fontSize: 32, fontWeight: '800', letterSpacing: -0.4, marginTop: 2 },

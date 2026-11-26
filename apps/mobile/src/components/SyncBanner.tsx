@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { MAX_FONT_SCALE } from '@/components/ui';
+import { MAX_FONT_SCALE, useLayout } from '@/components/ui';
 import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSync } from '@/sync/SyncProvider';
@@ -7,8 +7,11 @@ import { colors } from '@/theme/colors';
 import { formatDateTime } from '@/utils/format';
 
 /** Compact status pill showing offline/syncing/pending/failed state. Tapping opens `/sync`. */
-export function SyncBanner() {
+export function SyncBanner({ inTopBar = false }: { inTopBar?: boolean }) {
+  const { mode } = useLayout();
   const { syncState, stats } = useSync();
+
+  if (!inTopBar && mode !== 'phone') return null;
 
   const hasFailed = stats.failedOutbox > 0;
   const hasPending = stats.pendingOutbox > 0;
@@ -60,8 +63,8 @@ export function SyncBanner() {
         borderWidth: 1,
         borderRadius: 12,
         paddingHorizontal: 12,
-        minHeight: 40,
-        marginBottom: 14,
+        minHeight: inTopBar ? 44 : 40,
+        marginBottom: inTopBar ? 0 : 14,
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>

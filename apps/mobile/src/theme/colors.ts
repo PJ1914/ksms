@@ -7,6 +7,7 @@ export const colors = {
   accentSoft: '#FFF1D6',
   background: '#F4F8F1',
   surface: '#FFFFFF',
+  scrim: 'rgba(21,36,27,0.44)',
   surfaceMuted: '#EEF4EF',
   text: '#15241B',
   textMuted: '#5B6B61',
