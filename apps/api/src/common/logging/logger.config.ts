@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Params } from 'nestjs-pino';
-import { CORRELATION_HEADER } from '@ksms/constants';
+import { API_PREFIX, CORRELATION_HEADER } from '@ksms/constants';
 import type { Env } from '../../config/env';
 
 const SAFE_ID = /^[A-Za-z0-9_-]{8,64}$/;
@@ -14,11 +14,22 @@ export function resolveCorrelationId(req: IncomingMessage, res: ServerResponse):
   return id;
 }
 
+const HEALTH_PATH = `/${API_PREFIX}/health`;
+
+/** `/api/v1/health` and `/api/v1/health/ready` (with or without a query string). */
+export function isHealthProbe(req: IncomingMessage): boolean {
+  const path = (req.url ?? '').split('?')[0]!;
+  return path === HEALTH_PATH || path.startsWith(`${HEALTH_PATH}/`);
+}
+
 export function loggerOptions(env: Env): Params {
   return {
     pinoHttp: {
       level: env.LOG_LEVEL,
       genReqId: resolveCorrelationId,
+      // Health probes (Render, uptime pinger) run every few seconds; logging them is pure cost.
+      autoLogging: { ignore: isHealthProbe },
+      // Request bodies are never logged: the default serializers keep only method, url, headers and ids.
       // never log credentials or tokens
       redact: {
         paths: [
