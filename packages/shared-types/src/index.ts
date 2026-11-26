@@ -3,7 +3,18 @@ export type DecimalString = string;
 
 export interface ApiSuccess<T> {
   data: T;
-  meta?: { page?: number; pageSize?: number; total?: number; nextCursor?: string | null };
+  meta?: {
+    page?: number;
+    pageSize?: number;
+    /** Page-style lists: capped at 10,000 (`totalCapped` is then true). */
+    total?: number;
+    totalCapped?: boolean;
+    /** Keyset lists (`?paging=cursor`, then `?cursor=`): no total. */
+    limit?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+    serverTime?: string;
+  };
 }
 
 export interface ApiErrorBody {

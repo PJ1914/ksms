@@ -2,7 +2,14 @@ import { Injectable } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import type { TenantContext } from '../../common/auth/auth.types';
 import { AppException } from '../../common/errors/app.exception';
-import { Paginated } from '../../common/pagination/paginated';
+import {
+  COUNT_CAP,
+  afterKeyset,
+  cappedTotal,
+  decodeKeyset,
+  keysetPage,
+} from '../../common/pagination/keyset';
+import { CursorPage, Paginated } from '../../common/pagination/paginated';
 import { timestampRange } from '../../common/utils/dates';
 import { PrismaService } from '../../database/prisma.service';
 import { descendantCategoryIds } from '../catalog/category-tree';
@@ -90,7 +97,9 @@ export class InventoryQueriesService {
         WHERE ${where}
         ORDER BY p.name ASC, p.id ASC
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
-      this.prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n ${from} WHERE ${where}`,
+      // Capped count (FIXES F12): never scans more than COUNT_CAP + 1 rows for a total.
+      this.prisma.$queryRaw<{ n: bigint }[]>`
+        SELECT count(*) AS n FROM (SELECT 1 ${from} WHERE ${where} LIMIT ${COUNT_CAP + 1}) capped`,
     ]);
 
     const items = rows.map((r) => {
@@ -119,7 +128,7 @@ export class InventoryQueriesService {
           : {}),
       };
     });
-    return new Paginated(items, { page, pageSize, total: Number(count[0]?.n ?? 0) });
+    return new Paginated(items, { page, pageSize, ...cappedTotal(Number(count[0]?.n ?? 0)) });
   }
 
   /** One product: balance, its batches with expiry status, and the latest movements. */
@@ -202,28 +211,47 @@ export class InventoryQueriesService {
       ...(q.type ? { type: q.type } : {}),
       ...(q.from || q.to ? { occurredAt: timestampRange(q.from, q.to) } : {}),
     };
+    const orderBy: Prisma.StockMovementOrderByWithRelationInput[] = [
+      { occurredAt: 'desc' },
+      { id: 'desc' },
+    ];
+    const include = {
+      batch: { select: { batchNumber: true } },
+      product: { select: { name: true, sku: true } },
+      createdBy: { select: { fullName: true } },
+    } satisfies Prisma.StockMovementInclude;
+    const listItem = (m: Prisma.StockMovementGetPayload<{ include: typeof include }>) => ({
+      ...this.movementView(m, includeCost),
+      product: m.product,
+      createdBy: m.createdBy.fullName,
+    });
+
+    // Keyset mode (FIXES F12): newest first, no OFFSET, no count.
+    if (q.paging === 'cursor' || q.cursor) {
+      const after = q.cursor
+        ? afterKeyset('occurredAt', 'desc', 'desc', decodeKeyset(q.cursor))
+        : {};
+      const rows = await this.prisma.stockMovement.findMany({
+        where: { AND: [where, after] },
+        orderBy,
+        take: pageSize + 1,
+        include,
+      });
+      const kp = keysetPage(rows, pageSize, (m) => m.occurredAt);
+      return new CursorPage(kp.rows.map(listItem), kp.meta);
+    }
+
     const [rows, total] = await Promise.all([
       this.prisma.stockMovement.findMany({
         where,
-        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: {
-          batch: { select: { batchNumber: true } },
-          product: { select: { name: true, sku: true } },
-          createdBy: { select: { fullName: true } },
-        },
+        include,
       }),
-      this.prisma.stockMovement.count({ where }),
+      this.prisma.stockMovement.count({ where, take: COUNT_CAP + 1 }),
     ]);
-    return new Paginated(
-      rows.map((m) => ({
-        ...this.movementView(m, includeCost),
-        product: m.product,
-        createdBy: m.createdBy.fullName,
-      })),
-      { page, pageSize, total },
-    );
+    return new Paginated(rows.map(listItem), { page, pageSize, ...cappedTotal(total) });
   }
 
   /** Batches that are expired or expire within N days (default 30), soonest first. */

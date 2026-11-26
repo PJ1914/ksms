@@ -1,3 +1,4 @@
+import { KeysetQuery } from '../../common/pagination/keyset.dto';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -124,7 +125,7 @@ export class UpdateProductDto {
   @IsOptional() @IsInt() @Min(1) version?: number;
 }
 
-export class ListProductsQuery {
+export class ListProductsQuery extends KeysetQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize?: number;
   /** Matches name, SKU or the start of a barcode. */

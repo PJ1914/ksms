@@ -1,3 +1,4 @@
+import { KeysetQuery } from '../../common/pagination/keyset.dto';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -89,7 +90,7 @@ export const MOVEMENT_TYPES = [
   'TRANSFER_OUT',
 ] as const;
 
-export class MovementsQuery {
+export class MovementsQuery extends KeysetQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize?: number;
   @IsOptional() @IsUUID() productId?: string;

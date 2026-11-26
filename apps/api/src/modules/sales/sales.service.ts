@@ -6,7 +6,14 @@ import { AppException } from '../../common/errors/app.exception';
 import { DomainError } from '../../common/errors/domain.error';
 import { IdempotencyService } from '../../common/idempotency/idempotency.service';
 import { DocumentNumberService } from '../../common/numbering/document-number.service';
-import { Paginated } from '../../common/pagination/paginated';
+import {
+  COUNT_CAP,
+  afterKeyset,
+  cappedTotal,
+  decodeKeyset,
+  keysetPage,
+} from '../../common/pagination/keyset';
+import { CursorPage, Paginated } from '../../common/pagination/paginated';
 import { timestampRange } from '../../common/utils/dates';
 import { uuidv7 } from '../../common/utils/ids';
 import type { Db } from '../../database/db.types';
@@ -671,34 +678,48 @@ export class SalesService {
       ...(q.q ? { saleNumber: { contains: q.q, mode: 'insensitive' } } : {}),
       ...(q.from || q.to ? { soldAt: timestampRange(q.from, q.to) } : {}),
     };
+    const orderBy: Prisma.SaleOrderByWithRelationInput[] = [{ soldAt: 'desc' }, { id: 'desc' }];
+    const include = {
+      customer: { select: { id: true, name: true, phone: true } },
+      _count: { select: { items: true } },
+    } satisfies Prisma.SaleInclude;
+    const listItem = (s: Prisma.SaleGetPayload<{ include: typeof include }>) => ({
+      id: s.id,
+      saleNumber: s.saleNumber,
+      status: s.status,
+      soldAt: s.soldAt,
+      customer: s.customer,
+      lines: s._count.items,
+      total: m2(s.total),
+      paidTotal: m2(s.paidTotal),
+      creditAmount: m2(s.creditAmount),
+      returnedTotal: m2(s.returnedTotal),
+    });
+
+    // Keyset mode (FIXES F12): newest first, no OFFSET, no count.
+    if (q.paging === 'cursor' || q.cursor) {
+      const after = q.cursor ? afterKeyset('soldAt', 'desc', 'desc', decodeKeyset(q.cursor)) : {};
+      const rows = await this.prisma.sale.findMany({
+        where: { AND: [where, after] },
+        orderBy,
+        take: pageSize + 1,
+        include,
+      });
+      const kp = keysetPage(rows, pageSize, (s) => s.soldAt);
+      return new CursorPage(kp.rows.map(listItem), kp.meta);
+    }
+
     const [rows, total] = await Promise.all([
       this.prisma.sale.findMany({
         where,
-        orderBy: [{ soldAt: 'desc' }, { id: 'desc' }],
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: {
-          customer: { select: { id: true, name: true, phone: true } },
-          _count: { select: { items: true } },
-        },
+        include,
       }),
-      this.prisma.sale.count({ where }),
+      this.prisma.sale.count({ where, take: COUNT_CAP + 1 }),
     ]);
-    return new Paginated(
-      rows.map((s) => ({
-        id: s.id,
-        saleNumber: s.saleNumber,
-        status: s.status,
-        soldAt: s.soldAt,
-        customer: s.customer,
-        lines: s._count.items,
-        total: m2(s.total),
-        paidTotal: m2(s.paidTotal),
-        creditAmount: m2(s.creditAmount),
-        returnedTotal: m2(s.returnedTotal),
-      })),
-      { page, pageSize, total },
-    );
+    return new Paginated(rows.map(listItem), { page, pageSize, ...cappedTotal(total) });
   }
 
   /** The bill as stored. Purchase cost is NOT shown here (it belongs to reports). */

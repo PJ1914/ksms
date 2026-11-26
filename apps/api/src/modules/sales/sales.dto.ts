@@ -1,3 +1,4 @@
+import { KeysetQuery } from '../../common/pagination/keyset.dto';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -99,7 +100,7 @@ export class PreviewSaleDto {
   payments?: SalePaymentDto[];
 }
 
-export class SalesQuery {
+export class SalesQuery extends KeysetQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize?: number;
   @IsOptional() @Matches(DATE) from?: string;

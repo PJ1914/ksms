@@ -303,3 +303,11 @@ Routes: `GET /sync/products`, `GET /sync/categories`, `GET /sync/units` (need `p
 | 404  | `NOTIFICATION_NOT_FOUND` | No such notification for this org/user |
 
 Routes: `GET /notifications`, `GET /notifications/unread-count`, `POST /notifications/:id/read`, `POST /notifications/read-all` (all `@AuthenticatedOnly()`), and `POST /notifications/check-alerts` (`@RequireBranch()`, needs `stock.read`).
+
+## Keyset paging and capped totals (FIXES F12)
+
+`GET /products`, `GET /sales` and `GET /inventory/movements` accept `?paging=cursor` (first page) and then `?cursor=<meta.nextCursor>`, with `pageSize` as the page length. The answer is `{ data, meta: { limit, hasMore, nextCursor, serverTime } }`: no total and no `OFFSET`, so page 2,000 costs the same as page 1. The cursor is opaque (base64url of the last row's sort value and id); a tampered one answers `400 INVALID_CURSOR`. It carries no shop id: every query is still filtered by the caller's organization and branch.
+
+Without these parameters `page` / `pageSize` work as before. Their `meta.total` is now **capped at 10,000** (`meta.totalCapped: true` when the real number is larger), on products, sales, stock movements and stock balances, so a total never scans more than 10,001 rows. The phone uses `total` only to decide whether to load more, so nothing changed for it.
+
+Measured on 50,000 products (Neon, `EXPLAIN ANALYZE`): page 1 0.10 ms; OFFSET 49,975 43.5 ms; keyset after row 49,975 0.10 ms; `count(*)` 12.4 ms; capped count 3.3 ms.

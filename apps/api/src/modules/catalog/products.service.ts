@@ -3,7 +3,14 @@ import { randomInt } from 'node:crypto';
 import Decimal from 'decimal.js';
 import { AppException } from '../../common/errors/app.exception';
 import { DomainError } from '../../common/errors/domain.error';
-import { Paginated } from '../../common/pagination/paginated';
+import {
+  COUNT_CAP,
+  afterKeyset,
+  cappedTotal,
+  decodeKeyset,
+  keysetPage,
+} from '../../common/pagination/keyset';
+import { CursorPage, Paginated } from '../../common/pagination/paginated';
 import type { Db } from '../../database/db.types';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '../../generated/prisma/client';
@@ -60,6 +67,36 @@ const SALE_INCLUDE = {
   prices: { orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.ProductInclude;
 export type SaleProduct = Prisma.ProductGetPayload<{ include: typeof SALE_INCLUDE }>;
+
+const LIST_INCLUDE = {
+  baseUnit: { select: { id: true, code: true } },
+  category: { select: { id: true, name: true } },
+  barcodes: { take: 1, orderBy: { createdAt: 'asc' }, select: { barcode: true } },
+  prices: { where: { quantity: 1, isActive: true }, select: { unitId: true, price: true } },
+} satisfies Prisma.ProductInclude;
+type ProductListRow = Prisma.ProductGetPayload<{ include: typeof LIST_INCLUDE }>;
+
+/** One row of the product list (same shape in page and cursor mode). */
+const listItem = (p: ProductListRow) => ({
+  id: p.id,
+  sku: p.sku,
+  name: p.name,
+  localName: p.localName,
+  type: p.type,
+  status: p.status,
+  baseUnit: p.baseUnit,
+  category: p.category,
+  mrp: fx(p.mrp, MONEY_SCALE),
+  minStockLevel: fx(p.minStockLevel, QTY_SCALE),
+  trackBatch: p.trackBatch,
+  trackExpiry: p.trackExpiry,
+  isTaxable: p.isTaxable,
+  gstRatePercent: fx(p.gstRatePercent, 4),
+  primaryBarcode: p.barcodes[0]?.barcode ?? null,
+  basePrice: fx(p.prices.find((x) => x.unitId === p.baseUnitId)?.price, MONEY_SCALE), // price of 1 base unit
+  version: p.version,
+  updatedAt: p.updatedAt,
+});
 
 /** The loaded product for a line, or the same 404 a single lookup gives. */
 export function requireForSale(products: Map<string, SaleProduct>, id: string): SaleProduct {
@@ -171,42 +208,37 @@ export class ProductsService {
           }
         : {}),
     };
+    const sort = q.sort ?? 'name';
+    const order = q.order ?? 'asc';
+    const include = LIST_INCLUDE;
+    const orderBy: Prisma.ProductOrderByWithRelationInput[] = [{ [sort]: order }, { id: 'asc' }];
+
+    // Keyset mode (FIXES F12): no OFFSET, no count; cost does not grow with depth.
+    if (q.paging === 'cursor' || q.cursor) {
+      const limit = q.pageSize ?? 25;
+      const after = q.cursor ? afterKeyset(sort, order, 'asc', decodeKeyset(q.cursor)) : {};
+      const rows = await this.prisma.product.findMany({
+        where: { AND: [where, after] },
+        orderBy,
+        take: limit + 1,
+        include,
+      });
+      const page = keysetPage(rows, limit, (p) => p[sort]);
+      return new CursorPage(page.rows.map(listItem), page.meta);
+    }
+
     const [rows, total] = await Promise.all([
       this.prisma.product.findMany({
         where,
-        orderBy: [{ [q.sort ?? 'name']: q.order ?? 'asc' }, { id: 'asc' }],
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: {
-          baseUnit: { select: { id: true, code: true } },
-          category: { select: { id: true, name: true } },
-          barcodes: { take: 1, orderBy: { createdAt: 'asc' }, select: { barcode: true } },
-          prices: { where: { quantity: 1, isActive: true }, select: { unitId: true, price: true } },
-        },
+        include,
       }),
-      this.prisma.product.count({ where }),
+      // Capped: a total never costs more than COUNT_CAP rows (the phone only needs "is there more").
+      this.prisma.product.count({ where, take: COUNT_CAP + 1 }),
     ]);
-    const items = rows.map((p) => ({
-      id: p.id,
-      sku: p.sku,
-      name: p.name,
-      localName: p.localName,
-      type: p.type,
-      status: p.status,
-      baseUnit: p.baseUnit,
-      category: p.category,
-      mrp: fx(p.mrp, MONEY_SCALE),
-      minStockLevel: fx(p.minStockLevel, QTY_SCALE),
-      trackBatch: p.trackBatch,
-      trackExpiry: p.trackExpiry,
-      isTaxable: p.isTaxable,
-      gstRatePercent: fx(p.gstRatePercent, 4),
-      primaryBarcode: p.barcodes[0]?.barcode ?? null,
-      basePrice: fx(p.prices.find((x) => x.unitId === p.baseUnitId)?.price, MONEY_SCALE), // price of 1 base unit
-      version: p.version,
-      updatedAt: p.updatedAt,
-    }));
-    return new Paginated(items, { page, pageSize, total });
+    return new Paginated(rows.map(listItem), { page, pageSize, ...cappedTotal(total) });
   }
 
   async get(organizationId: string, id: string) {
