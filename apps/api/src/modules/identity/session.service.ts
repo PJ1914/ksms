@@ -33,26 +33,7 @@ export class SessionService {
   async create(db: Db, userId: string, organizationId: string, client: ClientInfo) {
     let deviceId: string | null = null;
     if (client.deviceUid) {
-      const device = await db.device.upsert({
-        where: { organizationId_deviceUid: { organizationId, deviceUid: client.deviceUid } },
-        create: {
-          organizationId,
-          userId,
-          deviceUid: client.deviceUid,
-          name: client.deviceName,
-          appVersion: client.appVersion,
-          lastSeenAt: new Date(),
-        },
-        update: {
-          userId,
-          name: client.deviceName,
-          appVersion: client.appVersion,
-          lastSeenAt: new Date(),
-          revokedAt: null,
-        },
-        select: { id: true },
-      });
-      deviceId = device.id;
+      deviceId = await this.claimDevice(db, userId, organizationId, client.deviceUid, client);
     }
     const refreshToken = newRefreshToken();
     const session = await db.userSession.create({
@@ -69,6 +50,54 @@ export class SessionService {
       select: { id: true },
     });
     return { sessionId: session.id, refreshToken };
+  }
+
+  /**
+   * Finds or registers the phone for this user. Login never un-revokes a device and never moves a device
+   * to another user: a blocked phone is refused (`DEVICE_REVOKED`) and a phone registered to someone else
+   * is refused (`DEVICE_OWNED_BY_OTHER`) until the owner releases it. See TD-135.
+   */
+  private async claimDevice(
+    db: Db,
+    userId: string,
+    organizationId: string,
+    deviceUid: string,
+    client: ClientInfo,
+  ): Promise<string> {
+    // `update: {}` only claims the row (safe for two first logins at once); fields are set below once allowed.
+    const device = await db.device.upsert({
+      where: { organizationId_deviceUid: { organizationId, deviceUid } },
+      create: {
+        organizationId,
+        userId,
+        deviceUid,
+        name: client.deviceName,
+        appVersion: client.appVersion,
+        lastSeenAt: new Date(),
+      },
+      update: {},
+      select: { id: true, userId: true, revokedAt: true },
+    });
+    if (device.revokedAt !== null) {
+      throw new AppException(
+        'DEVICE_REVOKED',
+        'This device has been blocked. Ask the owner to re-enable it.',
+        403,
+      );
+    }
+    if (device.userId !== userId) {
+      throw new AppException(
+        'DEVICE_OWNED_BY_OTHER',
+        'This phone is registered to another user. Ask the owner to release it.',
+        403,
+      );
+    }
+    await db.device.update({
+      where: { id: device.id },
+      data: { name: client.deviceName, appVersion: client.appVersion, lastSeenAt: new Date() },
+      select: { id: true },
+    });
+    return device.id;
   }
 
   async signAccessToken(
@@ -143,6 +172,15 @@ export class SessionService {
       where: { id: sessionId, revokedAt: null },
       data: { revokedAt: new Date(), revokedReason: reason },
     });
+  }
+
+  /** Revokes every live session on one device. */
+  async revokeAllForDevice(db: Db, deviceId: string, reason: string): Promise<number> {
+    const res = await db.userSession.updateMany({
+      where: { deviceId, revokedAt: null },
+      data: { revokedAt: new Date(), revokedReason: reason },
+    });
+    return res.count;
   }
 
   /** Revokes every live session of a user, optionally only within one organization. */

@@ -17,6 +17,10 @@ export function friendlyError(e: unknown): string {
     switch (e.code) {
       case 'INVALID_CREDENTIALS':
         return 'Wrong mobile number or password.';
+      case 'DEVICE_REVOKED':
+        return 'This phone has been blocked. Ask the shop owner to re-enable it.';
+      case 'DEVICE_OWNED_BY_OTHER':
+        return 'This phone is registered to another user. Ask the shop owner to release it.';
       case 'VALIDATION_ERROR': {
         const first = Array.isArray(e.details)
           ? (e.details[0] as { field?: string; messages?: string[] } | undefined)

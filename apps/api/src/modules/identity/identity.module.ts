@@ -8,11 +8,22 @@ import { InvitationsService } from './invitations.service';
 import { PasswordService } from './password.service';
 import { RolesService } from './roles.service';
 import { SessionService } from './session.service';
-import { EmployeesController, InvitationsController, RolesController } from './staff.controller';
+import {
+  DevicesController,
+  EmployeesController,
+  InvitationsController,
+  RolesController,
+} from './staff.controller';
 
 @Module({
   imports: [OrganizationModule],
-  controllers: [AuthController, EmployeesController, RolesController, InvitationsController],
+  controllers: [
+    AuthController,
+    EmployeesController,
+    RolesController,
+    InvitationsController,
+    DevicesController,
+  ],
   providers: [
     AuthService,
     PasswordService,

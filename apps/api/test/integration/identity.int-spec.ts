@@ -412,6 +412,94 @@ suite('Identity, RBAC and tenant isolation (real database)', () => {
     });
   });
 
+  // ---------- B2. devices (FIXES F1) ----------
+  describe('devices: revoke, restore, release', () => {
+    const login = (identifier: string, deviceUid: string) =>
+      ctx.http().post('/api/v1/auth/login').send({ identifier, password: PW, deviceUid });
+    const deviceOf = (o: Session) =>
+      ctx.prisma.device.findFirstOrThrow({
+        where: { organizationId: o.organizationId, deviceUid: `device-${o.phone}` },
+      });
+
+    it('a revoked device cannot sign in again and its sessions end at once', async () => {
+      const o = await registerOwner();
+      const device = await deviceOf(o);
+      const second = await login(o.phone, `device-${o.phone}`).expect(200);
+
+      await api(o.accessToken).post(`/devices/${device.id}/revoke`).expect(200);
+      await api(second.body.data.accessToken).get('/auth/me').expect(401);
+
+      const before = await ctx.prisma.userSession.count({ where: { userId: o.userId } });
+      const refused = await login(o.phone, `device-${o.phone}`).expect(403);
+      expect(refused.body.error.code).toBe('DEVICE_REVOKED');
+      expect(await ctx.prisma.userSession.count({ where: { userId: o.userId } })).toBe(before);
+      const row = await ctx.prisma.device.findUniqueOrThrow({ where: { id: device.id } });
+      expect(row.revokedAt).not.toBeNull();
+
+      // A different phone still works for the same person.
+      await login(o.phone, `device-other-${o.phone}`).expect(200);
+    });
+
+    it("another user cannot take over someone else's phone record", async () => {
+      const o = await registerOwner();
+      const cashier = await hire(o, 'Cashier');
+      const device = await deviceOf(o);
+
+      const refused = await login(cashier.phone, `device-${o.phone}`).expect(403);
+      expect(refused.body.error.code).toBe('DEVICE_OWNED_BY_OTHER');
+      const row = await ctx.prisma.device.findUniqueOrThrow({ where: { id: device.id } });
+      expect(row.userId).toBe(o.userId);
+    });
+
+    it('only the owner path re-enables or releases a phone, and both are audited', async () => {
+      const o = await registerOwner();
+      const cashier = await hire(o, 'Cashier');
+      const device = await deviceOf(o);
+
+      await api(cashier.accessToken).post(`/devices/${device.id}/revoke`).expect(403);
+      await api(o.accessToken).post(`/devices/${device.id}/revoke`).expect(200);
+      // Revoking ended the owner's own session on that phone; sign in on another one.
+      const fresh = await login(o.phone, `device-admin-${o.phone}`).expect(200);
+      const owner = api(fresh.body.data.accessToken);
+
+      await owner.post(`/devices/${device.id}/release`).expect(409); // blocked: re-enable first
+      const restored = await owner.post(`/devices/${device.id}/restore`).expect(200);
+      expect(restored.body.data.revokedAt).toBeNull();
+      await login(o.phone, `device-${o.phone}`).expect(200);
+
+      await owner.post(`/devices/${device.id}/release`).expect(200);
+      await login(cashier.phone, `device-${o.phone}`).expect(200);
+      const listed = await owner.get('/devices').expect(200);
+      expect(listed.body.data.map((d: { id: string }) => d.id)).not.toContain(device.id);
+
+      const actions = await ctx.prisma.auditLog.findMany({
+        where: { organizationId: o.organizationId, entityId: device.id },
+        select: { action: true, actorId: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      expect(actions.map((a) => a.action)).toEqual([
+        'device.revoke',
+        'device.restore',
+        'device.release',
+      ]);
+      expect(actions.every((a) => a.actorId === o.userId)).toBe(true);
+    });
+
+    it("cannot list, revoke or restore another shop's phone (cross-tenant)", async () => {
+      const a = await registerOwner();
+      const b = await registerOwner();
+      const deviceA = await deviceOf(a);
+
+      for (const action of ['revoke', 'restore', 'release']) {
+        await api(b.accessToken).post(`/devices/${deviceA.id}/${action}`).expect(404);
+      }
+      const listed = await api(b.accessToken).get('/devices').expect(200);
+      expect(listed.body.data.map((d: { id: string }) => d.id)).not.toContain(deviceA.id);
+      const row = await ctx.prisma.device.findUniqueOrThrow({ where: { id: deviceA.id } });
+      expect(row.revokedAt).toBeNull();
+    });
+  });
+
   // ---------- C. invitations ----------
   describe('invitations', () => {
     it('shows the one-time code once, stores only its hash, and never lists it', async () => {

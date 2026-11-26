@@ -13,6 +13,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import type { AppRequest, TenantContext } from '../../common/auth/auth.types';
 import { RequirePermission, Tenant } from '../../common/auth/decorators';
+import { DevicesService } from './devices.service';
 import { EmployeesService } from './employees.service';
 import { InvitationsService } from './invitations.service';
 import { RolesService } from './roles.service';
@@ -77,6 +78,44 @@ export class EmployeesController {
   @RequirePermission('employee.manage')
   reactivate(@Tenant() t: TenantContext, @Param('id', uuid()) id: string, @Req() req: AppRequest) {
     return this.employees.reactivate(t, id, meta(req));
+  }
+}
+
+@ApiTags('Devices')
+@ApiBearerAuth()
+@Controller('devices')
+export class DevicesController {
+  constructor(private readonly devices: DevicesService) {}
+
+  @Get()
+  @RequirePermission('employee.read')
+  @ApiOperation({ summary: "List the shop's registered phones" })
+  list(@Tenant() t: TenantContext) {
+    return this.devices.list(t.organizationId);
+  }
+
+  @Post(':id/revoke')
+  @HttpCode(200)
+  @RequirePermission('employee.manage')
+  @ApiOperation({ summary: 'Block a phone (lost or stolen); ends every session on it' })
+  revoke(@Tenant() t: TenantContext, @Param('id', uuid()) id: string, @Req() req: AppRequest) {
+    return this.devices.revoke(t, id, meta(req));
+  }
+
+  @Post(':id/restore')
+  @HttpCode(200)
+  @RequirePermission('employee.manage')
+  @ApiOperation({ summary: 'Re-enable a blocked phone' })
+  restore(@Tenant() t: TenantContext, @Param('id', uuid()) id: string, @Req() req: AppRequest) {
+    return this.devices.restore(t, id, meta(req));
+  }
+
+  @Post(':id/release')
+  @HttpCode(200)
+  @RequirePermission('employee.manage')
+  @ApiOperation({ summary: 'Free a phone so a different user can sign in on it' })
+  release(@Tenant() t: TenantContext, @Param('id', uuid()) id: string, @Req() req: AppRequest) {
+    return this.devices.release(t, id, meta(req));
   }
 }
 
