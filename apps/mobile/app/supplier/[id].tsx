@@ -27,6 +27,11 @@ import { formatDateTime, words } from '@/utils/format';
 
 export default function SupplierScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  return <SupplierDetail id={id} />;
+}
+
+/** `embedded` is the desktop right-hand pane (no navigation header of its own). */
+export function SupplierDetail({ id, embedded }: { id: string; embedded?: boolean }) {
   const { can } = useAuth();
   const {
     data: s,
@@ -59,7 +64,7 @@ export default function SupplierScreen() {
 
   return (
     <Screen onRefresh={() => void reload(true)} refreshing={refreshing}>
-      <Stack.Screen options={{ title: s.name }} />
+      {embedded ? null : <Stack.Screen options={{ title: s.name }} />}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 }}>
         <Avatar name={s.name} size={56} />
         <View style={{ flex: 1 }}>

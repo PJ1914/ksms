@@ -28,6 +28,11 @@ import { formatINR, isPositive } from '@/utils/currency';
 
 export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  return <ProductDetailPane id={id} />;
+}
+
+/** `embedded` is the desktop right-hand pane (no navigation header of its own). */
+export function ProductDetailPane({ id, embedded }: { id: string; embedded?: boolean }) {
   const { can } = useAuth();
   const { data, loading, error, refreshing, reload } = useLoad(async () => {
     const [product, stock] = await Promise.all([
@@ -48,7 +53,7 @@ export default function ProductScreen() {
 
   return (
     <Screen onRefresh={() => void reload(true)} refreshing={refreshing}>
-      <Stack.Screen options={{ title: p.name }} />
+      {embedded ? null : <Stack.Screen options={{ title: p.name }} />}
       <ErrorText message={error} />
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 14 }}>

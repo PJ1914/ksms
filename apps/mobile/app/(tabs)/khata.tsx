@@ -4,6 +4,8 @@ import { FlatList, Text, View } from 'react-native';
 import { query } from '@/api/client';
 import type { CustomerRow } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
+import { CustomerDetail } from '../customer/[id]';
+import { MasterDetail, useOpenDetail } from '@/components/MasterDetail';
 import { ListFooter } from '@/components/ListFooter';
 import {
   Avatar,
@@ -31,6 +33,19 @@ const FILTERS = [
 ] as const;
 
 export default function KhataScreen() {
+  return (
+    <MasterDetail
+      renderDetail={(id) => <CustomerDetail id={id} embedded />}
+      emptyTitle="Choose a customer"
+      emptyNote="Their khata, bills and payments appear here."
+    >
+      <KhataList />
+    </MasterDetail>
+  );
+}
+
+function KhataList() {
+  const open = useOpenDetail('/customer/[id]');
   const { can } = useAuth();
   const { db } = useSync();
   const [filter, setFilter] = useState<Filter>('all');
@@ -141,9 +156,7 @@ export default function KhataScreen() {
                     )
                   }
                   rightSub={item.isActive ? undefined : 'Switched off'}
-                  onPress={() =>
-                    router.push({ pathname: '/customer/[id]', params: { id: item.id } })
-                  }
+                  onPress={() => open(item.id)}
                 />
               )}
             />

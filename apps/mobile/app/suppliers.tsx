@@ -17,6 +17,8 @@ import {
   Segmented,
 } from '@/components/ui';
 import { illustrations } from '@/theme/art';
+import { SupplierDetail } from './supplier/[id]';
+import { MasterDetail, useOpenDetail } from '@/components/MasterDetail';
 import { usePagedList } from '@/hooks/useLoad';
 import { absMoney, formatINR, isNegative, isPositive } from '@/utils/currency';
 
@@ -27,6 +29,19 @@ const FILTERS = [
 ] as const;
 
 export default function SuppliersScreen() {
+  return (
+    <MasterDetail
+      renderDetail={(id) => <SupplierDetail id={id} embedded />}
+      emptyTitle="Choose a supplier"
+      emptyNote="What you owe, purchases and payments appear here."
+    >
+      <SuppliersList />
+    </MasterDetail>
+  );
+}
+
+function SuppliersList() {
+  const open = useOpenDetail('/supplier/[id]');
   const { can } = useAuth();
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
@@ -84,7 +99,7 @@ export default function SuppliersScreen() {
                   )
                 }
                 rightSub={item.isActive ? undefined : 'Switched off'}
-                onPress={() => router.push({ pathname: '/supplier/[id]', params: { id: item.id } })}
+                onPress={() => open(item.id)}
               />
             )}
           />

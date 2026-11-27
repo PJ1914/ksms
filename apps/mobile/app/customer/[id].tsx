@@ -32,6 +32,11 @@ import { formatDateTime, words } from '@/utils/format';
 
 export default function CustomerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  return <CustomerDetail id={id} />;
+}
+
+/** `embedded` is the desktop right-hand pane (no navigation header of its own). */
+export function CustomerDetail({ id, embedded }: { id: string; embedded?: boolean }) {
   const { can } = useAuth();
   const {
     data: c,
@@ -88,7 +93,7 @@ export default function CustomerScreen() {
 
   return (
     <Screen onRefresh={() => void reload(true)} refreshing={refreshing}>
-      <Stack.Screen options={{ title: c.name }} />
+      {embedded ? null : <Stack.Screen options={{ title: c.name }} />}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 }}>
         <Avatar name={c.name} size={56} />
         <View style={{ flex: 1 }}>

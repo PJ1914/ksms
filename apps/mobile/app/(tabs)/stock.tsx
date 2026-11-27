@@ -1,4 +1,5 @@
-import { Alert, FlatList, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
@@ -6,6 +7,8 @@ import { getData, query } from '@/api/client';
 import type { ExpiringRow, ProductDetail, StockRow } from '@/api/types';
 import { BarcodeScannerModal } from '@/components/BarcodeScannerModal';
 import { CategoryChips, type CategoryChipItem } from '@/components/CategoryChips';
+import { ProductDetailPane } from '../product/[id]';
+import { MasterDetail, useOpenDetail } from '@/components/MasterDetail';
 import { ListFooter } from '@/components/ListFooter';
 import {
   Badge,
@@ -36,6 +39,18 @@ const FILTERS = [
 ] as const;
 
 export default function StockScreen() {
+  return (
+    <MasterDetail
+      renderDetail={(id) => <ProductDetailPane id={id} embedded />}
+      emptyTitle="Choose a product"
+      emptyNote="Its stock, prices and history appear here."
+    >
+      <StockListScreen />
+    </MasterDetail>
+  );
+}
+
+function StockListScreen() {
   const { can } = useAuth();
   const { db } = useSync();
   const [filter, setFilter] = useState<Filter>('all');
@@ -157,6 +172,9 @@ function StockList({
   search: string;
   categoryId: string | null;
 }) {
+  const { can } = useAuth();
+  const open = useOpenDetail('/product/[id]');
+  const canAdjust = can('stock.adjust');
   const list = usePagedList<StockRow>(
     `/inventory/balances${query({
       q: search.trim(),
@@ -214,20 +232,52 @@ function StockList({
             title={item.name}
             subtitle={item.sku}
             right={
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontWeight: '800',
-                  color: item.isLowStock ? colors.danger : colors.text,
-                }}
-              >
-                {trimZeros(item.quantityOnHand)} {item.baseUnitCode}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text
+                    style={{
+                      fontSize: 16,
+                      fontWeight: '800',
+                      color: item.isLowStock ? colors.danger : colors.text,
+                    }}
+                  >
+                    {trimZeros(item.quantityOnHand)} {item.baseUnitCode}
+                  </Text>
+                  {item.isLowStock ? (
+                    <Text style={{ fontSize: 12, color: colors.danger, fontWeight: '600' }}>
+                      Low stock
+                    </Text>
+                  ) : null}
+                </View>
+                {canAdjust ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Add stock for ${item.name}`}
+                    hitSlop={6}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/stock-adjust',
+                        params: { productId: item.productId, mode: 'ADD' },
+                      })
+                    }
+                    style={({ pressed }) => [
+                      {
+                        width: 44,
+                        height: 44,
+                        borderRadius: 14,
+                        backgroundColor: colors.primarySoft,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      },
+                      pressed && { opacity: 0.8 },
+                    ]}
+                  >
+                    <Ionicons name="add" size={22} color={colors.primary} />
+                  </Pressable>
+                ) : null}
+              </View>
             }
-            rightSub={item.isLowStock ? 'Low stock' : undefined}
-            onPress={() =>
-              router.push({ pathname: '/product/[id]', params: { id: item.productId } })
-            }
+            onPress={() => open(item.productId)}
           />
         )}
       />
@@ -236,6 +286,7 @@ function StockList({
 }
 
 function ExpiringList() {
+  const open = useOpenDetail('/product/[id]');
   const { data, loading, error, refreshing, reload } = useLoad(
     () => getData<ExpiringRow[]>('/inventory/expiring?withinDays=30'),
     [],
@@ -270,9 +321,7 @@ function ExpiringList() {
               />
             }
             rightSub={`${trimZeros(item.quantity)} ${item.product.baseUnitCode}`}
-            onPress={() =>
-              router.push({ pathname: '/product/[id]', params: { id: item.product.id } })
-            }
+            onPress={() => open(item.product.id)}
           />
         )}
       />
