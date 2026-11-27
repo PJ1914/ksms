@@ -269,6 +269,7 @@ export interface SalePreview {
 
 export interface OrganizationSettings {
   id: string;
+  businessType?: string;
   name: string;
   legalName: string | null;
   pan: string | null;
@@ -587,4 +588,72 @@ export interface Dashboard {
     monthToDate: { from: string; revenue: string; grossProfit: string; netProfit: string } | null;
     isEstimate: boolean;
   } | null;
+}
+
+// ---------------------------------------------------------------- staff and roles
+
+export interface BranchInfo {
+  id: string;
+  code: string;
+  name: string;
+  isActive?: boolean;
+}
+
+export interface Employee {
+  id: string;
+  status: 'ACTIVE' | 'DEACTIVATED' | string;
+  createdAt: string;
+  user: {
+    id: string;
+    fullName: string;
+    phone: string | null;
+    email: string | null;
+    isActive: boolean;
+    lastLoginAt: string | null;
+  };
+  role: { id: string; name: string };
+  isOwner: boolean;
+  branches: { id: string; code: string; name: string; isDefault: boolean }[];
+}
+
+export interface RoleInfo {
+  id: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  memberCount: number;
+  permissions: string[];
+}
+
+export interface PermissionInfo {
+  key: string;
+  module: string;
+  description: string;
+}
+
+export interface InvitationRow {
+  id: string;
+  phone: string;
+  email: string | null;
+  branchIds: string[];
+  expiresAt: string;
+  createdAt: string;
+  status: 'PENDING' | 'ACCEPTED' | 'REVOKED' | 'EXPIRED';
+  role: { id: string; name: string };
+}
+
+export interface CreatedInvitation {
+  id: string;
+  code: string;
+  phone: string;
+  expiresAt: string;
+}
+
+export interface SupplierStockNote {
+  id: string;
+  productId: string;
+  productName: string;
+  baseUnitCode: string;
+  quantity: string;
+  receivedAt: string;
 }

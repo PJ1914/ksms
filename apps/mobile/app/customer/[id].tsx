@@ -1,8 +1,9 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Linking, Text, View } from 'react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Decimal from 'decimal.js';
-import { moneyString } from '@ksms/validation';
+import { moneyString, normalizeIndianPhone, validateCustomerForm } from '@ksms/validation';
 import { getData, patchData, postData } from '@/api/client';
 import type { CustomerRow, LedgerEntry } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
@@ -48,6 +49,7 @@ export function CustomerDetail({ id, embedded }: { id: string; embedded?: boolea
   const canLedger = can('ledger.read');
   const ledger = usePagedList<LedgerEntry>(canLedger ? `/customers/${id}/ledger` : null, 25);
   const [limit, setLimit] = useState<string | null>(null);
+  const [edit, setEdit] = useState<{ name: string; phone: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -70,6 +72,28 @@ export function CustomerDetail({ id, embedded }: { id: string; embedded?: boolea
         version: customer.version,
       });
       setLimit(null);
+      void reload();
+    } catch (e) {
+      setProblem(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Change the name and mobile number. An empty mobile field removes the number. */
+  async function saveDetails() {
+    if (!edit) return;
+    const bad = validateCustomerForm({ name: edit.name, phone: edit.phone, creditLimit: '' });
+    if (bad) return setProblem(bad);
+    setBusy(true);
+    setProblem(null);
+    try {
+      await patchData(`/customers/${id}`, {
+        name: edit.name.trim(),
+        phone: edit.phone.trim() ? normalizeIndianPhone(edit.phone) : null,
+        version: customer.version,
+      });
+      setEdit(null);
       void reload();
     } catch (e) {
       setProblem(friendlyError(e));
@@ -103,6 +127,28 @@ export function CustomerDetail({ id, embedded }: { id: string; embedded?: boolea
           </Text>
         </View>
         {!c.isActive ? <Badge text="Switched off" tone="warn" /> : null}
+        {can('customer.manage') && !edit ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Edit name and mobile"
+            hitSlop={8}
+            onPress={() => {
+              setProblem(null);
+              setLimit(null);
+              setEdit({ name: c.name, phone: c.phone ?? '' });
+            }}
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              backgroundColor: colors.primarySoft,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons name="create-outline" size={22} color={colors.primary} />
+          </Pressable>
+        ) : null}
       </View>
 
       <Hero
@@ -153,24 +199,61 @@ export function CustomerDetail({ id, embedded }: { id: string; embedded?: boolea
       />
 
       {can('customer.manage') ? (
-        limit === null ? (
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <Button
-                title="Credit limit"
-                icon="speedometer-outline"
-                variant="secondary"
-                onPress={() => setLimit(c.creditLimit ?? '')}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button
-                title={c.isActive ? 'Switch off' : 'Switch on'}
-                icon={c.isActive ? 'pause-circle-outline' : 'play-circle-outline'}
-                variant="secondary"
-                onPress={toggleActive}
-                busy={busy}
-              />
+        edit ? (
+          <Card>
+            <Field
+              label="Name"
+              value={edit.name}
+              onChangeText={(name) => setEdit({ ...edit, name })}
+              autoCapitalize="words"
+            />
+            <Field
+              label="Mobile number (empty = none)"
+              value={edit.phone}
+              onChangeText={(phone) => setEdit({ ...edit, phone })}
+              keyboardType="phone-pad"
+              maxLength={14}
+            />
+            <ErrorText message={problem} />
+            <Button title="Save details" onPress={saveDetails} busy={busy} />
+            <Button
+              title="Cancel"
+              variant="secondary"
+              onPress={() => {
+                setEdit(null);
+                setProblem(null);
+              }}
+            />
+          </Card>
+        ) : limit === null ? (
+          <View style={{ gap: 10 }}>
+            <Button
+              title="Edit name and mobile"
+              icon="create-outline"
+              variant="secondary"
+              onPress={() => {
+                setProblem(null);
+                setEdit({ name: c.name, phone: c.phone ?? '' });
+              }}
+            />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  title="Credit limit"
+                  icon="speedometer-outline"
+                  variant="secondary"
+                  onPress={() => setLimit(c.creditLimit ?? '')}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  title={c.isActive ? 'Switch off' : 'Switch on'}
+                  icon={c.isActive ? 'pause-circle-outline' : 'play-circle-outline'}
+                  variant="secondary"
+                  onPress={toggleActive}
+                  busy={busy}
+                />
+              </View>
             </View>
           </View>
         ) : (
@@ -187,7 +270,7 @@ export function CustomerDetail({ id, embedded }: { id: string; embedded?: boolea
           </Card>
         )
       ) : null}
-      {limit === null ? <ErrorText message={problem} /> : null}
+      {limit === null && !edit ? <ErrorText message={problem} /> : null}
 
       {canLedger ? (
         <>

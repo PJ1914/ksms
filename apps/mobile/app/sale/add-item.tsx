@@ -2,7 +2,7 @@ import { router, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { quantityString } from '@ksms/validation';
+import { quantityString, type CartLine } from '@ksms/validation';
 import { getData, query } from '@/api/client';
 import type { ProductDetail, ProductRow } from '@/api/types';
 import { useCart } from '@/cart/CartProvider';
@@ -33,9 +33,10 @@ import {
 } from '@/sync/cache-store';
 import { useSync } from '@/sync/SyncProvider';
 import { colors, radius, shadow } from '@/theme/colors';
-import { formatINR, isPositive } from '@/utils/currency';
+import { formatINR, isPositive, stepDownOrRemove } from '@/utils/currency';
 import { friendlyError } from '@/utils/errors';
 import { trimZeros } from '@/utils/format';
+import { haptic } from '@/utils/haptics';
 
 interface Quote {
   amount: string;
@@ -52,7 +53,7 @@ export default function AddItemScreen() {
 
 /** The product search + add list. `embedded` is the desktop POS: it sits beside the bill. */
 export function ProductPicker({ embedded }: { embedded?: boolean }) {
-  const { cart, add } = useCart();
+  const { cart, add, update, remove } = useCart();
   const { db } = useSync();
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
@@ -77,7 +78,26 @@ export function ProductPicker({ embedded }: { embedded?: boolean }) {
     inBill.set(l.productId, `${trimZeros(l.quantity)} ${l.unitCode}`);
   }
 
+  /** The plain bill line a "+" adds to: the product in its own unit, with no special price or discount. */
+  const plainLines = new Map<string, CartLine>();
+  for (const l of cart.lines) {
+    if (l.discount === '' && l.unitPrice === '' && !plainLines.has(l.productId)) {
+      plainLines.set(l.productId, l);
+    }
+  }
+
+  /** "−" on a product row: one less, and at 1 the item comes off the bill. */
+  function stepDown(item: ProductRow) {
+    const line = plainLines.get(item.id);
+    if (!line) return;
+    haptic('tap');
+    const next = stepDownOrRemove(line.quantity);
+    if (next === null) remove(line.key);
+    else update(line.key, { quantity: next });
+  }
+
   function quickAdd(item: ProductRow) {
+    haptic('tap');
     add({
       productId: item.id,
       name: item.name,
@@ -96,6 +116,7 @@ export function ProductPicker({ embedded }: { embedded?: boolean }) {
           productId={selected}
           onCancel={() => setSelected(null)}
           onAdd={(line, label) => {
+            haptic('tap');
             add(line);
             setAdded(label);
             setSelected(null);
@@ -116,10 +137,11 @@ export function ProductPicker({ embedded }: { embedded?: boolean }) {
             search={search}
             categoryId={categoryId}
             inBill={inBill}
+            plainLines={plainLines}
             onTap={(item) =>
               item.basePrice && !isLoose(item.baseUnit.code) ? quickAdd(item) : setSelected(item.id)
             }
-            onQuantity={(item) => setSelected(item.id)}
+            onMinus={stepDown}
           />
         </>
       )}
@@ -155,15 +177,17 @@ function Results({
   search,
   categoryId,
   inBill,
+  plainLines,
   onTap,
-  onQuantity,
+  onMinus,
 }: {
   embedded?: boolean;
   search: string;
   categoryId: string | null;
   inBill: Map<string, string>;
+  plainLines: Map<string, CartLine>;
   onTap: (item: ProductRow) => void;
-  onQuantity: (item: ProductRow) => void;
+  onMinus: (item: ProductRow) => void;
 }) {
   const { db } = useSync();
   const list = usePagedList<ProductRow>(
@@ -179,9 +203,7 @@ function Results({
           Offline — showing saved products from this phone.
         </Text>
       ) : null}
-      {embedded ? null : (
-        <Text style={styles.tip}>Tap a packet to add one. Tap again to add more.</Text>
-      )}
+      {embedded ? null : <Text style={styles.tip}>Tap + to add one. Tap − to take one off.</Text>}
       <ErrorText message={list.error} />
       <FlatList
         key={embedded ? 'grid' : 'list'}
@@ -213,14 +235,21 @@ function Results({
         renderItem={({ item }) => {
           const qty = inBill.get(item.id);
           const loose = isLoose(item.baseUnit.code);
+          // a − / + stepper for ordinary priced items already on the bill (in their own unit)
+          const found = plainLines.get(item.id);
+          const stepLine =
+            found && item.basePrice && !loose && found.unitId === item.baseUnit.id
+              ? found
+              : undefined;
           if (embedded)
             return (
               <ProductCard
                 item={item}
                 loose={loose}
                 onBill={qty}
+                stepLine={stepLine}
                 onAdd={() => onTap(item)}
-                onQuantity={() => onQuantity(item)}
+                onMinus={() => onMinus(item)}
               />
             );
           return (
@@ -233,29 +262,31 @@ function Results({
                   : 'No price set'
               }
               right={
-                <View style={styles.rowRight}>
-                  {qty ? <Badge text={`On bill: ${qty}`} tone="good" /> : null}
-                  <View style={[styles.addBtn, !item.basePrice && { opacity: 0.4 }]}>
-                    <Ionicons
-                      name={loose ? 'scale-outline' : 'add'}
-                      size={28}
-                      color={colors.onPrimary}
-                    />
+                stepLine ? (
+                  <Stepper
+                    name={item.name}
+                    quantity={stepLine.quantity}
+                    onMinus={() => onMinus(item)}
+                    onPlus={() => onTap(item)}
+                  />
+                ) : (
+                  <View style={styles.rowRight}>
+                    {qty ? <Badge text={`On bill: ${qty}`} tone="good" /> : null}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={loose ? `Weigh ${item.name}` : `Add ${item.name}`}
+                      onPress={() => onTap(item)}
+                      hitSlop={6}
+                      style={[styles.addBtn, !item.basePrice && { opacity: 0.4 }]}
+                    >
+                      <Ionicons
+                        name={loose ? 'scale-outline' : 'add'}
+                        size={22}
+                        color={colors.onPrimary}
+                      />
+                    </Pressable>
                   </View>
-                </View>
-              }
-              actions={
-                item.basePrice && !loose ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Choose quantity for ${item.name}`}
-                    onPress={() => onQuantity(item)}
-                    hitSlop={8}
-                    style={styles.qtyBtn}
-                  >
-                    <Text style={styles.qtyBtnText}>Qty</Text>
-                  </Pressable>
-                ) : undefined
+                )
               }
               onPress={() => onTap(item)}
             />
@@ -271,14 +302,17 @@ function ProductCard({
   item,
   loose,
   onBill,
+  stepLine,
   onAdd,
-  onQuantity,
+  onMinus,
 }: {
   item: ProductRow;
   loose: boolean;
   onBill?: string;
+  /** The bill line to step with − / +; when absent the tile shows the big Add button. */
+  stepLine?: CartLine;
   onAdd: () => void;
-  onQuantity: () => void;
+  onMinus: () => void;
 }) {
   const priced = !!item.basePrice;
   return (
@@ -294,35 +328,83 @@ function ProductCard({
         {priced ? `${formatINR(item.basePrice!)} / ${item.baseUnit.code}` : 'No price set'}
       </Text>
       <View style={styles.cardActions}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={loose ? `Weigh ${item.name}` : `Add ${item.name}`}
-          disabled={!priced}
-          onPress={onAdd}
-          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-            styles.cardAdd,
-            hovered && { backgroundColor: colors.primaryDark },
-            !priced && { opacity: 0.4 },
-            pressed && { opacity: 0.85 },
-          ]}
-        >
-          <Ionicons name={loose ? 'scale-outline' : 'add'} size={24} color={colors.onPrimary} />
-          <Text style={styles.cardAddText}>{loose ? 'Weigh' : 'Add'}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Choose quantity for ${item.name}`}
-          disabled={!priced || loose}
-          onPress={onQuantity}
-          style={({ pressed }) => [
-            styles.cardQty,
-            (!priced || loose) && { opacity: 0.35 },
-            pressed && { opacity: 0.85 },
-          ]}
-        >
-          <Text style={styles.qtyBtnText}>Qty</Text>
-        </Pressable>
+        {stepLine ? (
+          <Stepper
+            name={item.name}
+            quantity={stepLine.quantity}
+            onMinus={onMinus}
+            onPlus={onAdd}
+            wide
+          />
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={loose ? `Weigh ${item.name}` : `Add ${item.name}`}
+            disabled={!priced}
+            onPress={onAdd}
+            style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+              styles.cardAdd,
+              hovered && { backgroundColor: colors.primaryDark },
+              !priced && { opacity: 0.4 },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Ionicons name={loose ? 'scale-outline' : 'add'} size={24} color={colors.onPrimary} />
+            <Text style={styles.cardAddText}>{loose ? 'Weigh' : 'Add'}</Text>
+          </Pressable>
+        )}
       </View>
+    </View>
+  );
+}
+
+/** − quantity + for an item already on the bill. At 1, the − (shown as a bin) takes it off the bill. */
+function Stepper({
+  name,
+  quantity,
+  onMinus,
+  onPlus,
+  wide,
+}: {
+  name: string;
+  quantity: string;
+  onMinus: () => void;
+  onPlus: () => void;
+  wide?: boolean;
+}) {
+  const shown = trimZeros(quantity);
+  const last = shown === '1';
+  return (
+    <View style={[styles.stepper, wide && { flex: 1 }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={last ? `Remove ${name} from the bill` : `One less ${name}`}
+        hitSlop={6}
+        onPress={onMinus}
+        style={({ pressed }) => [styles.stepMinus, pressed && { opacity: 0.7 }]}
+      >
+        <Ionicons
+          name={last ? 'trash-outline' : 'remove'}
+          size={20}
+          color={last ? colors.danger : colors.primary}
+        />
+      </Pressable>
+      <Text
+        accessibilityLabel={`${shown} of ${name} on the bill`}
+        style={[styles.stepQty, wide && { flex: 1 }]}
+        numberOfLines={1}
+      >
+        {shown}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`One more ${name}`}
+        hitSlop={6}
+        onPress={onPlus}
+        style={({ pressed }) => [styles.stepPlus, pressed && { opacity: 0.85 }]}
+      >
+        <Ionicons name="add" size={22} color={colors.onPrimary} />
+      </Pressable>
     </View>
   );
 }
@@ -500,29 +582,35 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   cardAddText: { color: colors.onPrimary, fontSize: 17, fontWeight: '800' },
-  cardQty: {
-    minHeight: 52,
-    minWidth: 64,
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 10,
+    backgroundColor: colors.primarySoft,
+  },
+  stepMinus: { width: 34, height: 36, alignItems: 'center', justifyContent: 'center' },
+  stepQty: {
+    minWidth: 24,
+    textAlign: 'center',
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  stepPlus: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: colors.primarySoft,
   },
   embedded: { flex: 1, minWidth: 0, paddingHorizontal: 24, paddingTop: 16 },
   tip: { fontSize: 12, color: colors.textMuted, marginBottom: 8 },
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  qtyBtn: {
-    minHeight: 52,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: colors.primarySoft,
-    justifyContent: 'center',
-  },
-  qtyBtnText: { color: colors.primary, fontWeight: '800', fontSize: 16 },
   addBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',

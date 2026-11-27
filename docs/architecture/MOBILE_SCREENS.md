@@ -88,3 +88,18 @@ Built 2026-11-21 on top of the early slice (TD-61..64). Code: `apps/mobile/app/`
 | Stock & Add product scan | `(tabs)/stock.tsx`, `product-new.tsx` | Camera barcode scan (`BarcodeScannerModal`) in Stock jumps to the product or opens Add product pre-filled with the scanned barcode + optional MRP  | `stock.read`, `product.manage` |
 | Categories               | `categories.tsx`                      | List, add, rename and delete empty product categories                                                                                              | `category.manage`              |
 | Collection receipt       | `customer/pay.tsx`                    | Added **Share receipt** via Android share sheet on the collection confirmation screen                                                              | `collection.create`            |
+
+## Staff and roles (More tab, "Team")
+
+All of it uses the existing server endpoints (`/employees`, `/roles`, `/invitations`, `/branches`, `/auth/accept-invitation`); the server decides who may do what, the phone only hides what a role cannot use.
+
+| Screen                  | File               | What it does                                                                                                                          | Needs                                 |
+| ----------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Staff                   | `staff.tsx`        | People, their roles, invitations waiting to be used (cancel one), links to invite and to roles                                        | `employee.read` (`invitation.manage`) |
+| Staff member            | `staff/[id].tsx`   | Change role and branches, switch off or on, unlock sign-in. The owner and your own account cannot be changed                          | `employee.manage`                     |
+| Invite someone          | `staff-invite.tsx` | Mobile number, role, branches; shows the one-time code (72 hours, shown once) with a Share button                                     | `invitation.manage`                   |
+| Roles                   | `roles.tsx`        | Every role, what it covers by section, how many people hold it                                                                        | `role.read`                           |
+| Role                    | `role-edit.tsx`    | Make or change a role by ticking plain-English permissions in sections; delete an unused custom role. Owner role is read-only         | `role.manage`                         |
+| Join with an invitation | `login.tsx`        | "I have an invitation code": code, name, password. Someone who already has an account with that number enters their existing password | none (public)                         |
+
+An owner who works alone can choose "No, I work alone" on the More tab (or on the Staff screen): the Team group is then hidden. The choice is a display setting kept on the phone per shop (`src/prefs/staff-pref.ts`), not a permission, and "I have staff now" brings the options back. Other roles with the permission always see the Team group.

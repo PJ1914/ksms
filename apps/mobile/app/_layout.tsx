@@ -1,7 +1,16 @@
 import '@/theme/font';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { illustrations } from '@/theme/art';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import { CartProvider } from '@/cart/CartProvider';
@@ -19,7 +28,13 @@ export default function RootLayout() {
     <AuthProvider>
       <SyncProvider>
         <StatusBar style="dark" />
-        <RootStack />
+        {/* Lifts every screen above the on-screen keyboard (Android needs this too), so the field being typed in stays visible. */}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'web' ? undefined : 'padding'}
+        >
+          <RootStack />
+        </KeyboardAvoidingView>
         <SlowServerNotice />
       </SyncProvider>
     </AuthProvider>
@@ -151,6 +166,14 @@ function RootStack() {
               options={{ ...SCREEN_OPTIONS, title: 'Edit product' }}
             />
             <Stack.Screen name="categories" options={{ ...SCREEN_OPTIONS, title: 'Categories' }} />
+            <Stack.Screen name="staff" options={{ ...SCREEN_OPTIONS, title: 'Staff' }} />
+            <Stack.Screen name="staff/[id]" options={{ ...SCREEN_OPTIONS, title: 'Staff' }} />
+            <Stack.Screen
+              name="staff-invite"
+              options={{ ...SCREEN_OPTIONS, title: 'Invite someone' }}
+            />
+            <Stack.Screen name="roles" options={{ ...SCREEN_OPTIONS, title: 'Roles' }} />
+            <Stack.Screen name="role-edit" options={{ ...SCREEN_OPTIONS, title: 'Role' }} />
             <Stack.Screen
               name="product-new"
               options={{ ...SCREEN_OPTIONS, title: 'Add product', presentation: 'modal' }}

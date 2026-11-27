@@ -51,6 +51,7 @@ import { removeLocalHeldBillByServerId } from '@/sync/cache-store';
 import { useSync } from '@/sync/SyncProvider';
 import { colors, radius, shadow } from '@/theme/colors';
 import { formatINR, isPositive, isZero, stepQuantity } from '@/utils/currency';
+import { haptic } from '@/utils/haptics';
 import { friendlyError } from '@/utils/errors';
 import { trimZeros } from '@/utils/format';
 
@@ -354,7 +355,10 @@ export default function NewBillScreen() {
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`One less ${l.name}`}
-                        onPress={() => update(l.key, { quantity: stepQuantity(l.quantity, -1) })}
+                        onPress={() => {
+                          haptic('tap');
+                          update(l.key, { quantity: stepQuantity(l.quantity, -1) });
+                        }}
                         style={styles.stepBtn}
                       >
                         <Ionicons name="remove" size={18} color={colors.primary} />
@@ -371,7 +375,10 @@ export default function NewBillScreen() {
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`One more ${l.name}`}
-                        onPress={() => update(l.key, { quantity: stepQuantity(l.quantity, 1) })}
+                        onPress={() => {
+                          haptic('tap');
+                          update(l.key, { quantity: stepQuantity(l.quantity, 1) });
+                        }}
                         style={[styles.stepBtn, { backgroundColor: colors.primary }]}
                       >
                         <Ionicons name="add" size={18} color={colors.onPrimary} />
@@ -393,7 +400,10 @@ export default function NewBillScreen() {
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Remove ${l.name}`}
-                        onPress={() => remove(l.key)}
+                        onPress={() => {
+                          haptic('tap');
+                          remove(l.key);
+                        }}
                         style={styles.iconBtn}
                       >
                         <Ionicons name="trash-outline" size={20} color={colors.danger} />

@@ -1,12 +1,13 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, Share, Text, View } from 'react-native';
+import { Alert, Pressable, Share, Text, useWindowDimensions, View } from 'react-native';
 import { colors } from '@/theme/colors';
 import { getData } from '@/api/client';
 import type { BranchDetail, OrganizationSettings, SaleDetail } from '@/api/types';
 import { Invoice, type ShopDetails } from '@/components/Invoice';
 import { canPrint, printPage } from '@/utils/print';
+import { shareInvoicePdf } from '@/utils/share-invoice';
 import { useAuth } from '@/auth/AuthProvider';
 import { Card, ErrorText, Field, Loading, Screen } from '@/components/ui';
 import { useLoad } from '@/hooks/useLoad';
@@ -35,6 +36,8 @@ export default function SaleScreen() {
       fallbackName: profile?.organization.name ?? 'Shop',
     };
   }, [branch?.id]);
+  const { width } = useWindowDimensions();
+  const narrow = width < 600;
   const cancel = useSubmit();
   const [reason, setReason] = useState('');
   const [asking, setAsking] = useState(false);
@@ -58,6 +61,18 @@ export default function SaleScreen() {
   async function shareInvoice() {
     if (!s) return;
     const invNo = s.invoice?.invoiceNumber ?? s.saleNumber;
+    // Best: a PDF made from the saved invoice, shared and not kept. If that is not possible (no internet, no
+    // invoice yet), fall back to the plain-text bill so sharing never fails.
+    if (s.invoice) {
+      try {
+        if (await shareInvoicePdf(s.invoice.id, invNo)) return;
+      } catch (e) {
+        Alert.alert(
+          'Sharing as text',
+          `Could not make the PDF (${e instanceof Error ? e.message : 'unknown problem'}). Sharing the bill as text instead.`,
+        );
+      }
+    }
     const lines = s.items.map(
       (i) =>
         `• ${i.name}: ${trimZeros(i.quantity)} ${i.unitCode} × ${formatINR(i.unitPrice)} = ${formatINR(i.lineTotal)}`,
@@ -101,31 +116,37 @@ export default function SaleScreen() {
           {canPrint ? (
             <BillAction primary label="Print bill" icon="print-outline" onPress={printPage} />
           ) : null}
-          <BillAction label="Share" icon="share-outline" onPress={() => void shareInvoice()} />
+          <BillAction
+            label="Share PDF"
+            icon="share-outline"
+            onPress={() => void shareInvoice()}
+            grid={narrow}
+          />
           {canReturn ? (
             <BillAction
               label="Return goods"
               icon="return-down-back-outline"
+              grid={narrow}
               onPress={() => router.push({ pathname: '/sale/return', params: { saleId: s.id } })}
             />
           ) : null}
           {canCancel && !asking ? (
             <BillAction
               danger
+              grid={narrow}
               label="Cancel bill"
               icon="close-circle-outline"
               onPress={() => setAsking(true)}
             />
           ) : null}
           {can('sale.create') ? (
-            <View style={{ marginLeft: 'auto' }}>
-              <BillAction
-                primary={!canPrint}
-                label="Next bill"
-                icon="add-circle-outline"
-                onPress={() => router.replace('/sale/new')}
-              />
-            </View>
+            <BillAction
+              primary={!canPrint}
+              label="Next bill"
+              icon="add-circle-outline"
+              onPress={() => router.replace('/sale/new')}
+              grid={narrow}
+            />
           ) : null}
         </View>
 
@@ -167,12 +188,15 @@ function BillAction({
   onPress,
   primary,
   danger,
+  grid,
 }: {
   label: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
   onPress: () => void;
   primary?: boolean;
   danger?: boolean;
+  /** On a phone: two equal buttons per row. */
+  grid?: boolean;
 }) {
   const ink = primary ? colors.onPrimary : danger ? colors.danger : colors.primary;
   return (
@@ -183,9 +207,10 @@ function BillAction({
       style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 10,
-        minHeight: 56,
-        paddingHorizontal: 20,
+        ...(grid ? { flexBasis: '47%', flexGrow: 1, justifyContent: 'center' as const } : {}),
+        gap: 8,
+        minHeight: 46,
+        paddingHorizontal: 14,
         borderRadius: 14,
         borderWidth: 2,
         borderColor: primary ? colors.primary : danger ? colors.danger : colors.border,
@@ -199,8 +224,8 @@ function BillAction({
         opacity: pressed ? 0.85 : 1,
       })}
     >
-      <Ionicons name={icon} size={26} color={ink} />
-      <Text style={{ fontSize: 17, fontWeight: '700', color: ink }}>{label}</Text>
+      <Ionicons name={icon} size={22} color={ink} />
+      <Text style={{ fontSize: 15, fontWeight: '700', color: ink }}>{label}</Text>
     </Pressable>
   );
 }

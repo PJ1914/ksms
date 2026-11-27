@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Text, View } from 'react-native';
 import type { BranchDetail, OrganizationSettings, SaleDetail } from '@/api/types';
 import { colors } from '@/theme/colors';
@@ -100,6 +101,9 @@ function Row({
 
 /** A printable bill: shop header, items table, GST breakup, totals, payment and footer. */
 export function Invoice({ sale: s, shop }: { sale: SaleDetail; shop: ShopDetails }) {
+  // Phones are too narrow for a six-column table: below this width each item becomes a two-line row.
+  const [width, setWidth] = useState(0);
+  const compact = width > 0 && width < 560;
   const shopName = shop.org?.legalName || shop.org?.name || shop.fallbackName;
   const b = shop.branch;
   const address = [b?.addressLine, [b?.city, b?.state].filter(Boolean).join(', '), b?.pincode]
@@ -121,6 +125,7 @@ export function Invoice({ sale: s, shop }: { sale: SaleDetail; shop: ShopDetails
   return (
     <View
       nativeID="invoice-print"
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
       style={{
         width: '100%',
         maxWidth: 820,
@@ -129,12 +134,12 @@ export function Invoice({ sale: s, shop }: { sale: SaleDetail; shop: ShopDetails
         borderWidth: 1,
         borderColor: LINE,
         borderRadius: 6,
-        padding: 28,
+        padding: compact ? 14 : 28,
       }}
     >
       {/* Shop header */}
       <View style={{ alignItems: 'center', gap: 3, paddingBottom: 14 }}>
-        <T size={26} bold align="center">
+        <T size={compact ? 21 : 26} bold align="center">
           {shopName}
         </T>
         {address ? (
@@ -169,7 +174,7 @@ export function Invoice({ sale: s, shop }: { sale: SaleDetail; shop: ShopDetails
 
       {/* Bill + customer */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingVertical: 12, gap: 16 }}>
-        <View style={{ flex: 1, minWidth: 220, gap: 3 }}>
+        <View style={{ flex: 1, minWidth: compact ? '100%' : 220, gap: 3 }}>
           <T size={12} muted bold>
             BILL TO
           </T>
@@ -179,7 +184,14 @@ export function Invoice({ sale: s, shop }: { sale: SaleDetail; shop: ShopDetails
           {s.customer?.phone ? <T muted>Phone: {s.customer.phone}</T> : null}
           {s.customer?.gstin ? <T muted>GSTIN: {s.customer.gstin}</T> : null}
         </View>
-        <View style={{ flex: 1, minWidth: 220, gap: 3, alignItems: 'flex-end' }}>
+        <View
+          style={{
+            flex: 1,
+            minWidth: compact ? '100%' : 220,
+            gap: 3,
+            alignItems: compact ? 'flex-start' : 'flex-end',
+          }}
+        >
           <T bold>
             {s.invoice ? `Invoice No: ${s.invoice.invoiceNumber}` : `Bill No: ${s.saleNumber}`}
           </T>
@@ -190,74 +202,112 @@ export function Invoice({ sale: s, shop }: { sale: SaleDetail; shop: ShopDetails
 
       {/* Items */}
       <View style={{ borderWidth: 1, borderColor: LINE }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            backgroundColor: colors.surfaceMuted,
-            borderBottomWidth: 1,
-            borderColor: LINE,
-          }}
-        >
-          <Cell width={COLS.n} head>
-            #
-          </Cell>
-          <Cell head>Item</Cell>
-          <Cell width={COLS.qty} align="right" head>
-            Qty
-          </Cell>
-          <Cell width={COLS.rate} align="right" head>
-            Rate
-          </Cell>
-          <Cell width={COLS.disc} align="right" head>
-            Disc.
-          </Cell>
-          {showGstCol ? (
-            <Cell width={COLS.gst} align="right" head>
-              GST%
-            </Cell>
-          ) : null}
-          <Cell width={COLS.amt} align="right" head>
-            Amount
-          </Cell>
-        </View>
-        {s.items.map((i, idx) => (
-          <View
-            key={i.id}
-            style={{ flexDirection: 'row', borderTopWidth: idx ? 1 : 0, borderColor: '#E7EDE9' }}
-          >
-            <Cell width={COLS.n}>{idx + 1}</Cell>
-            <View style={{ flex: 1, paddingHorizontal: 6, paddingVertical: 7 }}>
-              <T bold>{i.name}</T>
-              {i.hsn ? (
-                <T size={11} muted>
-                  HSN {i.hsn}
+        {compact ? (
+          s.items.map((i, idx) => (
+            <View
+              key={i.id}
+              style={{
+                flexDirection: 'row',
+                gap: 8,
+                padding: 8,
+                borderTopWidth: idx ? 1 : 0,
+                borderColor: '#E7EDE9',
+              }}
+            >
+              <View style={{ flex: 1, gap: 2 }}>
+                <T bold>
+                  {idx + 1}. {i.name}
                 </T>
-              ) : null}
+                <T size={12} muted>
+                  {`${trimZeros(i.quantity)} ${i.unitCode} × ${formatINR(i.unitPrice)}`}
+                  {isPositive(i.discountAmount) ? `  ·  Disc ${formatINR(i.discountAmount)}` : ''}
+                  {showGstCol && i.taxRatePercent ? `  ·  GST ${trimZeros(i.taxRatePercent)}%` : ''}
+                  {i.hsn ? `  ·  HSN ${i.hsn}` : ''}
+                </T>
+              </View>
+              <T bold align="right">
+                {formatINR(i.lineTotal)}
+              </T>
             </View>
-            <Cell width={COLS.qty} align="right">
-              {`${trimZeros(i.quantity)} ${i.unitCode}`}
-            </Cell>
-            <Cell width={COLS.rate} align="right">
-              {formatINR(i.unitPrice).replace('₹', '')}
-            </Cell>
-            <Cell width={COLS.disc} align="right">
-              {isPositive(i.discountAmount) ? formatINR(i.discountAmount).replace('₹', '') : '-'}
-            </Cell>
-            {showGstCol ? (
-              <Cell width={COLS.gst} align="right">
-                {i.taxRatePercent ? `${trimZeros(i.taxRatePercent)}%` : '-'}
+          ))
+        ) : (
+          <>
+            <View
+              style={{
+                flexDirection: 'row',
+                backgroundColor: colors.surfaceMuted,
+                borderBottomWidth: 1,
+                borderColor: LINE,
+              }}
+            >
+              <Cell width={COLS.n} head>
+                #
               </Cell>
-            ) : null}
-            <Cell width={COLS.amt} align="right" bold>
-              {formatINR(i.lineTotal).replace('₹', '')}
-            </Cell>
-          </View>
-        ))}
+              <Cell head>Item</Cell>
+              <Cell width={COLS.qty} align="right" head>
+                Qty
+              </Cell>
+              <Cell width={COLS.rate} align="right" head>
+                Rate
+              </Cell>
+              <Cell width={COLS.disc} align="right" head>
+                Disc.
+              </Cell>
+              {showGstCol ? (
+                <Cell width={COLS.gst} align="right" head>
+                  GST%
+                </Cell>
+              ) : null}
+              <Cell width={COLS.amt} align="right" head>
+                Amount
+              </Cell>
+            </View>
+            {s.items.map((i, idx) => (
+              <View
+                key={i.id}
+                style={{
+                  flexDirection: 'row',
+                  borderTopWidth: idx ? 1 : 0,
+                  borderColor: '#E7EDE9',
+                }}
+              >
+                <Cell width={COLS.n}>{idx + 1}</Cell>
+                <View style={{ flex: 1, paddingHorizontal: 6, paddingVertical: 7 }}>
+                  <T bold>{i.name}</T>
+                  {i.hsn ? (
+                    <T size={11} muted>
+                      HSN {i.hsn}
+                    </T>
+                  ) : null}
+                </View>
+                <Cell width={COLS.qty} align="right">
+                  {`${trimZeros(i.quantity)} ${i.unitCode}`}
+                </Cell>
+                <Cell width={COLS.rate} align="right">
+                  {formatINR(i.unitPrice).replace('₹', '')}
+                </Cell>
+                <Cell width={COLS.disc} align="right">
+                  {isPositive(i.discountAmount)
+                    ? formatINR(i.discountAmount).replace('₹', '')
+                    : '-'}
+                </Cell>
+                {showGstCol ? (
+                  <Cell width={COLS.gst} align="right">
+                    {i.taxRatePercent ? `${trimZeros(i.taxRatePercent)}%` : '-'}
+                  </Cell>
+                ) : null}
+                <Cell width={COLS.amt} align="right" bold>
+                  {formatINR(i.lineTotal).replace('₹', '')}
+                </Cell>
+              </View>
+            ))}
+          </>
+        )}
       </View>
 
       {/* Totals */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 20, marginTop: 14 }}>
-        <View style={{ flex: 1, minWidth: 240, gap: 4 }}>
+        <View style={{ flex: 1, minWidth: compact ? '100%' : 240, gap: 4 }}>
           <T size={12} muted bold>
             AMOUNT IN WORDS
           </T>
@@ -281,7 +331,7 @@ export function Invoice({ sale: s, shop }: { sale: SaleDetail; shop: ShopDetails
           ) : null}
         </View>
 
-        <View style={{ width: 300, maxWidth: '100%' }}>
+        <View style={{ width: compact ? '100%' : 300, maxWidth: '100%' }}>
           <Row label="Sub total" value={formatINR(s.subtotal)} />
           {isPositive(s.discountTotal) ? (
             <Row label="Discount" value={`- ${formatINR(s.discountTotal)}`} />

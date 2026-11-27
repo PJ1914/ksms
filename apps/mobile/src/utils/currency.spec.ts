@@ -5,6 +5,7 @@ import {
   isNegative,
   isPositive,
   isZero,
+  stepDownOrRemove,
   stepQuantity,
 } from './currency';
 
@@ -51,5 +52,18 @@ describe('stepQuantity', () => {
     expect(stepQuantity('', 1)).toBe('1');
     expect(stepQuantity('abc', 1)).toBe('1');
     expect(stepQuantity('', -1)).toBe('1');
+  });
+});
+
+describe('stepDownOrRemove', () => {
+  it('takes one off a quantity above 1', () => {
+    expect(stepDownOrRemove('3')).toBe('2');
+    expect(stepDownOrRemove('2.5')).toBe('1.5');
+  });
+  it('returns null (remove the line) at 1 or less, or for a bad number', () => {
+    expect(stepDownOrRemove('1')).toBeNull();
+    expect(stepDownOrRemove('0.5')).toBeNull();
+    expect(stepDownOrRemove('')).toBeNull();
+    expect(stepDownOrRemove('abc')).toBeNull();
   });
 });

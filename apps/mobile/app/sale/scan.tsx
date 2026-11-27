@@ -11,6 +11,8 @@ import { getCachedProductByBarcode } from '@/sync/cache-store';
 import { useSync } from '@/sync/SyncProvider';
 import { colors } from '@/theme/colors';
 import { friendlyError } from '@/utils/errors';
+import { haptic } from '@/utils/haptics';
+import { createScanGuard } from '@/utils/scan-guard';
 
 interface Lookup {
   barcode: { unitId: string | null };
@@ -23,20 +25,15 @@ export default function ScanScreen() {
   const { add } = useCart();
   const { db } = useSync();
   const busy = useRef(false);
-  const lastCode = useRef<{ code: string; at: number } | null>(null);
+  const guard = useRef(createScanGuard()).current;
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [count, setCount] = useState(0);
 
   async function onScanned(code: string) {
-    const now = Date.now();
-    // the camera reports the same code many times a second: handle each one once, and not again for 2 seconds
-    if (
-      busy.current ||
-      (lastCode.current && lastCode.current.code === code && now - lastCode.current.at < 2000)
-    )
-      return;
+    // the camera reports the same code many times a second: a barcode counts once while it stays in
+    // view, and again only after the camera has moved away from it (the next packet)
+    if (!guard.accept(code, Date.now(), busy.current)) return;
     busy.current = true;
-    lastCode.current = { code, at: now };
     try {
       let r: Lookup;
       try {
@@ -68,9 +65,11 @@ export default function ScanScreen() {
         unitCode: unit.unitCode,
         quantity: '1',
       });
+      haptic('success');
       setCount((c) => c + 1);
       setMessage({ ok: true, text: `Added ${r.product.name} (1 ${unit.unitCode})` });
     } catch (e) {
+      haptic('error');
       setMessage({
         ok: false,
         text:

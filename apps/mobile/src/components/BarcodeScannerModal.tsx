@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { Modal, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/ui';
 import { colors } from '@/theme/colors';
+import { haptic } from '@/utils/haptics';
 
 const BARCODE_TYPES = ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39', 'qr'] as const;
 
@@ -34,6 +35,7 @@ export function BarcodeScannerModal({
     const code = raw.trim();
     if (!code || locked.current) return;
     locked.current = true;
+    haptic('success');
     onScanned(code);
   }
 

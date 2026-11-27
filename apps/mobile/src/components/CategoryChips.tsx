@@ -42,6 +42,35 @@ export function CategoryChips({
   );
 }
 
+/** The same chip row for any short list of choices (for example a sort order). */
+export function OptionChips<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { key: T; label: string }[];
+  value: T;
+  onChange: (key: T) => void;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.bar}
+      contentContainerStyle={styles.content}
+    >
+      {options.map((o) => (
+        <Chip
+          key={o.key}
+          label={o.label}
+          selected={value === o.key}
+          onPress={() => onChange(o.key)}
+        />
+      ))}
+    </ScrollView>
+  );
+}
+
 function Chip({
   label,
   art,

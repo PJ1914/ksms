@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { layoutMode } from './layout';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -91,21 +91,82 @@ export function Page({ children }: { children: React.ReactNode }) {
 export function Field({
   label,
   hint,
+  error,
+  prefix,
   ...input
-}: TextInputProps & { label: string; hint?: string }) {
+}: TextInputProps & {
+  label: string;
+  hint?: string;
+  /** Shown in red under the field (for example "Enter 10 digits"). */
+  error?: string | null;
+  /** Fixed text inside the left edge of the box, such as "+91". */
+  prefix?: string;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const secret = !!input.secureTextEntry;
   return (
     <View style={styles.field}>
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.label}>
         {label}
       </Text>
-      <TextInput
-        maxFontSizeMultiplier={MAX_FONT_SCALE}
-        placeholderTextColor={colors.textMuted}
-        style={[styles.input, input.multiline && { minHeight: 96, textAlignVertical: 'top' }]}
-        autoCorrect={false}
-        {...input}
-      />
-      {hint ? (
+      <View>
+        <TextInput
+          maxFontSizeMultiplier={MAX_FONT_SCALE}
+          placeholderTextColor={colors.textMuted}
+          style={[
+            styles.input,
+            input.multiline && { minHeight: 96, textAlignVertical: 'top' },
+            secret && { paddingRight: 52 },
+            prefix ? { paddingLeft: 58 } : null,
+            error ? { borderColor: colors.danger } : null,
+          ]}
+          autoCorrect={false}
+          {...input}
+          // a password hides its text until the user taps the eye
+          secureTextEntry={secret && !revealed}
+        />
+        {prefix ? (
+          <Text
+            maxFontSizeMultiplier={MAX_FONT_SCALE}
+            style={{
+              position: 'absolute',
+              left: 14,
+              top: 0,
+              bottom: 0,
+              textAlignVertical: 'center',
+              lineHeight: 52,
+              fontSize: 16,
+              fontWeight: '700',
+              color: colors.text,
+            }}
+          >
+            {prefix}
+          </Text>
+        ) : null}
+        {secret ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={revealed ? 'Hide password' : 'Show password'}
+            hitSlop={8}
+            onPress={() => setRevealed((r) => !r)}
+            style={styles.eye}
+          >
+            <Ionicons
+              name={revealed ? 'eye-off-outline' : 'eye-outline'}
+              size={22}
+              color={colors.textMuted}
+            />
+          </Pressable>
+        ) : null}
+      </View>
+      {error ? (
+        <Text
+          maxFontSizeMultiplier={MAX_FONT_SCALE}
+          style={[styles.hint, { color: colors.danger, fontWeight: '600' }]}
+        >
+          {error}
+        </Text>
+      ) : hint ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.hint}>
           {hint}
         </Text>
@@ -1024,6 +1085,15 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     color: colors.text,
+  },
+  eye: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   button: {
     borderRadius: radius.md,

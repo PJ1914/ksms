@@ -282,7 +282,14 @@ export async function listCachedUnits(db: SqlDb): Promise<SyncUnit[]> {
 
 export async function searchCachedCustomers(
   db: SqlDb,
-  opts: { q?: string; owes?: boolean; activeOnly?: boolean } = {},
+  opts: {
+    q?: string;
+    owes?: boolean;
+    advance?: boolean;
+    sort?: 'name' | 'balance' | 'createdAt';
+    order?: 'asc' | 'desc';
+    activeOnly?: boolean;
+  } = {},
 ): Promise<CustomerRow[]> {
   const term = (opts.q ?? '').trim().toLowerCase();
   const rows = await db.getAllAsync<{
@@ -312,9 +319,16 @@ export async function searchCachedCustomers(
     version: r.version,
   }));
   if (opts.owes) {
-    list = list
-      .filter((c) => new Decimal(c.balance).gt(0))
-      .sort((a, b) => new Decimal(b.balance).cmp(new Decimal(a.balance)));
+    list = list.filter((c) => new Decimal(c.balance).gt(0));
+    if (!opts.sort) opts = { ...opts, sort: 'balance', order: 'desc' };
+  } else if (opts.advance) {
+    list = list.filter((c) => new Decimal(c.balance).lt(0));
+  }
+  if (opts.sort === 'balance') {
+    const dir = opts.order === 'asc' ? 1 : -1;
+    list = list.sort((a, b) => dir * new Decimal(a.balance).cmp(new Decimal(b.balance)));
+  } else if (opts.sort === 'name' && opts.order === 'desc') {
+    list = list.reverse();
   }
   if (term) {
     list = list.filter(

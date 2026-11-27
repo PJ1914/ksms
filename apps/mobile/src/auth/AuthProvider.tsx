@@ -4,6 +4,8 @@ import { wipeLocalSyncCache } from '@/sync/expo-db';
 import {
   type Profile,
   getActiveBranch,
+  type JoinInput,
+  joinWithCode,
   setActiveBranch,
   type RegisterInput,
   refreshSession,
@@ -20,6 +22,8 @@ interface AuthState {
   profile: Profile | null;
   signIn: (identifier: string, password: string, organizationId?: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
+  /** Join a shop with an invitation code from the owner. */
+  join: (input: JoinInput) => Promise<void>;
   signOut: () => Promise<void>;
   /** Tries again to restore the saved session after a network problem at start-up. */
   retry: () => void;
@@ -70,6 +74,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       register: async (input) => {
         setProfile(await registerShop(input));
+        setBranchId(getActiveBranch());
+        setStatus('signedIn');
+      },
+      join: async (input) => {
+        setProfile(await joinWithCode(input));
         setBranchId(getActiveBranch());
         setStatus('signedIn');
       },

@@ -34,5 +34,17 @@ export function stepQuantity(q: string, delta: 1 | -1): string {
   const next = d.plus(delta);
   return next.lte(0) ? (d.lte(0) ? '1' : d.toString()) : next.toString();
 }
+/**
+ * One step down for a "−" button on a product row: the new quantity, or null when the line is at 1
+ * or less (or not a number), meaning the caller should take the item off the bill.
+ */
+export function stepDownOrRemove(q: string): string | null {
+  try {
+    const d = new Decimal(q.trim());
+    return d.gt(1) ? d.minus(1).toString() : null;
+  } catch {
+    return null;
+  }
+}
 /** First amount greater than the second? */
 export const isMoreThan = (a: string, b: string): boolean => new Decimal(a).gt(b);

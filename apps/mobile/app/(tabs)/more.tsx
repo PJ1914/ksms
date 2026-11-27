@@ -4,6 +4,8 @@ import { Image, type ImageSourcePropType, Pressable, StyleSheet, Text, View } fr
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/auth/AuthProvider';
 import {
+  Button,
+  Card,
   Choice,
   Screen,
   SectionTitle,
@@ -13,6 +15,7 @@ import {
 } from '@/components/ui';
 import { getData } from '@/api/client';
 import { useLoad } from '@/hooks/useLoad';
+import { useStaffPref } from '@/prefs/staff-pref';
 import { useSync } from '@/sync/SyncProvider';
 import { icons, illustrations } from '@/theme/art';
 import { colors, radius, shadow, tints, type Tint } from '@/theme/colors';
@@ -31,6 +34,10 @@ export default function MoreScreen() {
   const { stats } = useSync();
   const [busy, setBusy] = useState(false);
   const layout = useLayout();
+  // An owner who runs the shop alone can hide the staff options (kept on this phone, per shop).
+  const isOwner = profile?.role.name === 'Owner';
+  const staffPref = useStaffPref(profile?.organization.id);
+  const wantsStaff = !isOwner || staffPref.pref === 'yes';
   const tileW = layout.tileWidth(layout.columns(100, 3, 6));
   const unread = useLoad(
     () =>
@@ -97,6 +104,24 @@ export default function MoreScreen() {
           art: icons.repDayBook,
           href: '/daily-closing',
           show: can('cashbook.read') || can('closing.manage'),
+        },
+      ],
+    },
+    {
+      title: 'Team',
+      tint: 'mango',
+      items: [
+        {
+          title: 'Staff',
+          art: icons.roleManager,
+          href: '/staff',
+          show: can('employee.read') && wantsStaff,
+        },
+        {
+          title: 'Roles',
+          art: icons.roleCashier,
+          href: '/roles',
+          show: can('role.read') && wantsStaff,
         },
       ],
     },
@@ -177,6 +202,24 @@ export default function MoreScreen() {
           />
         ) : null}
 
+        {isOwner && staffPref.pref === 'unset' ? (
+          <Card>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.askTitle}>
+              Do you work with staff?
+            </Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.askNote}>
+              If you do, you can invite them and choose what each person may do. If you run the shop
+              alone, we will keep those options out of your way. You can change this later.
+            </Text>
+            <Button title="Yes, I have staff" onPress={() => staffPref.set('yes')} />
+            <Button
+              title="No, I work alone"
+              variant="secondary"
+              onPress={() => staffPref.set('no')}
+            />
+          </Card>
+        ) : null}
+
         {groups.map((g) => {
           const items = g.items.filter((i) => i.show);
           if (!items.length) return null;
@@ -223,6 +266,17 @@ export default function MoreScreen() {
             </View>
           );
         })}
+        {isOwner && staffPref.pref === 'no' ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => staffPref.set('yes')}
+            style={styles.staffLink}
+          >
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.staffLinkText}>
+              I have staff now: show staff options
+            </Text>
+          </Pressable>
+        ) : null}
       </Screen>
     </View>
   );
@@ -279,5 +333,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  askTitle: { fontSize: 17, fontWeight: '800', color: colors.text, marginBottom: 4 },
+  askNote: { fontSize: 14, color: colors.textMuted, marginBottom: 12, lineHeight: 20 },
+  staffLink: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
+  staffLinkText: { fontSize: 14, fontWeight: '700', color: colors.primary },
   badgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 });

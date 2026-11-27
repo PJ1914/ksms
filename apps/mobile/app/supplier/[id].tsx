@@ -2,7 +2,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Linking, Text, View } from 'react-native';
 import { getData, postData } from '@/api/client';
-import type { LedgerEntry, SupplierDetail } from '@/api/types';
+import type { LedgerEntry, SupplierDetail, SupplierStockNote } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
 import { ListFooter } from '@/components/ListFooter';
 import {
@@ -23,7 +23,7 @@ import { useLoad, usePagedList } from '@/hooks/useLoad';
 import { colors } from '@/theme/colors';
 import { absMoney, formatINR, isNegative, isPositive } from '@/utils/currency';
 import { friendlyError } from '@/utils/errors';
-import { formatDateTime, words } from '@/utils/format';
+import { formatDateTime, trimZeros, words } from '@/utils/format';
 
 export default function SupplierScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -41,6 +41,7 @@ export function SupplierDetail({ id, embedded }: { id: string; embedded?: boolea
     reload,
   } = useLoad(() => getData<SupplierDetail>(`/suppliers/${id}`), [id]);
   const ledger = usePagedList<LedgerEntry>(`/suppliers/${id}/ledger`, 25);
+  const received = usePagedList<SupplierStockNote>(`/suppliers/${id}/stock-received`, 10);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -123,6 +124,29 @@ export function SupplierDetail({ id, embedded }: { id: string; embedded?: boolea
         ]}
       />
       <ErrorText message={problem} />
+
+      {received.items.length > 0 ? (
+        <>
+          <SectionTitle>Stock received from them</SectionTitle>
+          <Group>
+            {received.items.map((n) => (
+              <EntryRow
+                key={n.id}
+                title={n.productName}
+                subtitle={formatDateTime(n.receivedAt)}
+                amount={`${trimZeros(n.quantity)} ${n.baseUnitCode}`}
+                direction="in"
+              />
+            ))}
+          </Group>
+          <ListFooter
+            shown={received.items.length}
+            total={received.meta?.total}
+            loadingMore={received.loadingMore}
+            onLoadMore={() => void received.loadMore()}
+          />
+        </>
+      ) : null}
 
       <SectionTitle>Statement</SectionTitle>
       {ledger.loading ? (

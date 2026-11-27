@@ -6,6 +6,7 @@ import type { CustomerRow } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
 import { CustomerDetail } from '../customer/[id]';
 import { MasterDetail, useOpenDetail } from '@/components/MasterDetail';
+import { OptionChips } from '@/components/CategoryChips';
 import { ListFooter } from '@/components/ListFooter';
 import {
   Avatar,
@@ -26,11 +27,30 @@ import { useSync } from '@/sync/SyncProvider';
 import { colors } from '@/theme/colors';
 import { absMoney, formatINR, isNegative, isPositive } from '@/utils/currency';
 
-type Filter = 'all' | 'owes';
+type Filter = 'all' | 'owes' | 'advance';
 const FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'owes', label: 'Owe money' },
+  { key: 'advance', label: 'Paid ahead' },
 ] as const;
+
+type SortKey = 'az' | 'za' | 'most' | 'least' | 'new' | 'old';
+const SORTS: Record<
+  SortKey,
+  { label: string; sort: 'name' | 'balance' | 'createdAt'; order: 'asc' | 'desc' }
+> = {
+  az: { label: 'Name A–Z', sort: 'name', order: 'asc' },
+  za: { label: 'Name Z–A', sort: 'name', order: 'desc' },
+  most: { label: 'Owes most', sort: 'balance', order: 'desc' },
+  least: { label: 'Owes least', sort: 'balance', order: 'asc' },
+  new: { label: 'New to old', sort: 'createdAt', order: 'desc' },
+  old: { label: 'Old to new', sort: 'createdAt', order: 'asc' },
+};
+
+const SORT_OPTIONS = (Object.keys(SORTS) as SortKey[]).map((k) => ({
+  key: k,
+  label: SORTS[k].label,
+}));
 
 export default function KhataScreen() {
   return (
@@ -50,10 +70,21 @@ function KhataList() {
   const { db } = useSync();
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('az');
+  const s = SORTS[sortKey];
   const list = usePagedList<CustomerRow>(
-    `/customers${query({ q: search.trim(), owes: filter === 'owes', sort: filter === 'owes' ? 'balance' : 'name', order: filter === 'owes' ? 'desc' : 'asc' })}`,
+    `/customers${query({ q: search.trim(), owes: filter === 'owes', advance: filter === 'advance', sort: s.sort, order: s.order })}`,
     30,
-    db ? () => searchCachedCustomers(db, { q: search, owes: filter === 'owes' }) : undefined,
+    db
+      ? () =>
+          searchCachedCustomers(db, {
+            q: search,
+            owes: filter === 'owes',
+            advance: filter === 'advance',
+            sort: s.sort,
+            order: s.order,
+          })
+      : undefined,
   );
 
   if (!can('customer.read'))
@@ -86,6 +117,7 @@ function KhataList() {
           placeholder="Search name or mobile number"
         />
         <Segmented options={FILTERS} value={filter} onChange={setFilter} />
+        <OptionChips options={SORT_OPTIONS} value={sortKey} onChange={setSortKey} />
         {list.loading ? (
           <Loading />
         ) : (
@@ -119,7 +151,7 @@ function KhataList() {
               ListEmptyComponent={
                 <EmptyState
                   art={
-                    filter === 'owes'
+                    filter === 'owes' || filter === 'advance'
                       ? illustrations.duesCleared
                       : search.trim()
                         ? illustrations.emptySearch
@@ -128,9 +160,11 @@ function KhataList() {
                   title={
                     filter === 'owes'
                       ? 'Nobody owes you money'
-                      : search.trim()
-                        ? 'No customers match'
-                        : 'No customers yet'
+                      : filter === 'advance'
+                        ? 'Nobody has paid ahead'
+                        : search.trim()
+                          ? 'No customers match'
+                          : 'No customers yet'
                   }
                   note={
                     filter === 'all' && !search.trim()

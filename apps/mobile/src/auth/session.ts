@@ -25,6 +25,7 @@ export interface RegisterInput {
   phone: string;
   password: string;
   shopName: string;
+  businessType?: string;
 }
 
 // The refresh token lives in the phone's encrypted store (Android Keystore). The short-lived
@@ -135,6 +136,24 @@ export async function registerShop(input: RegisterInput): Promise<Profile> {
     phone: input.phone.trim(),
     password: input.password,
     shopName: input.shopName.trim(),
+    ...(input.businessType ? { businessType: input.businessType } : {}),
+    ...(await deviceInfo()),
+  });
+  return accept(res.data);
+}
+
+export interface JoinInput {
+  code: string;
+  fullName: string;
+  password: string;
+}
+
+/** Joins a shop with the one-time code the owner shared; signs the person in. */
+export async function joinWithCode(input: JoinInput): Promise<Profile> {
+  const res = await publicApi.post<{ data: AuthResponse }>('/auth/accept-invitation', {
+    code: input.code.trim(),
+    fullName: input.fullName.trim(),
+    password: input.password,
     ...(await deviceInfo()),
   });
   return accept(res.data);
@@ -168,6 +187,13 @@ export function refreshSession(): Promise<Profile | null> {
     }
   })();
   return refreshing;
+}
+
+/** Headers for a raw file download (the JSON client cannot fetch binary files). */
+export async function downloadHeaders(): Promise<Record<string, string>> {
+  const token = await validAccessToken();
+  if (!token) throw new Error('Please sign in again.');
+  return { Authorization: `Bearer ${token}`, ...(branchId ? { 'x-branch-id': branchId } : {}) };
 }
 
 async function validAccessToken(): Promise<string | null> {

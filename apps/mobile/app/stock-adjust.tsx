@@ -10,6 +10,7 @@ import {
 } from '@ksms/validation';
 import { getData } from '@/api/client';
 import type { ProductDetail, StockDetail } from '@/api/types';
+import { SupplierPicker } from '@/components/SupplierPicker';
 import { Button, Choice, ErrorText, Field, FormHeader, Loading, Screen } from '@/components/ui';
 import { icons } from '@/theme/art';
 import { colors } from '@/theme/colors';
@@ -51,6 +52,7 @@ export default function StockAdjustScreen() {
   const [batchNumber, setBatchNumber] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
   const [showNote, setShowNote] = useState(false);
+  const [supplierId, setSupplierId] = useState('');
 
   if (loading) return <Loading />;
   if (!data) return <ErrorText message={loadError ?? 'Could not load this product.'} />;
@@ -72,6 +74,7 @@ export default function StockAdjustScreen() {
     batchNumber,
     expiryDate,
     tracked,
+    supplierId,
   };
 
   async function save() {
@@ -182,6 +185,8 @@ export default function StockAdjustScreen() {
           />
         </>
       ) : null}
+
+      {mode !== 'REMOVE' ? <SupplierPicker value={supplierId} onChange={setSupplierId} /> : null}
 
       {mode !== 'OPENING' ? (
         showNote || notes ? (

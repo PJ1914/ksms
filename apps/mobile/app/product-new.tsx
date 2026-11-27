@@ -5,6 +5,7 @@ import { newKey, postData } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { api } from '@/auth/session';
 import { BarcodeScannerModal } from '@/components/BarcodeScannerModal';
+import { SupplierPicker } from '@/components/SupplierPicker';
 import {
   Button,
   Card,
@@ -48,6 +49,7 @@ export default function NewProductScreen() {
   const [barcode, setBarcode] = useState(params.barcode ?? '');
   const [openingQuantity, setOpeningQuantity] = useState('');
   const [openingCost, setOpeningCost] = useState('');
+  const [supplierId, setSupplierId] = useState('');
   const [scanning, setScanning] = useState(false);
   const [gstRate, setGstRate] = useState<string>('NONE');
   const [hsnCode, setHsnCode] = useState('');
@@ -102,6 +104,7 @@ export default function NewProductScreen() {
         createdProduct.current.id,
         createdProduct.current.baseUnitId,
         input,
+        supplierId || undefined,
       );
       if (stockBody) {
         stockKey.current ??= newKey();
@@ -129,6 +132,7 @@ export default function NewProductScreen() {
     setBarcode('');
     setOpeningQuantity('');
     setOpeningCost('');
+    setSupplierId('');
     setHsnCode('');
     setBusy(false);
   }
@@ -209,6 +213,9 @@ export default function NewProductScreen() {
             keyboardType="decimal-pad"
             placeholder="Leave empty for 0"
           />
+        ) : null}
+        {canAdjustStock && openingQuantity.trim() !== '' ? (
+          <SupplierPicker value={supplierId} onChange={setSupplierId} />
         ) : null}
 
         <Pressable
