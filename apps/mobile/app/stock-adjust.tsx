@@ -1,5 +1,6 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
+import { Pressable, Text } from 'react-native';
 import {
   ADD_REASONS,
   REMOVE_REASONS,
@@ -11,6 +12,7 @@ import { getData } from '@/api/client';
 import type { ProductDetail, StockDetail } from '@/api/types';
 import { Button, Choice, ErrorText, Field, FormHeader, Loading, Screen } from '@/components/ui';
 import { icons } from '@/theme/art';
+import { colors } from '@/theme/colors';
 import { useLoad } from '@/hooks/useLoad';
 import { useSubmit } from '@/hooks/useSubmit';
 import { formatDate, trimZeros } from '@/utils/format';
@@ -48,6 +50,7 @@ export default function StockAdjustScreen() {
   const [batchId, setBatchId] = useState('');
   const [batchNumber, setBatchNumber] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
+  const [showNote, setShowNote] = useState(false);
 
   if (loading) return <Loading />;
   if (!data) return <ErrorText message={loadError ?? 'Could not load this product.'} />;
@@ -64,7 +67,8 @@ export default function StockAdjustScreen() {
     unitCost,
     reason,
     notes,
-    batchId,
+    // only one batch to take from: use it without asking
+    batchId: batchId || (stock.batches.length === 1 ? stock.batches[0]!.id : ''),
     batchNumber,
     expiryDate,
     tracked,
@@ -85,8 +89,8 @@ export default function StockAdjustScreen() {
       <Stack.Screen options={{ title: `${TITLES[mode]}: ${product.name}` }} />
       <FormHeader
         art={icons.stockAdjust}
-        title="Change stock"
-        note="Every change is kept in the history with its reason."
+        title={TITLES[mode]}
+        note={`Now in stock: ${trimZeros(stock.quantityOnHand)} ${stock.baseUnitCode}`}
       />
 
       {product.conversions.length > 1 ? (
@@ -104,6 +108,7 @@ export default function StockAdjustScreen() {
         onChangeText={setQuantity}
         keyboardType="decimal-pad"
         placeholder="e.g. 25"
+        autoFocus
         hint={
           unit && !unit.isBase
             ? `1 ${unit.unitCode} = ${trimZeros(unit.factorToBase)} ${product.baseUnit.code}`
@@ -144,7 +149,7 @@ export default function StockAdjustScreen() {
       ) : null}
 
       {tracked && mode === 'REMOVE' ? (
-        stock.batches.length > 0 ? (
+        stock.batches.length > 1 ? (
           <Choice
             label="From which batch"
             options={stock.batches.map((b) => ({
@@ -154,9 +159,9 @@ export default function StockAdjustScreen() {
             value={batchId}
             onChange={setBatchId}
           />
-        ) : (
+        ) : stock.batches.length === 0 ? (
           <ErrorText message="There are no batches with stock to remove from." />
-        )
+        ) : null
       ) : null}
 
       {tracked && mode !== 'REMOVE' ? (
@@ -179,12 +184,23 @@ export default function StockAdjustScreen() {
       ) : null}
 
       {mode !== 'OPENING' ? (
-        <Field
-          label="Note (optional)"
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="e.g. found behind the shelf"
-        />
+        showNote || notes ? (
+          <Field
+            label="Note"
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="e.g. found behind the shelf"
+            autoFocus
+          />
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setShowNote(true)}
+            style={{ minHeight: 44, justifyContent: 'center' }}
+          >
+            <Text style={{ color: colors.primary, fontWeight: '700' }}>+ Add a note</Text>
+          </Pressable>
+        )
       ) : null}
 
       <ErrorText message={error} />

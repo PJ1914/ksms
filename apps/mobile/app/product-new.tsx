@@ -13,8 +13,9 @@ import {
   ErrorText,
   Field,
   FormHeader,
-  SectionTitle,
+  Segmented,
 } from '@/components/ui';
+import { Ionicons } from '@expo/vector-icons';
 import { icons } from '@/theme/art';
 import { colors } from '@/theme/colors';
 import { friendlyError } from '@/utils/errors';
@@ -39,7 +40,9 @@ export default function NewProductScreen() {
   const { can } = useAuth();
   const params = useLocalSearchParams<{ barcode?: string }>();
   const [name, setName] = useState('');
-  const [sellBy, setSellBy] = useState<SellBy>('KG');
+  const [sellBy, setSellBy] = useState<SellBy>('PCS');
+  const [more, setMore] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
   const [price, setPrice] = useState('');
   const [mrp, setMrp] = useState('');
   const [barcode, setBarcode] = useState(params.barcode ?? '');
@@ -67,7 +70,7 @@ export default function NewProductScreen() {
   const unitCode = sellBy === 'KG' ? 'kg' : sellBy === 'L' ? 'L' : 'pcs';
   const canAdjustStock = can('stock.adjust');
 
-  async function save() {
+  async function save(another: boolean) {
     const input = {
       name,
       sellBy,
@@ -105,11 +108,29 @@ export default function NewProductScreen() {
         await postData('/inventory/opening-stock', stockBody, stockKey.current);
       }
 
-      router.back();
+      if (another) {
+        setSavedCount((n) => n + 1);
+        resetForNext();
+      } else {
+        router.back();
+      }
     } catch (e) {
       setError(friendlyError(e));
       setBusy(false);
     }
+  }
+
+  function resetForNext() {
+    createdProduct.current = null;
+    stockKey.current = null;
+    setName('');
+    setPrice('');
+    setMrp('');
+    setBarcode('');
+    setOpeningQuantity('');
+    setOpeningCost('');
+    setHsnCode('');
+    setBusy(false);
   }
 
   return (
@@ -119,52 +140,39 @@ export default function NewProductScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <FormHeader
-          art={icons.addProduct}
-          title="New product"
-          note="Name, unit and selling price are enough to start billing."
-        />
+        {savedCount > 0 ? (
+          <View style={styles.saved}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+            <Text style={styles.savedText}>
+              {savedCount} product{savedCount === 1 ? '' : 's'} saved. Add the next one.
+            </Text>
+          </View>
+        ) : (
+          <FormHeader
+            art={icons.addProduct}
+            title="New product"
+            note="Name, price and how it is sold are enough to start billing."
+          />
+        )}
+
         <Field
           label="Product name"
           value={name}
           onChangeText={setName}
           placeholder="e.g. Sona Masoori Rice"
           autoCapitalize="words"
+          autoFocus
         />
 
-        <View style={{ marginBottom: 4 }}>
-          <Field
-            label="Barcode (optional)"
-            value={barcode}
-            onChangeText={setBarcode}
-            placeholder="Scan packet or type barcode"
-          />
-          <Button
-            title={barcode ? 'Scan another barcode' : 'Scan barcode with camera'}
-            variant="secondary"
-            onPress={() => setScanning(true)}
-          />
-        </View>
-
-        <Text style={[styles.label, { marginTop: 10 }]}>Sold</Text>
-        <View style={styles.choices}>
-          {SELL_BY.map((s) => {
-            const selected = s.key === sellBy;
-            return (
-              <Pressable
-                key={s.key}
-                accessibilityRole="radio"
-                accessibilityState={{ selected }}
-                onPress={() => setSellBy(s.key)}
-                style={[styles.choice, selected && styles.choiceSelected]}
-              >
-                <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>
-                  {s.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <Text style={styles.label}>Sold by</Text>
+        <Segmented
+          options={SELL_BY.map((s) => ({
+            key: s.key,
+            label: s.key === 'PCS' ? 'Piece / packet' : s.key === 'KG' ? 'Weight (kg)' : 'Litre',
+          }))}
+          value={sellBy}
+          onChange={setSellBy}
+        />
 
         <Field
           label={`Selling price for ${unitLabel} (₹)`}
@@ -174,60 +182,97 @@ export default function NewProductScreen() {
           placeholder="e.g. 52.50"
         />
 
-        <Field
-          label={`MRP for ${unitLabel} (optional, ₹)`}
-          value={mrp}
-          onChangeText={setMrp}
-          keyboardType="decimal-pad"
-          placeholder="Printed MRP on pack"
-        />
+        <View style={styles.barcodeRow}>
+          <View style={{ flex: 1 }}>
+            <Field
+              label="Barcode (optional)"
+              value={barcode}
+              onChangeText={setBarcode}
+              placeholder="Scan or type"
+            />
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Scan barcode with camera"
+            onPress={() => setScanning(true)}
+            style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.85 }]}
+          >
+            <Ionicons name="barcode-outline" size={24} color={colors.text} />
+          </Pressable>
+        </View>
 
         {canAdjustStock ? (
-          <>
-            <SectionTitle>Opening stock (optional)</SectionTitle>
-            <Card>
-              <Field
-                label={`How many in stock right now (${unitCode})`}
-                value={openingQuantity}
-                onChangeText={setOpeningQuantity}
-                keyboardType="decimal-pad"
-                placeholder="Leave empty for 0 stock"
-              />
-              {openingQuantity.trim() !== '' ? (
-                <Field
-                  label={`Purchase / cost price per ${unitLabel} (₹, optional)`}
-                  value={openingCost}
-                  onChangeText={setOpeningCost}
-                  keyboardType="decimal-pad"
-                  placeholder="0"
-                  hint="Used for profit calculation. Leave empty if unknown (uses ₹0)."
-                />
-              ) : null}
-            </Card>
-          </>
+          <Field
+            label={`In stock right now (${unitCode}, optional)`}
+            value={openingQuantity}
+            onChangeText={setOpeningQuantity}
+            keyboardType="decimal-pad"
+            placeholder="Leave empty for 0"
+          />
         ) : null}
 
-        <Choice
-          label="GST rate (when shop GST is on)"
-          options={GST_RATES}
-          value={gstRate}
-          onChange={setGstRate}
-        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: more }}
+          onPress={() => setMore((v) => !v)}
+          style={styles.moreToggle}
+        >
+          <Text style={styles.moreText}>
+            {more ? 'Hide more details' : 'More details: MRP, cost, GST, HSN'}
+          </Text>
+          <Ionicons name={more ? 'chevron-up' : 'chevron-down'} size={18} color={colors.primary} />
+        </Pressable>
 
-        <Field
-          label="HSN code (optional, 4-8 digits)"
-          value={hsnCode}
-          onChangeText={setHsnCode}
-          keyboardType="number-pad"
-          placeholder="e.g. 1006"
-          maxLength={8}
-        />
+        {more ? (
+          <Card>
+            <Field
+              label={`MRP for ${unitLabel} (₹)`}
+              value={mrp}
+              onChangeText={setMrp}
+              keyboardType="decimal-pad"
+              placeholder="Printed MRP on pack"
+            />
+            {canAdjustStock && openingQuantity.trim() !== '' ? (
+              <Field
+                label={`Cost price per ${unitLabel} (₹)`}
+                value={openingCost}
+                onChangeText={setOpeningCost}
+                keyboardType="decimal-pad"
+                placeholder="0"
+                hint="Used for profit. Leave empty if unknown."
+              />
+            ) : null}
+            <Choice
+              label="GST rate (when shop GST is on)"
+              options={GST_RATES}
+              value={gstRate}
+              onChange={setGstRate}
+            />
+            <Field
+              label="HSN code (4-8 digits)"
+              value={hsnCode}
+              onChangeText={setHsnCode}
+              keyboardType="number-pad"
+              placeholder="e.g. 1006"
+              maxLength={8}
+            />
+          </Card>
+        ) : null}
 
-        <Text style={styles.note}>
-          More barcodes, categories and pack units can also be updated anytime from Edit product.
-        </Text>
         <ErrorText message={error} />
-        <Button title="Save product" onPress={save} busy={busy} />
+        <Button
+          title="Save product"
+          icon="checkmark"
+          onPress={() => void save(false)}
+          busy={busy}
+        />
+        <Button
+          title="Save & add another"
+          icon="add"
+          variant="secondary"
+          onPress={() => void save(true)}
+          disabled={busy}
+        />
       </ScrollView>
 
       <BarcodeScannerModal
@@ -253,18 +298,32 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   label: { fontSize: 13, fontWeight: '700', color: '#3D4C43', marginBottom: 8 },
-  choices: { gap: 8, marginBottom: 14 },
-  choice: {
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+  barcodeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  scanBtn: {
+    marginTop: 26,
+    width: 54,
+    height: 54,
     borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    minHeight: 48,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  choiceSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
-  choiceText: { fontSize: 15, color: colors.text },
-  choiceTextSelected: { color: colors.primary, fontWeight: '600' },
-  note: { fontSize: 13, color: colors.textMuted, marginBottom: 12 },
+  moreToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 48,
+    marginBottom: 8,
+  },
+  moreText: { fontSize: 14, fontWeight: '700', color: colors.primary },
+  saved: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.successSoft,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
+  },
+  savedText: { flex: 1, color: colors.success, fontWeight: '700' },
 });

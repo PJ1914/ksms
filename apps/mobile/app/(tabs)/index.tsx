@@ -14,6 +14,7 @@ import {
   SectionTitle,
   useLayout,
   MAX_FONT_SCALE,
+  QuickActions,
 } from '@/components/ui';
 import { SyncBanner } from '@/components/SyncBanner';
 import { formatINR, isNegative } from '@/utils/currency';
@@ -166,6 +167,38 @@ export default function HomeScreen() {
               </Pressable>
             </View>
           ) : null}
+        </View>
+
+        <View style={{ marginTop: 12 }}>
+          <QuickActions
+            actions={[
+              {
+                label: 'Scan & sell',
+                icon: 'barcode-outline',
+                primary: true,
+                hidden: !can('sale.create'),
+                onPress: () => router.push('/sale/scan'),
+              },
+              {
+                label: 'Add product',
+                icon: 'cube-outline',
+                hidden: !can('product.manage'),
+                onPress: () => router.push('/product-new'),
+              },
+              {
+                label: 'Add customer',
+                icon: 'person-add-outline',
+                hidden: !can('customer.manage'),
+                onPress: () => router.push('/customer-new'),
+              },
+              {
+                label: 'Collect money',
+                icon: 'cash-outline',
+                hidden: !can('collection.create'),
+                onPress: () => router.push('/(tabs)/khata'),
+              },
+            ]}
+          />
         </View>
 
         {cart.lines.length && can('sale.create') ? (
