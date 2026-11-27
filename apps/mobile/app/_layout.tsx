@@ -22,6 +22,7 @@ import { colors } from '@/theme/colors';
 import { WorkspaceButton } from '@/components/WorkspaceButton';
 import { MAX_FONT_SCALE, useLayout } from '@/components/ui';
 import { DesktopShell } from '@/components/DesktopShell';
+import { IntroSplash } from '@/components/IntroSplash';
 
 export default function RootLayout() {
   return (
@@ -36,9 +37,16 @@ export default function RootLayout() {
           <RootStack />
         </KeyboardAvoidingView>
         <SlowServerNotice />
+        <AppIntro />
       </SyncProvider>
     </AuthProvider>
   );
+}
+
+/** The opening animation; it leaves once sign-in has been checked (signed in, signed out or offline). */
+function AppIntro() {
+  const { status } = useAuth();
+  return <IntroSplash ready={status !== 'loading'} />;
 }
 
 /** Every screen outside the five tabs shows a header with a back arrow; screens set their own title. */

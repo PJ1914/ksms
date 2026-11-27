@@ -111,3 +111,11 @@ An owner who works alone can choose "No, I work alone" on the More tab (or on th
 last 20 results, GST add/remove at 5/12/18/28% with the CGST/SGST split, and "customer gives" change. It runs
 entirely on the phone, with no network and no data stored. It replaced the "Collect money" quick action on Home;
 collecting money is still done from a customer's page in Khata.
+
+## Opening animation
+
+The native splash shows the icon on cream. `IntroSplash` (mounted in the root layout) takes over at the same
+size: the awning lifts and settles, the ₹ pops, the icon moves up, then "Yapaaram" and "Your shop, in your
+pocket" rise in. It takes about 2.7 s (build-up plus a short pause) while sign-in is checked underneath, waits on the last frame if loading
+is slower, fades out in 0.45 s, can be skipped with a tap, and stays still when the phone's "remove
+animations" setting is on. It plays once per launch (not when switching back to the app).

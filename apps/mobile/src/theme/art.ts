@@ -123,3 +123,10 @@ export function categoryArt(name: string | null | undefined): ImageSourcePropTyp
   for (const [re, key] of rules) if (re.test(n)) return icons[key];
   return icons.catOther;
 }
+
+/** Yapaaram icon in layers, for the opening animation (made by assets/brand/make-intro-layers.py). */
+export const brand = {
+  awning: require('../../assets/brand/intro-awning.png'),
+  body: require('../../assets/brand/intro-body.png'),
+  rupee: require('../../assets/brand/intro-rupee.png'),
+};

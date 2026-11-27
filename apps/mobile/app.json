@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "KSMS",
-    "slug": "ksms",
+    "name": "Yapaaram",
+    "slug": "yapaaram",
     "version": "0.1.0",
-    "scheme": "ksms",
+    "scheme": "yapaaram",
     "orientation": "default",
     "userInterfaceStyle": "light",
     "plugins": [
@@ -12,22 +12,39 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "KSMS uses the camera only to scan product barcodes."
+          "cameraPermission": "Yapaaram uses the camera only to scan product barcodes."
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/brand/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#F4F8F1"
+        }
+      ]
     ],
     "android": {
-      "package": "com.ksms.storemanager"
+      "package": "com.yapaaram.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/brand/adaptive-icon.png",
+        "monochromeImage": "./assets/brand/monochrome-icon.png",
+        "backgroundColor": "#F4F8F1"
+      }
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/brand/favicon.png"
     },
     "experiments": {
       "typedRoutes": true
     },
     "ios": {
-      "supportsTablet": true
-    }
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yapaaram.app"
+    },
+    "icon": "./assets/brand/icon.png"
   }
 }
