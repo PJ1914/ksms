@@ -80,7 +80,7 @@ export default function CollectCustomerPaymentScreen() {
         ? `Advance balance: ${formatINR(absMoney(done.balanceAfter))}`
         : `Remaining due: ${formatINR(done.balanceAfter)}`;
       const lines = [
-        `${profile?.organization.name ?? 'KSMS'} — Payment Receipt`,
+        `${profile?.organization.name ?? 'Yapaaram'} — Payment Receipt`,
         `Receipt: ${done.receiptNumber}`,
         `Customer: ${c.name}`,
         `Received: ${formatINR(done.amount)} (${done.method})`,

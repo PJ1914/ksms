@@ -62,7 +62,7 @@ export default function NewSupplierScreen() {
         value={openingBalance}
         onChangeText={setOpeningBalance}
         keyboardType="decimal-pad"
-        hint="What you owed this supplier before you started using KSMS."
+        hint="What you owed this supplier before you started using Yapaaram."
       />
       <ErrorText message={error} />
     </Screen>

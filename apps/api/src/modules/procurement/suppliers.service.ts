@@ -87,7 +87,7 @@ export class SuppliersService {
           amount: opening,
           referenceType: 'SUPPLIER',
           referenceId: s.id,
-          description: 'Amount already owed when the shop started using KSMS',
+          description: 'Amount already owed when the shop started using Yapaaram',
         });
       }
       await this.audit.record(tx, {

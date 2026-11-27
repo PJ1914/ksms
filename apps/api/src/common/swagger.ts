@@ -10,9 +10,9 @@ export function setupSwagger(app: INestApplication, env: Env): void {
   if (!enabled) return;
 
   const config = new DocumentBuilder()
-    .setTitle('KSMS API')
+    .setTitle('Yapaaram API')
     .setDescription(
-      'Kirana Store Management System. Money and quantities are decimal strings. ' +
+      'Yapaaram: shop management for kirana stores. Money and quantities are decimal strings. ' +
         'Success: `{ data, meta? }`. Error: `{ error: { code, message, details?, correlationId } }`.',
     )
     .setVersion('1')

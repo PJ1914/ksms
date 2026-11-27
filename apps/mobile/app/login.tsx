@@ -106,6 +106,9 @@ export default function LoginScreen() {
               resizeMode="contain"
               accessibilityIgnoresInvertColors
             />
+            <Text style={styles.appName} accessibilityRole="header">
+              Yapaaram
+            </Text>
             <Text style={styles.brand}>
               {joining
                 ? 'Join your shop'
@@ -326,6 +329,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   heroArt: { width: 260, height: 190 },
+  appName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.primary,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginTop: 8,
+  },
   brand: {
     fontSize: 26,
     fontWeight: '800',

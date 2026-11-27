@@ -60,7 +60,7 @@ export class CreateSupplierDto {
   @Matches(STATE_CODE_REGEX, { message: 'stateCode must be the 2-digit GST state code' })
   stateCode?: string;
   @IsOptional() @IsInt() @Min(0) @Max(365) paymentTermsDays?: number;
-  /** What the shop already owed this supplier when it started using KSMS. Needs the X-Branch-Id header. */
+  /** What the shop already owed this supplier when it started using Yapaaram. Needs the X-Branch-Id header. */
   @IsOptional() @Matches(MONEY, msg('openingBalance')) openingBalance?: string;
 }
 

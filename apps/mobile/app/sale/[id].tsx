@@ -78,7 +78,7 @@ export default function SaleScreen() {
         `• ${i.name}: ${trimZeros(i.quantity)} ${i.unitCode} × ${formatINR(i.unitPrice)} = ${formatINR(i.lineTotal)}`,
     );
     const parts = [
-      `${profile?.organization.name ?? 'KSMS'} — ${s.invoice?.type === 'GST' ? 'Tax Invoice' : s.invoice?.type === 'BILL_OF_SUPPLY' ? 'Bill of Supply' : 'Invoice'} ${invNo}`,
+      `${profile?.organization.name ?? 'Yapaaram'} — ${s.invoice?.type === 'GST' ? 'Tax Invoice' : s.invoice?.type === 'BILL_OF_SUPPLY' ? 'Bill of Supply' : 'Invoice'} ${invNo}`,
       `Date: ${formatDateTime(s.soldAt)}`,
       `Customer: ${s.customer?.name ?? 'Walk-in'}`,
       '',
