@@ -203,10 +203,9 @@ export default function HomeScreen() {
                 onPress: () => router.push('/customer-new'),
               },
               {
-                label: 'Collect money',
-                icon: 'cash-outline',
-                hidden: !can('collection.create'),
-                onPress: () => router.push('/(tabs)/khata'),
+                label: 'Calculator',
+                icon: 'calculator-outline',
+                onPress: () => router.push('/calculator'),
               },
             ]}
           />

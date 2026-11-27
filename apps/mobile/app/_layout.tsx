@@ -166,6 +166,7 @@ function RootStack() {
               options={{ ...SCREEN_OPTIONS, title: 'Edit product' }}
             />
             <Stack.Screen name="categories" options={{ ...SCREEN_OPTIONS, title: 'Categories' }} />
+            <Stack.Screen name="calculator" options={{ ...SCREEN_OPTIONS, title: 'Calculator' }} />
             <Stack.Screen name="staff" options={{ ...SCREEN_OPTIONS, title: 'Staff' }} />
             <Stack.Screen name="staff/[id]" options={{ ...SCREEN_OPTIONS, title: 'Staff' }} />
             <Stack.Screen

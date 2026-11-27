@@ -103,3 +103,11 @@ All of it uses the existing server endpoints (`/employees`, `/roles`, `/invitati
 | Join with an invitation | `login.tsx`        | "I have an invitation code": code, name, password. Someone who already has an account with that number enters their existing password | none (public)                         |
 
 An owner who works alone can choose "No, I work alone" on the More tab (or on the Staff screen): the Team group is then hidden. The choice is a display setting kept on the phone per shop (`src/prefs/staff-pref.ts`), not a permission, and "I have staff now" brings the options back. Other roles with the permission always see the Team group.
+
+## Calculator (Home, quick actions)
+
+`app/calculator.tsx`, engine in `src/utils/calc.ts` (exact decimal maths, no floats). Shop-style percent
+(`200 + 18%` = 236, `500 − 10%` = 450, `200 × 5%` = 10), × ÷ before + −, Indian number grouping, a tape of the
+last 20 results, GST add/remove at 5/12/18/28% with the CGST/SGST split, and "customer gives" change. It runs
+entirely on the phone, with no network and no data stored. It replaced the "Collect money" quick action on Home;
+collecting money is still done from a customer's page in Khata.

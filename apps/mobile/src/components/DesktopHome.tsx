@@ -210,9 +210,7 @@ export function DesktopHome({
           {can('customer.manage') ? (
             <Action label="Add customer" icon="person-add-outline" to="/customer-new" />
           ) : null}
-          {can('collection.create') ? (
-            <Action label="Collect money" icon="cash-outline" to="/(tabs)/khata" />
-          ) : null}
+          <Action label="Calculator" icon="calculator-outline" to="/calculator" />
         </View>
       </View>
 
