@@ -18,6 +18,10 @@ export function SyncBanner({ inTopBar = false }: { inTopBar?: boolean }) {
   const isOffline = syncState === 'offline';
   const isSyncing = syncState === 'syncing';
 
+  // Desktop: stay quiet unless a held bill is waiting or failed. The browser build has no
+  // offline database, so "offline" there only means the local cache could not sync.
+  if (mode !== 'phone' && !hasFailed && !hasPending) return null;
+
   let bg: string = colors.primarySoft;
   let border: string = colors.primarySoft;
   let fg: string = colors.success;

@@ -1,30 +1,22 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Image, Share, Text, View } from 'react-native';
-import { illustrations } from '@/theme/art';
+import { Ionicons } from '@expo/vector-icons';
+import { Pressable, Share, Text, View } from 'react-native';
+import { colors } from '@/theme/colors';
 import { getData } from '@/api/client';
-import type { SaleDetail } from '@/api/types';
+import type { BranchDetail, OrganizationSettings, SaleDetail } from '@/api/types';
+import { Invoice, type ShopDetails } from '@/components/Invoice';
+import { canPrint, printPage } from '@/utils/print';
 import { useAuth } from '@/auth/AuthProvider';
-import {
-  Badge,
-  Button,
-  Card,
-  ErrorText,
-  Field,
-  KeyValue,
-  Loading,
-  Screen,
-  SectionTitle,
-} from '@/components/ui';
+import { Card, ErrorText, Field, Loading, Screen } from '@/components/ui';
 import { useLoad } from '@/hooks/useLoad';
 import { useSubmit } from '@/hooks/useSubmit';
-import { colors } from '@/theme/colors';
 import { formatINR, isMoreThan, isPositive, isZero } from '@/utils/currency';
-import { formatDateTime, trimZeros, words } from '@/utils/format';
+import { formatDateTime, trimZeros } from '@/utils/format';
 
 export default function SaleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { can, profile } = useAuth();
+  const { can, profile, branch } = useAuth();
   const {
     data: s,
     loading,
@@ -32,6 +24,17 @@ export default function SaleScreen() {
     refreshing,
     reload,
   } = useLoad(() => getData<SaleDetail>(`/sales/${id}`), [id]);
+  const shop = useLoad<ShopDetails>(async () => {
+    const [org, branches] = await Promise.all([
+      getData<OrganizationSettings>('/organization').catch(() => null),
+      can('branch.read') ? getData<BranchDetail[]>('/branches').catch(() => []) : [],
+    ]);
+    return {
+      org,
+      branch: branches.find((b) => b.id === branch?.id) ?? branches[0] ?? null,
+      fallbackName: profile?.organization.name ?? 'Shop',
+    };
+  }, [branch?.id]);
   const cancel = useSubmit();
   const [reason, setReason] = useState('');
   const [asking, setAsking] = useState(false);
@@ -81,125 +84,52 @@ export default function SaleScreen() {
     await Share.share({ title: `Invoice ${invNo}`, message: parts.join('\n') });
   }
 
+  const shopDetails = shop.data ?? {
+    org: null,
+    branch: null,
+    fallbackName: profile?.organization.name ?? 'Shop',
+  };
+  const canReturn = !cancelled && can('sale.return') && returnable;
+  const canCancel = !cancelled && can('sale.cancel') && isZero(s.returnedTotal);
+
   return (
-    <Screen
-      onRefresh={() => void reload(true)}
-      refreshing={refreshing}
-      footer={
-        can('sale.create') ? (
-          <Button title="Next bill" icon="add" onPress={() => router.replace('/sale/new')} />
-        ) : undefined
-      }
-    >
+    <Screen onRefresh={() => void reload(true)} refreshing={refreshing}>
       <Stack.Screen options={{ title: s.saleNumber }} />
 
-      {!cancelled ? (
-        <View style={{ alignItems: 'center', marginBottom: 8 }}>
-          <Image
-            source={illustrations.billSaved}
-            style={{ width: 150, height: 130 }}
-            resizeMode="contain"
-            accessibilityIgnoresInvertColors
-          />
-        </View>
-      ) : null}
-      <Card>
-        <View
-          style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
-        >
-          <Text style={{ fontSize: 28, fontWeight: '800', color: colors.text }}>
-            {formatINR(s.total)}
-          </Text>
-          <Badge text={cancelled ? 'Cancelled' : 'Completed'} tone={cancelled ? 'bad' : 'good'} />
-        </View>
-        <KeyValue label="When" value={formatDateTime(s.soldAt)} />
-        {s.invoice ? (
-          <KeyValue
-            label="Invoice"
-            value={`${s.invoice.invoiceNumber} (${words(s.invoice.type)})`}
-          />
-        ) : null}
-        <KeyValue label="Customer" value={s.customer?.name ?? 'Walk-in'} />
-        <KeyValue label="Sold by" value={s.soldBy.fullName} />
-        {cancelled && s.cancelReason ? (
-          <KeyValue label="Cancelled because" value={s.cancelReason} tone="danger" />
-        ) : null}
-      </Card>
-
-      <SectionTitle>Items</SectionTitle>
-      <Card>
-        {s.items.map((i) => (
-          <View key={i.id} style={{ paddingVertical: 6 }}>
-            <KeyValue label={i.name} value={formatINR(i.lineTotal)} bold />
-            <KeyValue
-              label={`${trimZeros(i.quantity)} ${i.unitCode} × ${formatINR(i.unitPrice)}${isPositive(i.discountAmount) ? ` (discount ${formatINR(i.discountAmount)})` : ''}`}
-              value={
-                isPositive(i.returnedBaseQuantity)
-                  ? `${trimZeros(i.returnedBaseQuantity)} returned`
-                  : ''
-              }
-              tone="muted"
+      <View style={{ width: '100%', maxWidth: 820, alignSelf: 'center', gap: 14 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          {canPrint ? (
+            <BillAction primary label="Print bill" icon="print-outline" onPress={printPage} />
+          ) : null}
+          <BillAction label="Share" icon="share-outline" onPress={() => void shareInvoice()} />
+          {canReturn ? (
+            <BillAction
+              label="Return goods"
+              icon="return-down-back-outline"
+              onPress={() => router.push({ pathname: '/sale/return', params: { saleId: s.id } })}
             />
-          </View>
-        ))}
-      </Card>
-
-      <SectionTitle>Payment</SectionTitle>
-      <Card>
-        <KeyValue label="Items" value={formatINR(s.subtotal)} />
-        {isPositive(s.discountTotal) ? (
-          <KeyValue label="Discount" value={`- ${formatINR(s.discountTotal)}`} tone="success" />
-        ) : null}
-        {isPositive(s.taxTotal) ? (
-          <>
-            <KeyValue label="Taxable value" value={formatINR(s.taxableTotal)} />
-            {isPositive(s.igstTotal) ? (
-              <KeyValue label="IGST" value={formatINR(s.igstTotal)} />
-            ) : (
-              <>
-                <KeyValue label="CGST" value={formatINR(s.cgstTotal)} />
-                <KeyValue label="SGST" value={formatINR(s.sgstTotal)} />
-              </>
-            )}
-          </>
-        ) : null}
-        {!isZero(s.roundOff) ? (
-          <KeyValue label="Round off" value={formatINR(s.roundOff)} tone="muted" />
-        ) : null}
-        <KeyValue label="Total" value={formatINR(s.total)} bold />
-        {s.payments
-          .filter((p) => p.status === 'COMPLETED' || cancelled)
-          .map((p) => (
-            <KeyValue
-              key={p.paymentId}
-              label={`Paid by ${words(p.method)}`}
-              value={formatINR(p.amount)}
-              tone={p.status === 'REVERSED' ? 'muted' : undefined}
+          ) : null}
+          {canCancel && !asking ? (
+            <BillAction
+              danger
+              label="Cancel bill"
+              icon="close-circle-outline"
+              onPress={() => setAsking(true)}
             />
-          ))}
-        {isPositive(s.creditAmount) ? (
-          <KeyValue label="On khata" value={formatINR(s.creditAmount)} tone="danger" />
-        ) : null}
-        {isPositive(s.returnedTotal) ? (
-          <KeyValue label="Returned goods worth" value={formatINR(s.returnedTotal)} tone="muted" />
-        ) : null}
-        {isPositive(s.refundedTotal) ? (
-          <KeyValue label="Money given back" value={formatINR(s.refundedTotal)} tone="muted" />
-        ) : null}
-      </Card>
+          ) : null}
+          {can('sale.create') ? (
+            <View style={{ marginLeft: 'auto' }}>
+              <BillAction
+                primary={!canPrint}
+                label="Next bill"
+                icon="add-circle-outline"
+                onPress={() => router.replace('/sale/new')}
+              />
+            </View>
+          ) : null}
+        </View>
 
-      <Button title="Share invoice" variant="secondary" onPress={() => void shareInvoice()} />
-
-      {!cancelled && can('sale.return') && returnable ? (
-        <Button
-          title="Return goods"
-          variant="secondary"
-          onPress={() => router.push({ pathname: '/sale/return', params: { saleId: s.id } })}
-        />
-      ) : null}
-
-      {!cancelled && can('sale.cancel') && isZero(s.returnedTotal) ? (
-        asking ? (
+        {asking ? (
           <Card>
             <Field
               label="Why is this bill cancelled?"
@@ -208,18 +138,69 @@ export default function SaleScreen() {
               placeholder="e.g. customer changed mind"
             />
             <ErrorText message={cancel.error} />
-            <Button
-              title="Yes, cancel this bill"
-              variant="danger"
-              onPress={doCancel}
-              busy={cancel.busy}
-            />
-            <Button title="Keep the bill" variant="secondary" onPress={() => setAsking(false)} />
+            <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+              <BillAction
+                danger
+                label="Yes, cancel this bill"
+                icon="close-circle-outline"
+                onPress={doCancel}
+              />
+              <BillAction
+                label="Keep the bill"
+                icon="arrow-undo-outline"
+                onPress={() => setAsking(false)}
+              />
+            </View>
           </Card>
-        ) : (
-          <Button title="Cancel this bill" variant="danger" onPress={() => setAsking(true)} />
-        )
-      ) : null}
+        ) : null}
+
+        <Invoice sale={s} shop={shopDetails} />
+      </View>
     </Screen>
+  );
+}
+
+/** A compact action button: big enough to tap, sized to its label instead of stretching the page. */
+function BillAction({
+  label,
+  icon,
+  onPress,
+  primary,
+  danger,
+}: {
+  label: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  onPress: () => void;
+  primary?: boolean;
+  danger?: boolean;
+}) {
+  const ink = primary ? colors.onPrimary : danger ? colors.danger : colors.primary;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        minHeight: 56,
+        paddingHorizontal: 20,
+        borderRadius: 14,
+        borderWidth: 2,
+        borderColor: primary ? colors.primary : danger ? colors.danger : colors.border,
+        backgroundColor: primary
+          ? hovered
+            ? colors.primaryDark
+            : colors.primary
+          : hovered
+            ? colors.surfaceMuted
+            : colors.surface,
+        opacity: pressed ? 0.85 : 1,
+      })}
+    >
+      <Ionicons name={icon} size={26} color={ink} />
+      <Text style={{ fontSize: 17, fontWeight: '700', color: ink }}>{label}</Text>
+    </Pressable>
   );
 }

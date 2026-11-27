@@ -135,14 +135,17 @@ export function Button({
     secondary: { bg: colors.primarySoft, fg: colors.primary, border: colors.primarySoft },
     danger: { bg: colors.surface, fg: colors.danger, border: '#F3C9C1' },
   }[variant];
+  const wide = useLayout().mode !== 'phone';
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={title}
       accessibilityState={{ disabled: !!(busy || disabled), busy: !!busy }}
       disabled={busy || disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
+        wide && { minHeight: 64 },
         { backgroundColor: palette.bg, borderColor: palette.border },
         variant === 'primary' && !disabled && shadow.raised,
         (pressed || busy || disabled) && { opacity: disabled ? 0.45 : 0.8 },
@@ -152,10 +155,10 @@ export function Button({
         <ActivityIndicator color={palette.fg} />
       ) : (
         <View style={styles.buttonInner}>
-          {icon ? <Ionicons name={icon} size={20} color={palette.fg} /> : null}
+          {icon ? <Ionicons name={icon} size={wide ? 28 : 20} color={palette.fg} /> : null}
           <Text
             maxFontSizeMultiplier={MAX_FONT_SCALE}
-            style={[styles.buttonText, { color: palette.fg }]}
+            style={[styles.buttonText, wide && { fontSize: 19 }, { color: palette.fg }]}
           >
             {title}
           </Text>
@@ -538,6 +541,7 @@ export function ListRow({
   right,
   rightSub,
   onPress,
+  actions,
   leading,
   icon,
   art,
@@ -548,6 +552,8 @@ export function ListRow({
   right?: React.ReactNode;
   rightSub?: string;
   onPress?: () => void;
+  /** Extra buttons beside the row. They sit outside the row's own button (a button cannot contain a button). */
+  actions?: React.ReactNode;
   /** Anything on the left (an Avatar, IconTile…). `icon`/`art` are shortcuts for an IconTile. */
   leading?: React.ReactNode;
   icon?: IconName;
@@ -555,8 +561,8 @@ export function ListRow({
   tint?: Tint;
 }) {
   const lead = leading ?? (icon || art ? <IconTile icon={icon} art={art} tint={tint} /> : null);
-  const content = (
-    <View style={styles.listRow}>
+  const rowInner = (
+    <>
       {lead ? <View style={{ marginRight: 12 }}>{lead}</View> : null}
       <View style={{ flex: 1 }}>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.listTitle} numberOfLines={2}>
@@ -587,8 +593,29 @@ export function ListRow({
       {onPress ? (
         <Ionicons name="chevron-forward" size={18} color="#A3B1A8" style={{ marginLeft: 6 }} />
       ) : null}
-    </View>
+    </>
   );
+  if (actions) {
+    return (
+      <View style={styles.listRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={title}
+          onPress={onPress}
+          style={({ pressed }) => [
+            { flex: 1, flexDirection: 'row', alignItems: 'center', minWidth: 0 },
+            pressed && { opacity: 0.75 },
+          ]}
+        >
+          {rowInner}
+        </Pressable>
+        <View style={{ marginLeft: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {actions}
+        </View>
+      </View>
+    );
+  }
+  const content = <View style={styles.listRow}>{rowInner}</View>;
   return onPress ? (
     <Pressable
       accessibilityRole="button"
@@ -1062,11 +1089,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingVertical: 10,
     paddingHorizontal: 16,
-    minHeight: 44,
+    minHeight: 52,
     justifyContent: 'center',
   },
   pillSelected: { borderColor: colors.text, backgroundColor: colors.text },
-  pillText: { fontSize: 14, fontWeight: '600', color: colors.text },
+  pillText: { fontSize: 16, fontWeight: '600', color: colors.text },
   pillTextSelected: { color: colors.surface },
   segTrack: {
     flexDirection: 'row',
@@ -1076,7 +1103,7 @@ const styles = StyleSheet.create({
     gap: 4,
     marginBottom: 14,
   },
-  seg: { flex: 1, minHeight: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  seg: { flex: 1, minHeight: 48, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   segOn: { backgroundColor: colors.surface, ...shadow.card },
   segText: { fontSize: 14, fontWeight: '700', color: colors.textMuted },
   segTextOn: { color: colors.text },
@@ -1111,13 +1138,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 18,
-    minHeight: 64,
+    minHeight: 76,
     ...shadow.card,
     shadowOpacity: 0.04,
   },
-  listTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-  listSub: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
-  listRight: { fontSize: 15, fontWeight: '800', color: colors.text },
+  listTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
+  listSub: { fontSize: 15, color: colors.textMuted, marginTop: 2 },
+  listRight: { fontSize: 17, fontWeight: '800', color: colors.text },
   searchRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
   searchBox: {
     flex: 1,

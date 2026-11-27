@@ -249,33 +249,35 @@ function StockList({
                     </Text>
                   ) : null}
                 </View>
-                {canAdjust ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Add stock for ${item.name}`}
-                    hitSlop={6}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/stock-adjust',
-                        params: { productId: item.productId, mode: 'ADD' },
-                      })
-                    }
-                    style={({ pressed }) => [
-                      {
-                        width: 44,
-                        height: 44,
-                        borderRadius: 14,
-                        backgroundColor: colors.primarySoft,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      },
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <Ionicons name="add" size={22} color={colors.primary} />
-                  </Pressable>
-                ) : null}
               </View>
+            }
+            actions={
+              canAdjust ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add stock for ${item.name}`}
+                  hitSlop={6}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/stock-adjust',
+                      params: { productId: item.productId, mode: 'ADD' },
+                    })
+                  }
+                  style={({ pressed }) => [
+                    {
+                      width: 44,
+                      height: 44,
+                      borderRadius: 14,
+                      backgroundColor: colors.primarySoft,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    },
+                    pressed && { opacity: 0.8 },
+                  ]}
+                >
+                  <Ionicons name="add" size={22} color={colors.primary} />
+                </Pressable>
+              ) : undefined
             }
             onPress={() => open(item.productId)}
           />

@@ -105,7 +105,7 @@ export default function MoreScreen() {
       tint: 'blue',
       items: [
         {
-          title: 'GST settings',
+          title: 'Shop & bill details',
           art: icons.gstInvoice,
           href: '/gst-settings',
           show: can('organization.read'),

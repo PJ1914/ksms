@@ -33,15 +33,15 @@ export function WorkspaceButton({
       onFocus={() => setFocus(true)}
       onBlur={() => setFocus(false)}
       style={({ pressed }) => ({
-        minHeight: 44,
-        minWidth: 44,
+        minHeight: 56,
+        minWidth: 56,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: compact ? 'center' : 'flex-start',
-        gap: 10,
-        paddingHorizontal: compact ? 4 : 10,
+        gap: 14,
+        paddingHorizontal: compact ? 4 : 14,
         borderRadius: radius.sm,
-        borderWidth: 2,
+        borderWidth: 3,
         borderColor: focus ? colors.info : 'transparent',
         backgroundColor: primary
           ? hover
@@ -55,7 +55,7 @@ export function WorkspaceButton({
         opacity: pressed ? 0.8 : 1,
       })}
     >
-      <Ionicons name={icon} size={20} color={ink} />
+      <Ionicons name={icon} size={26} color={ink} />
       {!compact && (
         <Text
           maxFontSizeMultiplier={MAX_FONT_SCALE}
@@ -63,7 +63,7 @@ export function WorkspaceButton({
           style={{
             flexShrink: 1,
             color: ink,
-            fontSize: 14,
+            fontSize: 17,
             fontWeight: active || primary ? '700' : '500',
           }}
         >

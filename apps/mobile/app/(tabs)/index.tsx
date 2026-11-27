@@ -17,7 +17,7 @@ import {
   QuickActions,
 } from '@/components/ui';
 import { SyncBanner } from '@/components/SyncBanner';
-import { DesktopDashboard } from '@/components/DesktopDashboard';
+import { DesktopHome } from '@/components/DesktopHome';
 import { formatINR, isNegative } from '@/utils/currency';
 import { useLoad } from '@/hooks/useLoad';
 import { icons, illustrations } from '@/theme/art';
@@ -74,6 +74,16 @@ export default function HomeScreen() {
 
   const fullName = profile?.user.fullName ?? '';
   const firstName = fullName.split(' ')[0] ?? '';
+
+  if (layout.mode !== 'phone')
+    return (
+      <DesktopHome
+        name={firstName}
+        shop={`${profile?.organization.name ?? ''}${branch ? ` · ${branch.name}` : ''}`}
+        d={d}
+        counts={data ?? undefined}
+      />
+    );
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
@@ -256,8 +266,6 @@ export default function HomeScreen() {
             onPress={() => router.push('/suppliers')}
           />
         </View>
-
-        <DesktopDashboard />
 
         {d ? (
           <View style={styles.owed}>

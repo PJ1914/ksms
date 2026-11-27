@@ -21,7 +21,7 @@ const groups: [string, Entry[]][] = [
       ['New bill', 'add', '/sale/new', /^\/sale\/(new|add-item|customer|scan)$/, 'sale.create'],
       ['Held bills', 'pause-circle-outline', '/held-bills', /^\/held-bills$/, 'sale.create'],
       [
-        'Sales / returns',
+        'Sales',
         'receipt-outline',
         '/(tabs)/billing',
         /^\/(billing$|sale\/(?!new$|add-item$|customer$|scan$))/,
@@ -30,52 +30,28 @@ const groups: [string, Entry[]][] = [
     ],
   ],
   [
-    'Customers (CRM)',
+    'Manage',
     [
       [
-        'Customers & khata',
+        'Customers',
         'people-outline',
         '/(tabs)/khata',
-        /^\/(khata|customer)/,
+        /^\/(khata|customer|collections)/,
         'customer.read',
       ],
-      ['Collections', 'wallet-outline', '/collections', /^\/collections$/, 'collection.read'],
+      ['Products', 'cube-outline', '/(tabs)/stock', /^\/(stock|product)/, 'stock.read'],
+      ['Suppliers', 'business-outline', '/suppliers', /^\/(supplier|purchase)/, 'supplier.read'],
       [
-        'Collection agents',
-        'person-circle-outline',
-        '/collection-agents',
-        /^\/collection-agents$/,
-        'collection.read',
-      ],
-    ],
-  ],
-  [
-    'Inventory',
-    [
-      ['Products / stock', 'cube-outline', '/(tabs)/stock', /^\/(stock$|product)/, 'stock.read'],
-      ['Categories', 'pricetags-outline', '/categories', /^\/categories$/, 'category.manage'],
-      ['Stock adjust', 'options-outline', '/stock-adjust', /^\/stock-adjust$/, 'stock.adjust'],
-      ['Purchases', 'bag-outline', '/purchases', /^\/purchase/, 'purchase.read'],
-      ['Suppliers', 'business-outline', '/suppliers', /^\/supplier/, 'supplier.read'],
-    ],
-  ],
-  [
-    'Money',
-    [
-      ['Cashbook', 'book-outline', '/cashbook', /^\/cashbook$/, 'cashbook.read'],
-      ['Expenses', 'card-outline', '/expenses', /^\/expenses$/, 'expense.read'],
-      [
-        'Daily closing',
-        'calendar-outline',
-        '/daily-closing',
-        /^\/daily-closing$/,
+        'Money',
+        'wallet-outline',
+        '/cashbook',
+        /^\/(cashbook|expenses|daily-closing)/,
         'cashbook.read',
-        'closing.manage',
       ],
     ],
   ],
   [
-    'Insights',
+    '',
     [
       [
         'Reports',
@@ -88,21 +64,12 @@ const groups: [string, Entry[]][] = [
         'report.inventory',
         'report.purchases',
       ],
-      ['Notifications', 'notifications-outline', '/notifications', /^\/notifications$/],
-    ],
-  ],
-  [
-    'Settings',
-    [
       [
-        'GST settings',
-        'settings-outline',
-        '/gst-settings',
-        /^\/gst-settings$/,
-        'organization.read',
+        'More',
+        'grid-outline',
+        '/(tabs)/more',
+        /^\/(more|categories|gst-settings|sync|notifications|collection-agents|stock-adjust)/,
       ],
-      ['Sync', 'sync-outline', '/sync', /^\/sync$/],
-      ['More', 'grid-outline', '/(tabs)/more', /^\/more$/],
     ],
   ],
 ];
@@ -127,7 +94,7 @@ function Sidebar({
         borderRightWidth: 1,
         borderColor: colors.border,
       }}
-      contentContainerStyle={{ padding: 10, gap: 3 }}
+      contentContainerStyle={{ padding: 12, gap: 4 }}
     >
       {toggle ? (
         <WorkspaceButton
@@ -144,22 +111,22 @@ function Sidebar({
           Kirana
         </Text>
       )}
-      {groups.map(([title, entries]) => {
+      {groups.map(([title, entries], groupIndex) => {
         const visible = entries.filter(
           ([, , , , ...permissions]) => !permissions.length || permissions.some(can),
         );
         if (!visible.length) return null;
         return (
-          <View key={title} style={{ marginTop: title ? 8 : 0 }}>
+          <View key={groupIndex} style={{ marginTop: title ? 14 : 0, gap: 4 }}>
             {!!title && !compact && (
               <Text
                 maxFontSizeMultiplier={MAX_FONT_SCALE}
                 style={{
                   color: colors.textMuted,
-                  fontSize: 12,
-                  fontWeight: '700',
-                  paddingHorizontal: 12,
-                  paddingVertical: 4,
+                  fontSize: 14,
+                  fontWeight: '800',
+                  paddingHorizontal: 14,
+                  paddingVertical: 6,
                 }}
               >
                 {title}
@@ -202,12 +169,12 @@ function TopBar({
         paddingHorizontal: 12,
       }}
     >
-      <View style={{ minHeight: 56, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <View style={{ minHeight: 76, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
         <WorkspaceButton label="Search (Ctrl+K)" icon="search-outline" onPress={search} />
         <Text
           maxFontSizeMultiplier={MAX_FONT_SCALE}
           numberOfLines={1}
-          style={{ flex: 1, color: colors.text, fontWeight: '600' }}
+          style={{ flex: 1, color: colors.text, fontWeight: '700', fontSize: 18 }}
         >
           {branch?.name}
         </Text>

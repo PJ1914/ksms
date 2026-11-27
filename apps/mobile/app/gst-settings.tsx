@@ -45,6 +45,12 @@ export default function GstSettingsScreen() {
   const [gstin, setGstin] = useState('');
   const [stateCode, setStateCode] = useState('');
   const [addressLine, setAddressLine] = useState('');
+  const [shopName, setShopName] = useState('');
+  const [shopPhone, setShopPhone] = useState('');
+  const [shopEmail, setShopEmail] = useState('');
+  const [city, setCity] = useState('');
+  const [stateName, setStateName] = useState('');
+  const [pincode, setPincode] = useState('');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -56,6 +62,12 @@ export default function GstSettingsScreen() {
     setGstin(data.activeBranch?.gstin ?? '');
     setStateCode(data.activeBranch?.stateCode ?? '');
     setAddressLine(data.activeBranch?.addressLine ?? '');
+    setShopName(data.org.name);
+    setShopPhone(data.activeBranch?.phone ?? data.org.phone ?? '');
+    setShopEmail(data.org.email ?? '');
+    setCity(data.activeBranch?.city ?? '');
+    setStateName(data.activeBranch?.state ?? '');
+    setPincode(data.activeBranch?.pincode ?? '');
   }, [data]);
 
   if (loading) return <Loading />;
@@ -78,6 +90,10 @@ export default function GstSettingsScreen() {
           ...(cleanGstin ? { gstin: cleanGstin } : {}),
           ...(cleanState ? { stateCode: cleanState } : {}),
           ...(addressLine.trim() ? { addressLine: addressLine.trim() } : {}),
+          ...(city.trim() ? { city: city.trim() } : {}),
+          ...(stateName.trim() ? { state: stateName.trim() } : {}),
+          ...(pincode.trim() ? { pincode: pincode.trim() } : {}),
+          ...(shopPhone.trim() ? { phone: shopPhone.trim() } : {}),
         });
       }
       if (can('organization.manage')) {
@@ -85,6 +101,8 @@ export default function GstSettingsScreen() {
           gstEnabled: on,
           defaultTaxMode,
           ...(legalName.trim().length >= 2 ? { legalName: legalName.trim() } : {}),
+          ...(shopName.trim().length >= 2 ? { name: shopName.trim() } : {}),
+          ...(shopEmail.trim() ? { email: shopEmail.trim() } : {}),
         });
       }
       await reload();
@@ -100,16 +118,41 @@ export default function GstSettingsScreen() {
     <Screen
       footer={
         can('organization.manage') ? (
-          <Button title="Save GST settings" onPress={() => void save()} busy={busy} />
+          <Button title="Save shop details" onPress={() => void save()} busy={busy} />
         ) : undefined
       }
     >
-      <Stack.Screen options={{ title: 'GST & Billing Settings' }} />
+      <Stack.Screen options={{ title: 'Shop & bill details' }} />
       <FormHeader
         art={icons.gstInvoice}
-        title="GST & billing"
-        note="These settings decide the tax on every new bill."
+        title="Shop & bill details"
+        note="This is printed at the top of every bill."
       />
+
+      <SectionTitle>Shop details (printed on the bill)</SectionTitle>
+      <Card>
+        <Field
+          label="Shop name"
+          value={shopName}
+          onChangeText={setShopName}
+          placeholder="e.g. Sri Lakshmi Kirana Store"
+        />
+        <Field
+          label="Shop phone"
+          value={shopPhone}
+          onChangeText={setShopPhone}
+          keyboardType="number-pad"
+          placeholder="10-digit mobile number"
+          maxLength={10}
+        />
+        <Field
+          label="Email (optional)"
+          value={shopEmail}
+          onChangeText={setShopEmail}
+          autoCapitalize="none"
+          placeholder="shop@example.com"
+        />
+      </Card>
 
       <SectionTitle>Shop GST</SectionTitle>
       <Card>
@@ -159,10 +202,30 @@ export default function GstSettingsScreen() {
               maxLength={2}
             />
             <Field
-              label="Branch address (shown on invoice)"
+              label="Shop address (shown on the bill)"
               value={addressLine}
               onChangeText={setAddressLine}
-              placeholder="Street, area, city"
+              placeholder="Shop no, street, area"
+            />
+            <Field
+              label="City / town"
+              value={city}
+              onChangeText={setCity}
+              placeholder="e.g. Hyderabad"
+            />
+            <Field
+              label="State"
+              value={stateName}
+              onChangeText={setStateName}
+              placeholder="e.g. Telangana"
+            />
+            <Field
+              label="Pincode"
+              value={pincode}
+              onChangeText={setPincode}
+              keyboardType="number-pad"
+              placeholder="6 digits"
+              maxLength={6}
             />
           </Card>
         </>

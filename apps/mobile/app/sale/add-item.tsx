@@ -112,6 +112,7 @@ export function ProductPicker({ embedded }: { embedded?: boolean }) {
           />
           <CategoryChips categories={cats.data ?? []} value={categoryId} onChange={setCategoryId} />
           <Results
+            embedded={embedded}
             search={search}
             categoryId={categoryId}
             inBill={inBill}
@@ -150,12 +151,14 @@ export function ProductPicker({ embedded }: { embedded?: boolean }) {
 }
 
 function Results({
+  embedded,
   search,
   categoryId,
   inBill,
   onTap,
   onQuantity,
 }: {
+  embedded?: boolean;
   search: string;
   categoryId: string | null;
   inBill: Map<string, string>;
@@ -176,16 +179,21 @@ function Results({
           Offline — showing saved products from this phone.
         </Text>
       ) : null}
-      <Text style={styles.tip}>Tap a packet to add one. Tap again to add more.</Text>
+      {embedded ? null : (
+        <Text style={styles.tip}>Tap a packet to add one. Tap again to add more.</Text>
+      )}
       <ErrorText message={list.error} />
       <FlatList
+        key={embedded ? 'grid' : 'list'}
         data={list.items}
         keyExtractor={(p) => p.id}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: 96 }}
+        numColumns={embedded ? 3 : 1}
+        columnWrapperStyle={embedded ? { gap: 14 } : undefined}
+        contentContainerStyle={{ paddingBottom: embedded ? 32 : 96, gap: embedded ? 14 : 0 }}
         onEndReachedThreshold={0.5}
         onEndReached={() => void list.loadMore()}
-        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        ItemSeparatorComponent={embedded ? undefined : () => <View style={{ height: 8 }} />}
         ListFooterComponent={
           <ListFooter
             shown={list.items.length}
@@ -205,6 +213,16 @@ function Results({
         renderItem={({ item }) => {
           const qty = inBill.get(item.id);
           const loose = isLoose(item.baseUnit.code);
+          if (embedded)
+            return (
+              <ProductCard
+                item={item}
+                loose={loose}
+                onBill={qty}
+                onAdd={() => onTap(item)}
+                onQuantity={() => onQuantity(item)}
+              />
+            );
           return (
             <ListRow
               leading={<IconTile art={categoryArt(item.name)} tint="mango" size={48} />}
@@ -217,25 +235,27 @@ function Results({
               right={
                 <View style={styles.rowRight}>
                   {qty ? <Badge text={`On bill: ${qty}`} tone="good" /> : null}
-                  {item.basePrice && !loose ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Choose quantity for ${item.name}`}
-                      onPress={() => onQuantity(item)}
-                      hitSlop={8}
-                      style={styles.qtyBtn}
-                    >
-                      <Text style={styles.qtyBtnText}>Qty</Text>
-                    </Pressable>
-                  ) : null}
                   <View style={[styles.addBtn, !item.basePrice && { opacity: 0.4 }]}>
                     <Ionicons
                       name={loose ? 'scale-outline' : 'add'}
-                      size={22}
+                      size={28}
                       color={colors.onPrimary}
                     />
                   </View>
                 </View>
+              }
+              actions={
+                item.basePrice && !loose ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Choose quantity for ${item.name}`}
+                    onPress={() => onQuantity(item)}
+                    hitSlop={8}
+                    style={styles.qtyBtn}
+                  >
+                    <Text style={styles.qtyBtnText}>Qty</Text>
+                  </Pressable>
+                ) : undefined
               }
               onPress={() => onTap(item)}
             />
@@ -243,6 +263,67 @@ function Results({
         }}
       />
     </>
+  );
+}
+
+/** Desktop POS tile: every product gets the same two big buttons, so the grid stays even. */
+function ProductCard({
+  item,
+  loose,
+  onBill,
+  onAdd,
+  onQuantity,
+}: {
+  item: ProductRow;
+  loose: boolean;
+  onBill?: string;
+  onAdd: () => void;
+  onQuantity: () => void;
+}) {
+  const priced = !!item.basePrice;
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardTop}>
+        <IconTile art={categoryArt(item.name)} tint="mango" size={56} />
+        {onBill ? <Badge text={`On bill: ${onBill}`} tone="good" /> : null}
+      </View>
+      <Text style={styles.cardName} numberOfLines={2}>
+        {item.name}
+      </Text>
+      <Text style={styles.cardPrice}>
+        {priced ? `${formatINR(item.basePrice!)} / ${item.baseUnit.code}` : 'No price set'}
+      </Text>
+      <View style={styles.cardActions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={loose ? `Weigh ${item.name}` : `Add ${item.name}`}
+          disabled={!priced}
+          onPress={onAdd}
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+            styles.cardAdd,
+            hovered && { backgroundColor: colors.primaryDark },
+            !priced && { opacity: 0.4 },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Ionicons name={loose ? 'scale-outline' : 'add'} size={24} color={colors.onPrimary} />
+          <Text style={styles.cardAddText}>{loose ? 'Weigh' : 'Add'}</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Choose quantity for ${item.name}`}
+          disabled={!priced || loose}
+          onPress={onQuantity}
+          style={({ pressed }) => [
+            styles.cardQty,
+            (!priced || loose) && { opacity: 0.35 },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Text style={styles.qtyBtnText}>Qty</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -394,20 +475,53 @@ function Picker({
 }
 
 const styles = StyleSheet.create({
+  card: {
+    flex: 1,
+    minWidth: 0,
+    padding: 16,
+    gap: 6,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  cardName: { fontSize: 17, fontWeight: '700', color: colors.text, minHeight: 44, marginTop: 6 },
+  cardPrice: { fontSize: 16, color: colors.textMuted, fontWeight: '600' },
+  cardActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  cardAdd: {
+    flex: 1,
+    minHeight: 52,
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+  },
+  cardAddText: { color: colors.onPrimary, fontSize: 17, fontWeight: '800' },
+  cardQty: {
+    minHeight: 52,
+    minWidth: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+  },
   embedded: { flex: 1, minWidth: 0, paddingHorizontal: 24, paddingTop: 16 },
   tip: { fontSize: 12, color: colors.textMuted, marginBottom: 8 },
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   qtyBtn: {
-    minHeight: 40,
-    paddingHorizontal: 10,
+    minHeight: 52,
+    paddingHorizontal: 16,
     borderRadius: 10,
     backgroundColor: colors.primarySoft,
     justifyContent: 'center',
   },
-  qtyBtnText: { color: colors.primary, fontWeight: '800', fontSize: 13 },
+  qtyBtnText: { color: colors.primary, fontWeight: '800', fontSize: 16 },
   addBtn: {
-    width: 40,
-    height: 40,
+    width: 52,
+    height: 52,
     borderRadius: 12,
     backgroundColor: colors.primary,
     alignItems: 'center',
@@ -434,12 +548,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    height: 48,
-    paddingHorizontal: 16,
+    height: 56,
+    paddingHorizontal: 20,
     borderRadius: 14,
     backgroundColor: colors.primary,
   },
-  barBtnText: { color: colors.onPrimary, fontWeight: '800', fontSize: 15 },
+  barBtnText: { color: colors.onPrimary, fontWeight: '800', fontSize: 17 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
   chip: {
     minHeight: 44,

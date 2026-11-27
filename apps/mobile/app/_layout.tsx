@@ -1,3 +1,4 @@
+import '@/theme/font';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';

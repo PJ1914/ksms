@@ -60,7 +60,7 @@ export function DesktopDashboard() {
         : Promise.resolve([]),
     [branch?.id],
   );
-  if (mode !== 'desktop') return null;
+  if (mode === 'phone') return null;
 
   const series = trend.data?.series ?? [];
   const max = series.reduce((m, s) => Decimal.max(m, s.billValue), new Decimal(0));
