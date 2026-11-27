@@ -25,6 +25,7 @@ import { IdempotencyService } from '../../common/idempotency/idempotency.service
 import {
   CreateSupplierDto,
   LedgerQuery,
+  PageQuery,
   PaymentsQuery,
   ReversePaymentDto,
   SupplierPaymentDto,
@@ -118,6 +119,19 @@ export class SuppliersController {
   })
   statement(@Tenant() t: TenantContext, @Param('id', uuid()) id: string, @Query() q: LedgerQuery) {
     return this.suppliers.statement(t.organizationId, id, q);
+  }
+
+  @Get('suppliers/:id/stock-received')
+  @RequirePermission('supplier.read')
+  @ApiOperation({
+    summary: 'Stock added by hand and noted as coming from this supplier (no money)',
+  })
+  stockReceived(
+    @Tenant() t: TenantContext,
+    @Param('id', uuid()) id: string,
+    @Query() q: PageQuery,
+  ) {
+    return this.suppliers.stockReceived(t.organizationId, id, q);
   }
 
   @Post('suppliers/:id/payments')

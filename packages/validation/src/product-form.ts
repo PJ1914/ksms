@@ -80,6 +80,7 @@ export function buildOpeningStockPayload(
   productId: string,
   unitId: string,
   input: Pick<ProductFormInput, 'openingQuantity' | 'openingCost'>,
+  supplierId?: string,
 ) {
   const qty = (input.openingQuantity ?? '').trim();
   if (!qty) return null;
@@ -89,6 +90,7 @@ export function buildOpeningStockPayload(
     unitId,
     quantity: qty,
     unitCost: cost || '0',
+    ...(supplierId ? { supplierId } : {}),
   };
 }
 

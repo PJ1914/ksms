@@ -31,6 +31,8 @@ export class OpeningStockDto {
   @IsOptional() @IsUUID() batchId?: string;
   @IsOptional() @trim() @IsString() @MaxLength(40) batchNumber?: string;
   @IsOptional() @Matches(DATE, { message: 'expiryDate must be YYYY-MM-DD' }) expiryDate?: string;
+  /** Optional: the supplier this stock came from. Noted on the supplier; no money is recorded. */
+  @IsOptional() @IsUUID() supplierId?: string;
 }
 
 export const ADJUSTMENT_REASONS = [
@@ -60,6 +62,8 @@ export class StockAdjustmentDto {
   @IsOptional()
   @Matches(COST, { message: 'unitCost must be a non-negative decimal string' })
   unitCost?: string;
+  /** Optional: the supplier added stock came from (only when adding stock). */
+  @IsOptional() @IsUUID() supplierId?: string;
   /** Allow the balance to go below zero. Needs the shop setting, the stock.override_negative permission and notes. */
   @IsOptional() @IsBoolean() allowNegative?: boolean;
 }

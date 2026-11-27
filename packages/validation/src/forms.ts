@@ -118,6 +118,8 @@ export interface StockForm {
   batchNumber: string;
   expiryDate: string;
   tracked: boolean;
+  /** Optional: the supplier this stock came from (adding or opening stock only). */
+  supplierId?: string;
 }
 
 export function validateStockForm(f: StockForm): string | null {
@@ -143,6 +145,7 @@ export function buildStockRequest(f: StockForm): { path: string; body: Record<st
   const common = {
     productId: f.productId,
     unitId: f.unitId,
+    ...(f.mode !== 'REMOVE' && f.supplierId ? { supplierId: f.supplierId } : {}),
     ...(f.tracked && f.mode !== 'REMOVE' && trim(f.batchNumber)
       ? { batchNumber: trim(f.batchNumber) }
       : {}),

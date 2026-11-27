@@ -936,6 +936,81 @@ suite('Inventory engine (real database)', () => {
     });
   });
 
+  // ---------- H2. optional supplier on stock-in ----------
+  describe('supplier noted on manually added stock', () => {
+    const supplierOf = async (s: Shop, name: string) =>
+      (await api(s.token, s.branchId).post('/suppliers', { name }, null).expect(201)).body.data as {
+        id: string;
+      };
+
+    it('opening and added stock are listed on the supplier, and no money is owed', async () => {
+      const sup = await supplierOf(shop, 'Ravi Traders');
+      const rice = await looseRice(undefined, 'Supplier Rice');
+      await A.post('/inventory/opening-stock', {
+        productId: rice.id,
+        unitId: U.KG,
+        quantity: '10',
+        unitCost: '40',
+        supplierId: sup.id,
+      }).expect(201);
+      await A.post('/inventory/adjustments', {
+        productId: rice.id,
+        unitId: U.KG,
+        quantity: '5',
+        reason: 'FOUND',
+        supplierId: sup.id,
+      }).expect(201);
+      const list = (await A.get(`/suppliers/${sup.id}/stock-received`).expect(200)).body;
+      expect(list.meta.total).toBe(2);
+      expect(
+        list.data.map((n: { productName: string; quantity: string }) => [
+          n.productName,
+          n.quantity,
+        ]),
+      ).toEqual(
+        expect.arrayContaining([
+          ['Supplier Rice', '10.000'],
+          ['Supplier Rice', '5.000'],
+        ]),
+      );
+      expect((await A.get(`/suppliers/${sup.id}`).expect(200)).body.data.balance).toBe('0.00');
+    });
+
+    it('a supplier cannot be noted when removing stock', async () => {
+      const sup = await supplierOf(shop, 'Not For Removal');
+      const rice = await looseRice(undefined, 'Removal Rice');
+      await A.post('/inventory/opening-stock', {
+        productId: rice.id,
+        unitId: U.KG,
+        quantity: '10',
+        unitCost: '40',
+      }).expect(201);
+      const res = await A.post('/inventory/adjustments', {
+        productId: rice.id,
+        unitId: U.KG,
+        quantity: '-1',
+        reason: 'DAMAGE',
+        supplierId: sup.id,
+      });
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.status).toBeLessThan(500);
+    });
+
+    it("another shop's supplier is refused and its stock list is not readable", async () => {
+      const other = await newShop();
+      const theirs = await supplierOf(other, 'Their Supplier');
+      const rice = await looseRice(undefined, 'Cross Rice');
+      await A.post('/inventory/opening-stock', {
+        productId: rice.id,
+        unitId: U.KG,
+        quantity: '10',
+        unitCost: '40',
+        supplierId: theirs.id,
+      }).expect(404);
+      await A.get(`/suppliers/${theirs.id}/stock-received`).expect(404);
+    });
+  });
+
   // ---------- I. history is permanent ----------
   describe('audit and immutability', () => {
     it('stock movements cannot be edited or deleted, and adjustments are audited', async () => {

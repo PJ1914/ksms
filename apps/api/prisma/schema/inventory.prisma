@@ -123,6 +123,23 @@ model StockAdjustment {
   @@map("stock_adjustments")
 }
 
+/// Which supplier a manual stock-in (opening stock or "add stock") came from. History only: no money is owed.
+model StockSupplierNote {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  branchId       String   @map("branch_id") @db.Uuid
+  supplierId     String   @map("supplier_id") @db.Uuid
+  supplier       Supplier @relation(fields: [supplierId], references: [id])
+  productId      String   @map("product_id") @db.Uuid
+  movementId     String   @unique @map("movement_id") @db.Uuid
+  quantity       Decimal  @db.Decimal(14, 3) // base unit, always positive
+  createdById    String   @map("created_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, supplierId, createdAt])
+  @@map("stock_supplier_notes")
+}
+
 model StockTransfer {
   id             String         @id @default(uuid(7)) @db.Uuid
   organizationId String         @map("organization_id") @db.Uuid

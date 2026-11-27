@@ -30,6 +30,7 @@ model Supplier {
   ledger          SupplierLedgerEntry[]
   purchaseReturns PurchaseReturn[]
   payments        Payment[]
+  stockNotes      StockSupplierNote[]
 
   @@index([organizationId, name])
   @@index([organizationId, phone])

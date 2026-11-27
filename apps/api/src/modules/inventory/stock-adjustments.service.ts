@@ -71,6 +71,7 @@ export class StockAdjustmentsService {
           );
         }
 
+        await this.assertSupplier(tx, t, dto.supplierId);
         const referenceId = randomUUID();
         const result = await this.inventory.receive(tx, ctx, {
           productId: dto.productId,
@@ -80,6 +81,15 @@ export class StockAdjustmentsService {
           batch: { batchId: dto.batchId, batchNumber: dto.batchNumber, expiryDate: dto.expiryDate },
           reference: { type: 'OPENING_STOCK', id: referenceId },
         });
+        await this.noteSupplier(
+          tx,
+          t,
+          ctx,
+          dto.supplierId,
+          product.id,
+          result.movements[0]!.id,
+          baseQuantity,
+        );
         const view = {
           referenceId,
           productId: product.id,
@@ -117,6 +127,11 @@ export class StockAdjustmentsService {
         'FOUND must add stock (use a positive quantity)',
       );
 
+    if (dto.supplierId && signed.lt(0))
+      throw new DomainError(
+        'SUPPLIER_NOT_ALLOWED',
+        'A supplier can only be noted when adding stock',
+      );
     if (dto.allowNegative) await this.assertNegativeOverrideAllowed(t, dto);
 
     return this.idempotency.execute(
@@ -137,6 +152,7 @@ export class StockAdjustmentsService {
             );
           }
         }
+        await this.assertSupplier(tx, t, dto.supplierId);
         const { baseQuantity, baseCost, product } = await this.convert(
           tx,
           t,
@@ -204,6 +220,16 @@ export class StockAdjustmentsService {
           },
         });
 
+        if (signed.gt(0))
+          await this.noteSupplier(
+            tx,
+            t,
+            ctx,
+            dto.supplierId,
+            product.id,
+            result.movements[0]!.id,
+            baseQuantity,
+          );
         const view = {
           id: adjustmentId,
           productId: product.id,
@@ -227,6 +253,41 @@ export class StockAdjustmentsService {
         return view;
       },
     );
+  }
+
+  /** The supplier must be one of this shop's own, switched on. */
+  private async assertSupplier(tx: Tx, t: TenantContext, supplierId?: string) {
+    if (!supplierId) return;
+    const s = await tx.supplier.findFirst({
+      where: { id: supplierId, organizationId: t.organizationId, deletedAt: null },
+      select: { isActive: true },
+    });
+    if (!s) throw new AppException('SUPPLIER_NOT_FOUND', 'Supplier not found', 404);
+    if (!s.isActive) throw new DomainError('SUPPLIER_INACTIVE', 'This supplier is switched off');
+  }
+
+  /** Records on the supplier that this stock came from them (history only, no money). */
+  private async noteSupplier(
+    tx: Tx,
+    t: TenantContext,
+    ctx: StockContext,
+    supplierId: string | undefined,
+    productId: string,
+    movementId: string,
+    baseQuantity: Decimal,
+  ) {
+    if (!supplierId) return;
+    await tx.stockSupplierNote.create({
+      data: {
+        organizationId: t.organizationId,
+        branchId: ctx.branchId,
+        supplierId,
+        productId,
+        movementId,
+        quantity: baseQuantity.toFixed(3),
+        createdById: t.userId,
+      },
+    });
   }
 
   private ctx(t: TenantContext): StockContext {

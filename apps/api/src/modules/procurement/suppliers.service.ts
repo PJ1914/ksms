@@ -274,6 +274,41 @@ export class SuppliersService {
     });
   }
 
+  /** Stock received from this supplier through "add stock" / opening stock (history only, no money). */
+  async stockReceived(organizationId: string, id: string, q: { page?: number; pageSize?: number }) {
+    const s = await this.prisma.supplier.findFirst({
+      where: { id, organizationId, deletedAt: null },
+      select: { id: true, name: true },
+    });
+    if (!s) throw new AppException('SUPPLIER_NOT_FOUND', 'Supplier not found', 404);
+    const page = q.page ?? 1;
+    const pageSize = q.pageSize ?? 25;
+    const where = { organizationId, supplierId: id };
+    const [rows, total] = await Promise.all([
+      this.prisma.stockSupplierNote.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.stockSupplierNote.count({ where }),
+    ]);
+    const products = await this.prisma.product.findMany({
+      where: { organizationId, id: { in: [...new Set(rows.map((r) => r.productId))] } },
+      select: { id: true, name: true, baseUnit: { select: { code: true } } },
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    const items = rows.map((r) => ({
+      id: r.id,
+      productId: r.productId,
+      productName: byId.get(r.productId)?.name ?? 'Product',
+      baseUnitCode: byId.get(r.productId)?.baseUnit.code ?? '',
+      quantity: r.quantity.toFixed(3),
+      receivedAt: r.createdAt,
+    }));
+    return new Paginated(items, { page, pageSize, total, supplier: { id: s.id, name: s.name } });
+  }
+
   private async assertNameFree(organizationId: string, name: string, exceptId?: string) {
     const clash = await this.prisma.supplier.findFirst({
       where: {
