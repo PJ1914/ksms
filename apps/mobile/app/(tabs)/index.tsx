@@ -17,6 +17,7 @@ import {
   QuickActions,
 } from '@/components/ui';
 import { SyncBanner } from '@/components/SyncBanner';
+import { DesktopDashboard } from '@/components/DesktopDashboard';
 import { formatINR, isNegative } from '@/utils/currency';
 import { useLoad } from '@/hooks/useLoad';
 import { icons, illustrations } from '@/theme/art';
@@ -255,6 +256,8 @@ export default function HomeScreen() {
             onPress={() => router.push('/suppliers')}
           />
         </View>
+
+        <DesktopDashboard />
 
         {d ? (
           <View style={styles.owed}>

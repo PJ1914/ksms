@@ -1,6 +1,15 @@
 import { router } from 'expo-router';
 import { Image, type ImageSourcePropType, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
+import SalesReport from './sales';
+import ProfitReport from './profit';
+import CashReport from './cash';
+import DuesReport from './dues';
+import CollectionsReport from './collections';
+import DayBookReport from './day-book';
+import PurchasesReport from './purchases';
+import StockReport from './stock';
 import { EmptyState, MAX_FONT_SCALE, Screen, useLayout } from '@/components/ui';
 import { icons, illustrations } from '@/theme/art';
 import { colors, radius, shadow, tints, type Tint } from '@/theme/colors';
@@ -79,6 +88,67 @@ const ITEMS: readonly {
   },
 ];
 
+const REPORT_SCREENS: Record<string, () => React.JSX.Element> = {
+  '/reports/sales': SalesReport,
+  '/reports/profit': ProfitReport,
+  '/reports/cash': CashReport,
+  '/reports/dues': DuesReport,
+  '/reports/collections': CollectionsReport,
+  '/reports/day-book': DayBookReport,
+  '/reports/purchases': PurchasesReport,
+  '/reports/stock': StockReport,
+};
+
+/** Desktop: the report list on the left, the chosen report beside it. */
+function DesktopReports({ allowed }: { allowed: typeof ITEMS }) {
+  const [active, setActive] = useState(String(allowed[0]!.to));
+  const Report = REPORT_SCREENS[active];
+  return (
+    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: colors.background }}>
+      <View
+        style={{
+          width: 280,
+          padding: 16,
+          gap: 6,
+          borderRightWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.surface,
+        }}
+      >
+        <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text, padding: 8 }}>
+          Reports
+        </Text>
+        {allowed.map((i) => (
+          <Pressable
+            key={i.title}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active === String(i.to) }}
+            onPress={() => setActive(String(i.to))}
+            style={{
+              padding: 12,
+              borderRadius: radius.sm,
+              backgroundColor: active === String(i.to) ? colors.primarySoft : 'transparent',
+            }}
+          >
+            <Text
+              style={{
+                fontWeight: '700',
+                color: active === String(i.to) ? colors.primary : colors.text,
+              }}
+            >
+              {i.title}
+            </Text>
+            <Text style={{ fontSize: 12, color: colors.textMuted }}>{i.note}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <View key={active} style={{ flex: 1, minWidth: 0 }}>
+        {Report ? <Report /> : null}
+      </View>
+    </View>
+  );
+}
+
 /** The reports this role may open, as picture tiles. The server checks the same permissions again. */
 export default function ReportsHub() {
   const { can } = useAuth();
@@ -90,6 +160,7 @@ export default function ReportsHub() {
       <EmptyState art={illustrations.roleLocked} title="No reports are available for your role" />
     );
   }
+  if (layout.mode === 'desktop') return <DesktopReports allowed={allowed} />;
   return (
     <Screen>
       <View style={styles.grid}>
