@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { DEFAULT_BUSINESS_TYPE } from '@ksms/constants';
 import { Prisma } from '../../generated/prisma/client';
 import { AppException } from '../../common/errors/app.exception';
 import { PrismaService } from '../../database/prisma.service';
@@ -30,10 +31,16 @@ export class OrganizationService {
   async get(organizationId: string) {
     const org = await this.prisma.organization.findFirst({
       where: { id: organizationId, deletedAt: null },
-      select: ORG_SELECT,
+      select: { ...ORG_SELECT, settings: true },
     });
     if (!org) throw new AppException('NOT_FOUND', 'Organization not found', 404);
-    return { ...org, maxCashierDiscountPercent: org.maxCashierDiscountPercent.toString() };
+    const { settings, ...rest } = org;
+    const businessType = (settings as { businessType?: string } | null)?.businessType;
+    return {
+      ...rest,
+      businessType: businessType ?? DEFAULT_BUSINESS_TYPE,
+      maxCashierDiscountPercent: org.maxCashierDiscountPercent.toString(),
+    };
   }
 
   async update(

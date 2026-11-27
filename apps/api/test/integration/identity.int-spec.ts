@@ -214,6 +214,9 @@ suite('Identity, RBAC and tenant isolation (real database)', () => {
 
     it.each([
       ['short password', { password: 'short' }],
+      ['password without a number', { password: 'onlyletters' }],
+      ['password without a letter', { password: '1234567890' }],
+      ['unknown shop type', { businessType: 'SPACESHIP' }],
       ['bad phone', { phone: '12345' }],
       ['bad email', { email: 'nope' }],
       ['missing shop name', { shopName: '' }],

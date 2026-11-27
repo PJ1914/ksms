@@ -1,6 +1,7 @@
 import { Transform } from 'class-transformer';
 import {
   IsEmail,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -9,6 +10,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { BUSINESS_TYPES, type BusinessType } from '@ksms/constants';
 import { normalizeIndianPhone } from '@ksms/validation';
 import { GSTIN_REGEX, STATE_CODE_REGEX } from '../organization/organization.dto';
 
@@ -33,8 +35,15 @@ export class RegisterOwnerDto extends DeviceInfoDto {
   @IsString() @Length(2, 100) fullName!: string;
   @phone() @Matches(/^[6-9]\d{9}$/, PHONE_RULE) phone!: string;
   @IsOptional() @lower() @IsEmail() @MaxLength(150) email?: string;
-  @IsString() @MinLength(8) @MaxLength(128) password!: string;
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  @Matches(/[A-Za-z]/, { message: 'password must contain a letter' })
+  @Matches(/\d/, { message: 'password must contain a number' })
+  password!: string;
   @IsString() @Length(2, 100) shopName!: string;
+  /** Kind of shop (defaults to a kirana store). */
+  @IsOptional() @IsIn(BUSINESS_TYPES) businessType?: BusinessType;
   @IsOptional() @IsString() @Length(2, 100) branchName?: string;
   @IsOptional()
   @Matches(STATE_CODE_REGEX, { message: 'stateCode must be the 2-digit GST state code' })

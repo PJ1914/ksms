@@ -22,3 +22,8 @@ export type ReturnDisposition = (typeof RETURN_DISPOSITIONS)[number];
 export const IDEMPOTENCY_HEADER = 'idempotency-key' as const;
 export const BRANCH_HEADER = 'x-branch-id' as const;
 export const CORRELATION_HEADER = 'x-correlation-id' as const;
+
+/** What kind of shop this is. Kept on the organization so screens and defaults can be tuned per business. */
+export const BUSINESS_TYPES = ['KIRANA', 'GENERAL_STORE', 'MEDICAL', 'OTHER'] as const;
+export type BusinessType = (typeof BUSINESS_TYPES)[number];
+export const DEFAULT_BUSINESS_TYPE: BusinessType = 'KIRANA';

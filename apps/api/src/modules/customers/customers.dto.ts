@@ -81,6 +81,8 @@ export class CustomersQuery {
   @IsOptional() @bool() @IsBoolean() isActive?: boolean;
   /** true = only customers who owe the shop money. */
   @IsOptional() @bool() @IsBoolean() owes?: boolean;
+  /** true = only customers who have paid ahead (the shop holds their money). */
+  @IsOptional() @bool() @IsBoolean() advance?: boolean;
   @IsOptional() @IsIn(['name', 'balance', 'createdAt']) sort?: 'name' | 'balance' | 'createdAt';
   @IsOptional() @IsIn(['asc', 'desc']) order?: 'asc' | 'desc';
 }

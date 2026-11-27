@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   ALL_PERMISSION_KEYS,
+  DEFAULT_BUSINESS_TYPE,
   PERMISSIONS,
   SYSTEM_ROLE_DESCRIPTIONS,
   SYSTEM_ROLE_PERMISSIONS,
@@ -51,7 +52,12 @@ export class AuthService {
       const permissionId = new Map(permissions.map((p) => [p.key, p.id]));
 
       const org = await tx.organization.create({
-        data: { name: dto.shopName, phone: dto.phone, email: dto.email },
+        data: {
+          name: dto.shopName,
+          phone: dto.phone,
+          email: dto.email,
+          settings: { businessType: dto.businessType ?? DEFAULT_BUSINESS_TYPE },
+        },
         select: { id: true },
       });
 

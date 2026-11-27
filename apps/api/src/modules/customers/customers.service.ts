@@ -95,7 +95,7 @@ export class CustomersService {
       organizationId,
       deletedAt: null,
       ...(q.isActive === undefined ? {} : { isActive: q.isActive }),
-      ...(q.owes ? { balance: { gt: 0 } } : {}),
+      ...(q.owes ? { balance: { gt: 0 } } : q.advance ? { balance: { lt: 0 } } : {}),
       ...(q.q
         ? {
             OR: [
