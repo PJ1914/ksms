@@ -1,0 +1,82 @@
+// Support tickets (ADMIN_PANEL.md section 2.7, Phase D). Shops raise tickets; ADMIN/SUPPORT answer.
+// Text only for now; screenshots come in Phase D2.
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketCategory {
+  BILLING
+  BUG
+  HOW_TO
+  CALLBACK
+  OTHER
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model SupportTicket {
+  id               String         @id @default(uuid(7)) @db.Uuid
+  ticketNumber     Int            @unique @default(autoincrement()) @map("ticket_number") // shown as T-000123
+  organizationId   String         @map("organization_id") @db.Uuid
+  createdByUserId  String         @map("created_by_user_id") @db.Uuid
+  category         TicketCategory
+  priority         TicketPriority @default(NORMAL)
+  status           TicketStatus   @default(OPEN)
+  subject          String
+  assignedAdminId  String?        @map("assigned_admin_id") @db.Uuid
+  callbackPhone    String?        @map("callback_phone")
+  callbackWindow   String?        @map("callback_window")
+  appVersion       String?        @map("app_version")
+  deviceInfo       String?        @map("device_info")
+  lastCorrelationId String?       @map("last_correlation_id")
+  firstResponseAt  DateTime?      @map("first_response_at") @db.Timestamptz(3)
+  lastMessageAt    DateTime       @default(now()) @map("last_message_at") @db.Timestamptz(3)
+  resolvedAt       DateTime?      @map("resolved_at") @db.Timestamptz(3)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  messages TicketMessage[]
+
+  @@index([status, priority, createdAt])
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([assignedAdminId, status])
+  @@map("support_tickets")
+}
+
+/// Append-only (trigger). `internalNote` messages are never returned to the shop.
+model TicketMessage {
+  id            String        @id @default(uuid(7)) @db.Uuid
+  ticketId      String        @map("ticket_id") @db.Uuid
+  ticket        SupportTicket @relation(fields: [ticketId], references: [id])
+  senderType    String        @map("sender_type") // VENDOR | STAFF | ADMIN | SUPPORT | SYSTEM (CHECK)
+  senderUserId  String?       @map("sender_user_id") @db.Uuid
+  senderAdminId String?       @map("sender_admin_id") @db.Uuid
+  body          String
+  internalNote  Boolean       @default(false) @map("internal_note")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_messages")
+}
+
+/// Single row (id = 1): what the app's Call / WhatsApp buttons use. Edited in the admin panel.
+model SupportSettings {
+  id        Int       @id @default(1)
+  phone     String?
+  whatsapp  String?
+  hoursText String?   @map("hours_text")
+  updatedBy String?   @map("updated_by") @db.Uuid
+  updatedAt DateTime? @map("updated_at") @db.Timestamptz(3)
+
+  @@map("support_settings")
+}

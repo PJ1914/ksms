@@ -111,6 +111,8 @@ flowchart BT
 
 (Reporting is SQL over the tables and imports no module, so its dotted edges are about data, not code. All modules also call Audit; edges omitted for readability. **Enforced** by `apps/api/src/architecture.spec.ts`, which runs in `pnpm check` and CI: it reads the real imports and fails on any import a module is not allowed to make, on `common/` importing from feature modules, and on cycles. When a module is added or starts using another, update the map in that test and this diagram.)
 
+**Platform plane (ADR-001).** `modules/platform` (admin panel API at `/admin/v1`) sits outside these layers. It is the only code allowed to read across organizations, may import `identity` (password hashing), and **no module may import it** (also enforced by `architecture.spec.ts`). Its controllers are guarded only by `PlatformGuard`; the shop guards skip them.
+
 ### Responsibilities
 
 | Module                | Owns                                                                                                                          |

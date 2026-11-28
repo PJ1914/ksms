@@ -9,7 +9,13 @@ const entry = (userId: string): CachedAuth => ({
     createdAt: new Date(),
     user: { isActive: true, tokenVersion: 0 },
   },
-  member: { id: 'm', roleId: 'r', status: 'ACTIVE', branches: [] },
+  member: {
+    id: 'm',
+    roleId: 'r',
+    status: 'ACTIVE',
+    branches: [],
+    organization: { lockStatus: 'NONE', lockedAt: null, subscription: null },
+  },
 });
 
 describe('SessionCache (FIXES F7)', () => {

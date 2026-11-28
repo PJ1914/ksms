@@ -7,6 +7,7 @@ import { financialYear } from '../../common/utils/financial-year';
 import type { Db } from '../../database/db.types';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 
 export interface BranchInput {
   code: string;
@@ -49,6 +50,7 @@ export class BranchService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly cache: SessionCache,
+    private readonly subscriptions: SubscriptionService,
   ) {}
 
   /**
@@ -94,6 +96,7 @@ export class BranchService {
     meta: { correlationId?: string; ipAddress?: string },
   ) {
     return this.prisma.$transaction(async (tx) => {
+      await this.subscriptions.assertWithinLimit(tx, organizationId, 'branches');
       const branch = await this.createInTx(tx, organizationId, input);
       this.cache.invalidateAll(); // owners now have one more branch
       await this.audit.record(tx, {

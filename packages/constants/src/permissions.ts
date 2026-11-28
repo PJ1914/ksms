@@ -59,6 +59,9 @@ export const PERMISSIONS = {
   'role.manage': 'Create and edit roles',
   'audit.read': 'View the audit log',
   'backup.manage': 'Manage backups and sync status',
+  // support (ADMIN_PANEL.md Phase D): Owner always; staff only when the owner grants it
+  'support.create': 'Raise support tickets and see your own',
+  'support.read': 'See every support ticket of the shop',
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSIONS;
@@ -84,6 +87,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<
     'backup.manage',
     'audit.read',
     'system.reconcile',
+    'support.create',
+    'support.read',
   ),
   Cashier: [
     'product.read',

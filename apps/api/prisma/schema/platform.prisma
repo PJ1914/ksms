@@ -1,0 +1,196 @@
+// Platform control plane (ADR-001, ADMIN_PANEL.md): the people who run the product (ADMIN, SUPPORT).
+// These tables sit ABOVE the tenants and are only used by modules/platform.
+
+enum PlatformRole {
+  ADMIN
+  SUPPORT
+}
+
+model PlatformAdmin {
+  id                 String         @id @default(uuid(7)) @db.Uuid
+  email              String         @unique // stored lower-cased (CHECK in migration)
+  fullName           String         @map("full_name")
+  passwordHash       String         @map("password_hash")
+  role               PlatformRole
+  isActive           Boolean        @default(true) @map("is_active")
+  mustChangePassword Boolean        @default(true) @map("must_change_password")
+  /// AES-256-GCM ciphertext of the TOTP secret (PLATFORM_MFA_KEY). Set but not enabled = enrolment pending.
+  mfaSecretEnc       String?        @map("mfa_secret_enc")
+  mfaEnabledAt       DateTime?      @map("mfa_enabled_at") @db.Timestamptz(3)
+  /// Last accepted TOTP time step: a code is never accepted twice (replay protection).
+  mfaLastStep        BigInt?        @map("mfa_last_step")
+  failedLoginCount   Int            @default(0) @map("failed_login_count")
+  lastFailedLoginAt  DateTime?      @map("last_failed_login_at") @db.Timestamptz(3)
+  lockedUntil        DateTime?      @map("locked_until") @db.Timestamptz(3)
+  lastLoginAt        DateTime?      @map("last_login_at") @db.Timestamptz(3)
+  createdById        String?        @map("created_by") @db.Uuid
+  createdBy          PlatformAdmin? @relation("AdminCreatedBy", fields: [createdById], references: [id])
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  created       PlatformAdmin[]             @relation("AdminCreatedBy")
+  recoveryCodes PlatformAdminRecoveryCode[]
+  sessions      PlatformAdminSession[]
+  auditLogs     PlatformAuditLog[]
+  lockedOrgs    Organization[]              @relation("OrganizationLockedBy")
+  subEvents     SubscriptionEvent[]
+  subPayments   SubscriptionPayment[]
+
+  @@map("platform_admins")
+}
+
+model PlatformAdminRecoveryCode {
+  id        String        @id @default(uuid(7)) @db.Uuid
+  adminId   String        @map("admin_id") @db.Uuid
+  admin     PlatformAdmin @relation(fields: [adminId], references: [id])
+  codeHash  String        @unique @map("code_hash") // SHA-256 of a high-entropy random code
+  usedAt    DateTime?     @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([adminId])
+  @@map("platform_admin_recovery_codes")
+}
+
+model PlatformAdminSession {
+  id                String        @id @default(uuid(7)) @db.Uuid
+  adminId           String        @map("admin_id") @db.Uuid
+  admin             PlatformAdmin @relation(fields: [adminId], references: [id])
+  refreshTokenHash  String        @unique @map("refresh_token_hash")
+  previousTokenHash String?       @map("previous_token_hash")
+  ipAddress         String?       @map("ip_address")
+  userAgent         String?       @map("user_agent")
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt        DateTime      @default(now()) @map("last_used_at") @db.Timestamptz(3)
+  expiresAt         DateTime      @map("expires_at") @db.Timestamptz(3) // absolute cap (12 h)
+  revokedAt         DateTime?     @map("revoked_at") @db.Timestamptz(3)
+  revokedReason     String?       @map("revoked_reason")
+
+  @@index([adminId])
+  @@index([previousTokenHash])
+  @@map("platform_admin_sessions")
+}
+
+/// Append-only (trigger): every platform action, with who, why, before/after, IP and correlation id.
+model PlatformAuditLog {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  adminId        String        @map("admin_id") @db.Uuid
+  admin          PlatformAdmin @relation(fields: [adminId], references: [id])
+  action         String // e.g. "admin.create", "shop.lock"
+  organizationId String?       @map("organization_id") @db.Uuid
+  entityType     String?       @map("entity_type")
+  entityId       String?       @map("entity_id")
+  beforeData     Json?         @map("before_data")
+  afterData      Json?         @map("after_data")
+  reason         String?
+  ipAddress      String?       @map("ip_address")
+  correlationId  String?       @map("correlation_id")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([adminId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("platform_audit_logs")
+}
+
+// ===== Plans and subscriptions (ADMIN_PANEL.md §4, Phase B) =====
+
+/// A sellable plan. Prices are money: NUMERIC, decimal strings over the API.
+model Plan {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  code              String   @unique // TRIAL, BASIC, PRO
+  name              String
+  monthlyPrice      Decimal  @default(0) @map("monthly_price") @db.Decimal(12, 2)
+  /// Percent off by number of months, e.g. {"3":"5","6":"10","9":"12","12":"15"}.
+  durationDiscounts Json     @default("{}") @map("duration_discounts")
+  maxBranches       Int?     @map("max_branches") // null = unlimited
+  maxUsers          Int?     @map("max_users") // null = unlimited
+  features          Json     @default("{}")
+  isTrial           Boolean  @default(false) @map("is_trial")
+  trialDays         Int?     @map("trial_days")
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  subscriptions Subscription[]
+  events        SubscriptionEvent[]
+
+  @@map("plans")
+}
+
+/// One current subscription per shop. State (TRIAL/ACTIVE/GRACE/EXPIRED) is derived from the dates at read time.
+model Subscription {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  organizationId String       @unique @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  planId         String       @map("plan_id") @db.Uuid
+  plan           Plan         @relation(fields: [planId], references: [id])
+  startsAt       DateTime     @map("starts_at") @db.Timestamptz(3)
+  endsAt         DateTime     @map("ends_at") @db.Timestamptz(3)
+  graceDays      Int          @default(5) @map("grace_days")
+  version        Int          @default(1)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([endsAt])
+  @@map("subscriptions")
+}
+
+enum SubscriptionEventType {
+  TRIAL_STARTED
+  GRANTED
+  EXTENDED
+  PLAN_CHANGED
+  LOCKED
+  UNLOCKED
+  REFUNDED
+  ADJUSTED
+  GRACE_CHANGED
+}
+
+/// Append-only (trigger) history of every change to a shop's subscription.
+model SubscriptionEvent {
+  id             String                @id @default(uuid(7)) @db.Uuid
+  organizationId String                @map("organization_id") @db.Uuid
+  type           SubscriptionEventType
+  planId         String?               @map("plan_id") @db.Uuid
+  plan           Plan?                 @relation(fields: [planId], references: [id])
+  months         Int?
+  oldEndsAt      DateTime?             @map("old_ends_at") @db.Timestamptz(3)
+  newEndsAt      DateTime?             @map("new_ends_at") @db.Timestamptz(3)
+  paymentId      String?               @map("payment_id") @db.Uuid
+  reason         String?
+  adminId        String?               @map("admin_id") @db.Uuid // null = system
+  admin          PlatformAdmin?        @relation(fields: [adminId], references: [id])
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@map("subscription_events")
+}
+
+enum SubPaymentMethod {
+  UPI
+  CASH
+  BANK
+  OTHER
+}
+
+/// Append-only (trigger) manual payments. A refund is a NEGATIVE row pointing at the original.
+model SubscriptionPayment {
+  id                 String               @id @default(uuid(7)) @db.Uuid
+  organizationId     String               @map("organization_id") @db.Uuid
+  amount             Decimal              @db.Decimal(12, 2)
+  method             SubPaymentMethod
+  reference          String?
+  months             Int
+  receivedAt         DateTime             @map("received_at") @db.Timestamptz(3)
+  reversesPaymentId  String?              @unique @map("reverses_payment_id") @db.Uuid
+  reversesPayment    SubscriptionPayment? @relation("PaymentReversal", fields: [reversesPaymentId], references: [id])
+  reversedBy         SubscriptionPayment? @relation("PaymentReversal")
+  recordedById       String               @map("recorded_by") @db.Uuid
+  recordedBy         PlatformAdmin        @relation(fields: [recordedById], references: [id])
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, receivedAt(sort: Desc)])
+  @@index([receivedAt])
+  @@map("subscription_payments")
+}

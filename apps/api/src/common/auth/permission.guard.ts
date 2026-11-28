@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import type { PermissionKey } from '@ksms/constants';
 import { AppException } from '../errors/app.exception';
 import type { AppRequest } from './auth.types';
-import { AUTHENTICATED_ONLY, IS_PUBLIC, REQUIRE_PERMISSION } from './decorators';
+import { AUTHENTICATED_ONLY, IS_PLATFORM, IS_PUBLIC, REQUIRE_PERMISSION } from './decorators';
 import { RolePermissionService } from './role-permission.service';
 
 /**
@@ -21,6 +21,7 @@ export class PermissionGuard implements CanActivate {
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const targets = [ctx.getHandler(), ctx.getClass()];
+    if (this.reflector.getAllAndOverride<boolean>(IS_PLATFORM, targets)) return true; // PlatformGuard decides
     if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets)) return true;
     if (this.reflector.getAllAndOverride<boolean>(AUTHENTICATED_ONLY, targets)) return true;
 

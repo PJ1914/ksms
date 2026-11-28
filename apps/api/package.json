@@ -13,7 +13,8 @@
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:status": "prisma migrate status",
-    "db:migrate:deploy": "prisma migrate deploy"
+    "db:migrate:deploy": "prisma migrate deploy",
+    "admin:create": "node dist/create-admin.js"
   },
   "dependencies": {
     "@ksms/constants": "workspace:*",

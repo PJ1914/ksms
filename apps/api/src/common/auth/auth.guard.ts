@@ -6,7 +6,7 @@ import { AppException } from '../errors/app.exception';
 import { findMember, type MemberLookup } from '../tenant/member-lookup';
 import { AccessTokenService } from './access-token.service';
 import type { AppRequest } from './auth.types';
-import { IS_PUBLIC } from './decorators';
+import { IS_PLATFORM, IS_PUBLIC } from './decorators';
 import { type CachedSession, SessionCache } from './session-cache';
 import { absoluteExpiry } from './session-lifetime';
 
@@ -26,11 +26,10 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [
-      ctx.getHandler(),
-      ctx.getClass(),
-    ]);
-    if (isPublic) return true;
+    const targets = [ctx.getHandler(), ctx.getClass()];
+    // Platform routes are authenticated by PlatformGuard with its own tokens (ADR-001).
+    if (this.reflector.getAllAndOverride<boolean>(IS_PLATFORM, targets)) return true;
+    if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets)) return true;
 
     const req = ctx.switchToHttp().getRequest<AppRequest>();
     const header = req.headers.authorization;

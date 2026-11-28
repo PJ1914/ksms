@@ -5,6 +5,7 @@ import { AppException } from '../../common/errors/app.exception';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BranchService } from '../organization/branch.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import type { AcceptInvitationDto } from './auth.dto';
 import { AuthService, type RequestMeta } from './auth.service';
 import { PasswordService } from './password.service';
@@ -38,6 +39,7 @@ export class InvitationsService {
     private readonly passwords: PasswordService,
     private readonly sessions: SessionService,
     private readonly auth: AuthService,
+    private readonly subscriptions: SubscriptionService,
   ) {}
 
   /** The plain code is returned ONCE here and never stored (only its hash is). */
@@ -59,6 +61,8 @@ export class InvitationsService {
     const code = generateCode();
     const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
     const invitation = await this.prisma.$transaction(async (tx) => {
+      // Early, friendly refusal; acceptance checks again under a lock (the binding check).
+      await this.subscriptions.assertWithinLimit(tx, t.organizationId, 'users');
       const inv = await tx.invitation.create({
         data: {
           organizationId: t.organizationId,
@@ -217,6 +221,15 @@ export class InvitationsService {
         select: { id: true },
       });
       if (already) throw new AppException('ALREADY_MEMBER', 'You already belong to this shop', 409);
+
+      const org = await tx.organization.findUniqueOrThrow({
+        where: { id: inv.organizationId },
+        select: { lockStatus: true },
+      });
+      if (org.lockStatus === 'LOCKED') {
+        throw new AppException('ORG_LOCKED', 'This shop is locked. Please contact support.', 403);
+      }
+      await this.subscriptions.assertWithinLimit(tx, inv.organizationId, 'users');
 
       const member = await tx.organizationMember.create({
         data: { organizationId: inv.organizationId, userId, roleId: role.id },

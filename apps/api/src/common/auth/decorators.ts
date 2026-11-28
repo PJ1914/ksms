@@ -9,6 +9,31 @@ export const REQUIRE_BRANCH = 'requireBranch';
 /** Skip authentication for a route (login, health, docs). Everything else is protected by default. */
 export const Public = () => SetMetadata(IS_PUBLIC, true);
 
+/**
+ * Marks a controller as part of the PLATFORM plane (/admin/v1, ADR-001). The shop guards (Auth, Tenant,
+ * Permission) skip it entirely and the platform guard takes over; the platform guard skips everything else.
+ * A shop token can therefore never reach a platform route, and a platform token never a shop route.
+ */
+export const IS_PLATFORM = 'isPlatform';
+export const PlatformRoute = () => SetMetadata(IS_PLATFORM, true);
+
+/*
+ * Subscription enforcement (ADMIN_PANEL.md §2.5), read by TenantGuard:
+ *   EXPIRED shops may read but not write; LOCKED shops may do neither, except on the routes below.
+ */
+export const ALLOW_WHEN_LOCKED = 'allowWhenLocked';
+export const ALLOW_WHEN_EXPIRED = 'allowWhenExpired';
+export const READ_ONLY_SAFE = 'readOnlySafe';
+
+/** Still reachable when the shop is LOCKED (and EXPIRED): who-am-I, logout, own subscription, support. */
+export const AllowWhenLocked = () => SetMetadata(ALLOW_WHEN_LOCKED, true);
+
+/** A write that stays allowed when the subscription has EXPIRED (e.g. marking notifications read). */
+export const AllowWhenExpired = () => SetMetadata(ALLOW_WHEN_EXPIRED, true);
+
+/** A POST that only reads (e.g. a price preview); treated like a GET for EXPIRED shops. */
+export const ReadOnlySafe = () => SetMetadata(READ_ONLY_SAFE, true);
+
 /** The route needs an `X-Branch-Id` header the user is assigned to (branch-scoped operations). */
 export const RequireBranch = () => SetMetadata(REQUIRE_BRANCH, true);
 

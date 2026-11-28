@@ -8,6 +8,8 @@ import { isHealthProbe, loggerOptions } from './logger.config';
 const env = parseEnv({
   DATABASE_URL: 'postgresql://u:p@host/db',
   JWT_ACCESS_SECRET: 'x'.repeat(32),
+  PLATFORM_JWT_SECRET: 'p'.repeat(48),
+  PLATFORM_MFA_KEY: Buffer.alloc(32, 1).toString('base64'),
   NODE_ENV: 'production',
 });
 

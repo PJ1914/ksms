@@ -13,8 +13,12 @@ const SRC_DIR = __dirname;
 /** For each module: the other modules it may import from (everything else is forbidden). */
 const ALLOWED: Record<string, string[]> = {
   audit: [],
-  organization: ['audit'],
-  identity: ['audit', 'organization'],
+  // Shop-side subscriptions (ADMIN_PANEL.md Phase B): trial start, own state, plan limits.
+  subscription: [],
+  // Shop-side support tickets (ADMIN_PANEL.md Phase D).
+  support: [],
+  organization: ['audit', 'subscription'],
+  identity: ['audit', 'organization', 'subscription'],
   catalog: ['audit', 'organization'],
   inventory: ['audit', 'organization', 'catalog'],
   finance: ['audit', 'organization'],
@@ -28,6 +32,8 @@ const ALLOWED: Record<string, string[]> = {
   context: ['audit', 'organization', 'identity'],
   health: [],
   retention: [],
+  // Platform control plane (ADR-001): cross-tenant by design. Nothing else may import it (test below).
+  platform: ['identity'],
 };
 
 function sourceFiles(dir: string): string[] {
@@ -81,6 +87,35 @@ describe('module boundaries', () => {
       for (const target of relativeImports(file)) {
         const other = moduleOf(target);
         if (other) violations.push(`${path.relative(SRC_DIR, file)} imports modules/${other}`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('no module imports the platform plane (ADR-001)', () => {
+    const offenders = Object.entries(ALLOWED)
+      .filter(([m, deps]) => m !== 'platform' && deps.includes('platform'))
+      .map(([m]) => m);
+    expect(offenders).toEqual([]);
+    const violations: string[] = [];
+    for (const file of sourceFiles(SRC_DIR)) {
+      if (moduleOf(file) === 'platform') continue;
+      const rel = path.relative(SRC_DIR, file);
+      if (rel === 'app.module.ts' || rel === 'create-admin.ts') continue; // composition roots
+      for (const target of relativeImports(file)) {
+        if (moduleOf(target) === 'platform') violations.push(`${rel} imports modules/platform`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('platform controllers never use the shop tenant/permission decorators (ADR-001)', () => {
+    const violations: string[] = [];
+    for (const file of sourceFiles(path.join(MODULES_DIR, 'platform'))) {
+      const text = fs.readFileSync(file, 'utf8');
+      for (const banned of ['@RequirePermission(', '@AuthenticatedOnly(', '@Tenant(', '@Public(']) {
+        if (text.includes(banned))
+          violations.push(`${path.relative(SRC_DIR, file)} uses ${banned}`);
       }
     }
     expect(violations).toEqual([]);

@@ -2,6 +2,8 @@ import { Body, Controller, Get, HttpCode, Patch, Post, Req } from '@nestjs/commo
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { AppRequest, Principal, TenantContext } from '../../common/auth/auth.types';
 import {
+  AllowWhenExpired,
+  AllowWhenLocked,
   AuthenticatedOnly,
   AuthThrottled,
   CurrentPrincipal,
@@ -71,6 +73,7 @@ export class AuthController {
 
   @ApiBearerAuth()
   @AuthenticatedOnly()
+  @AllowWhenLocked()
   @HttpCode(204)
   @Post('auth/logout')
   @ApiOperation({ summary: 'Revoke the current session' })
@@ -80,6 +83,7 @@ export class AuthController {
 
   @ApiBearerAuth()
   @AuthenticatedOnly()
+  @AllowWhenLocked()
   @Get('auth/me')
   @ApiOperation({ summary: 'Current user, role, branches and permissions' })
   me(@Tenant() t: TenantContext) {
@@ -88,6 +92,7 @@ export class AuthController {
 
   @ApiBearerAuth()
   @AuthenticatedOnly()
+  @AllowWhenExpired()
   @HttpCode(204)
   @Post('auth/change-password')
   @ApiOperation({ summary: 'Change password; signs the user out of every device' })
@@ -101,6 +106,7 @@ export class AuthController {
 
   @ApiBearerAuth()
   @AuthenticatedOnly()
+  @AllowWhenExpired()
   @Patch('devices/current')
   @ApiOperation({ summary: 'Update this device (push token, name, app version)' })
   updateDevice(@CurrentPrincipal() p: Principal, @Body() dto: UpdateDeviceDto) {

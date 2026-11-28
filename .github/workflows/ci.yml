@@ -143,7 +143,7 @@ jobs:
           test "$(docker run --rm --entrypoint id ksms-api:ci -u)" != "0"
       - name: Boot, readiness and a real login (argon2 native module)
         run: |
-          docker run -d --name api --network host             -e DATABASE_URL=postgresql://ci:ci@localhost:5432/ci             -e JWT_ACCESS_SECRET=ci-only-secret-ci-only-secret-0000000             -e PORT=3000 ksms-api:ci
+          docker run -d --name api --network host             -e DATABASE_URL=postgresql://ci:ci@localhost:5432/ci             -e JWT_ACCESS_SECRET=ci-only-secret-ci-only-secret-0000000             -e PLATFORM_JWT_SECRET=ci-only-platform-secret-ci-only-platform-secret-00             -e PLATFORM_MFA_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=             -e PORT=3000 ksms-api:ci
           for i in $(seq 1 30); do
             curl -fsS http://localhost:3000/api/v1/health/ready && break
             sleep 2

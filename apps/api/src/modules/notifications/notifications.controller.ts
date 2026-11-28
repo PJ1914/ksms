@@ -2,6 +2,7 @@ import { Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@n
 import { ApiBearerAuth, ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import type { TenantContext } from '../../common/auth/auth.types';
 import {
+  AllowWhenExpired,
   AuthenticatedOnly,
   RequireBranch,
   RequirePermission,
@@ -33,6 +34,7 @@ export class NotificationsController {
     return this.notifications.unreadCount(t);
   }
 
+  @AllowWhenExpired()
   @Post(':id/read')
   @HttpCode(200)
   @AuthenticatedOnly()
@@ -41,6 +43,7 @@ export class NotificationsController {
     return this.notifications.markRead(t, id);
   }
 
+  @AllowWhenExpired()
   @Post('read-all')
   @HttpCode(200)
   @AuthenticatedOnly()
@@ -49,6 +52,7 @@ export class NotificationsController {
     return this.notifications.markAllRead(t);
   }
 
+  @AllowWhenExpired()
   @Post('check-alerts')
   @HttpCode(200)
   @RequireBranch()

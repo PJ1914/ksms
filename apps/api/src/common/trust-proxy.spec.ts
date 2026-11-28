@@ -15,7 +15,13 @@ class IpController {
 }
 
 const env = (over: Record<string, string>) =>
-  parseEnv({ DATABASE_URL: 'postgresql://u:p@h/d', JWT_ACCESS_SECRET: 'x'.repeat(32), ...over });
+  parseEnv({
+    DATABASE_URL: 'postgresql://u:p@h/d',
+    JWT_ACCESS_SECRET: 'x'.repeat(32),
+    PLATFORM_JWT_SECRET: 'p'.repeat(48),
+    PLATFORM_MFA_KEY: Buffer.alloc(32, 1).toString('base64'),
+    ...over,
+  });
 
 async function appWith(over: Record<string, string>): Promise<INestApplication> {
   const ref = await Test.createTestingModule({ controllers: [IpController] }).compile();

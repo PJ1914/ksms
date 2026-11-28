@@ -28,6 +28,9 @@ jobs:
       DATABASE_URL: ${{ secrets.RETENTION_DATABASE_URL }}
       # Not used by the purge, but the shared env validation requires a value.
       JWT_ACCESS_SECRET: retention-job-does-not-sign-tokens-000000
+      # Same: the purge never touches the admin panel (ADR-001); throwaway values for validation only.
+      PLATFORM_JWT_SECRET: retention-job-does-not-sign-admin-tokens-0000000000
+      PLATFORM_MFA_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       NODE_ENV: production
       DB_POOL_MAX: '2'
     steps:

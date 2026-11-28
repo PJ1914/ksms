@@ -21,7 +21,12 @@ import { ApiBearerAuth, ApiHeader, ApiOperation, ApiSecurity, ApiTags } from '@n
 import type { Response } from 'express';
 import { IDEMPOTENCY_HEADER } from '@ksms/constants';
 import type { AppRequest, TenantContext } from '../../common/auth/auth.types';
-import { RequireBranch, RequirePermission, Tenant } from '../../common/auth/decorators';
+import {
+  ReadOnlySafe,
+  RequireBranch,
+  RequirePermission,
+  Tenant,
+} from '../../common/auth/decorators';
 import { IdempotencyService } from '../../common/idempotency/idempotency.service';
 import { HeldBillsService } from './held-bills.service';
 import { InvoicesService } from './invoices.service';
@@ -95,6 +100,7 @@ export class SalesController {
   }
 
   @Post('sales/preview')
+  @ReadOnlySafe() // prices a cart, writes nothing: allowed for EXPIRED shops
   @HttpCode(200)
   @RequirePermission('sale.create')
   @ApiOperation({

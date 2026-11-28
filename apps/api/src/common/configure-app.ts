@@ -1,9 +1,9 @@
-import { INestApplication, ValidationError, ValidationPipe } from '@nestjs/common';
+import { INestApplication, RequestMethod, ValidationError, ValidationPipe } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
 import compression from 'compression';
 import helmet from 'helmet';
-import { API_PREFIX } from '@ksms/constants';
+import { API_PREFIX, PLATFORM_PREFIX, SUBSCRIPTION_STATE_HEADER } from '@ksms/constants';
 import type { Env } from '../config/env';
 import { AppException } from './errors/app.exception';
 import { AllExceptionsFilter } from './filters/all-exceptions.filter';
@@ -57,10 +57,19 @@ export function configureApp(app: INestApplication, env: Env): void {
         compression.filter(req, res),
     }),
   );
-  if (env.CORS_ORIGINS.length > 0) {
-    app.enableCors({ origin: env.CORS_ORIGINS, credentials: false });
+  const origins = [...new Set([...env.CORS_ORIGINS, ...env.PLATFORM_ADMIN_ORIGINS])];
+  if (origins.length > 0) {
+    app.enableCors({
+      origin: origins,
+      credentials: false,
+      // The web app reads the shop's subscription state from every answer (ADMIN_PANEL.md §2.5).
+      exposedHeaders: [SUBSCRIPTION_STATE_HEADER],
+    });
   }
-  app.setGlobalPrefix(API_PREFIX);
+  // Platform controllers declare their full path (admin/v1/...) and stay outside the shop prefix (ADR-001).
+  app.setGlobalPrefix(API_PREFIX, {
+    exclude: [{ path: `${PLATFORM_PREFIX}/{*path}`, method: RequestMethod.ALL }],
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true, // strip unknown properties
