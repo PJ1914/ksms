@@ -14,7 +14,7 @@ services:
         sync: false
       - key: JWT_ACCESS_SECRET
         sync: false
-      # Admin panel (ADR-001): required in production, set both in the Render dashboard.
+      # Admin panel (ADR-001): set these in the Render dashboard to turn the admin panel on. Without them the API still starts and /admin/v1 answers 503.
       - key: PLATFORM_JWT_SECRET
         sync: false
       - key: PLATFORM_MFA_KEY

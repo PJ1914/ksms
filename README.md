@@ -43,7 +43,7 @@ For a phone to reach the API, set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` to
 
 The admin panel API lives at `/admin/v1` (Swagger: `/admin/v1/docs`), separate from the shop API (ADR-001, `ADMIN_PANEL.md`).
 
-- Set `PLATFORM_JWT_SECRET` (`openssl rand -base64 48`, different from `JWT_ACCESS_SECRET`) and `PLATFORM_MFA_KEY` (`openssl rand -base64 32`) in `apps/api/.env`. They are **required in production**. Without them in development, `/admin/v1` answers `503`.
+- Set `PLATFORM_JWT_SECRET` (`openssl rand -base64 48`, different from `JWT_ACCESS_SECRET`) and `PLATFORM_MFA_KEY` (`openssl rand -base64 32`) in `apps/api/.env`. Set **both** to turn the admin panel on. Without them the API still starts and `/admin/v1` answers `503`.
 - Create the first admin. This is the only way to create one; there is no sign-up and nothing is seeded:
 
   ```bash

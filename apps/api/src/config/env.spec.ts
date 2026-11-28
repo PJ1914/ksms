@@ -68,13 +68,13 @@ describe('parseEnv', () => {
       expect(env.PLATFORM_AUTH_THROTTLE_LIMIT).toBe(5);
     });
 
-    it('is required in production', () => {
-      expect(() => parseEnv({ ...valid, NODE_ENV: 'production' })).toThrow(/PLATFORM_JWT_SECRET/);
-      expect(() =>
-        parseEnv({ ...valid, NODE_ENV: 'production', PLATFORM_JWT_SECRET: 'p'.repeat(48) }),
-      ).toThrow(/PLATFORM_MFA_KEY/);
-      expect(parseEnv({ ...valid, ...platform, NODE_ENV: 'production' }).NODE_ENV).toBe(
-        'production',
+    it('never stops production from starting when the keys are missing (the admin panel stays off)', () => {
+      const env = parseEnv({ ...valid, NODE_ENV: 'production' });
+      expect(env.NODE_ENV).toBe('production');
+      expect(env.PLATFORM_JWT_SECRET).toBeUndefined();
+      expect(env.PLATFORM_MFA_KEY).toBeUndefined();
+      expect(parseEnv({ ...valid, ...platform, NODE_ENV: 'production' }).PLATFORM_JWT_SECRET).toBe(
+        platform.PLATFORM_JWT_SECRET,
       );
     });
 

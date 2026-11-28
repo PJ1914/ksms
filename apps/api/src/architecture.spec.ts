@@ -33,7 +33,7 @@ const ALLOWED: Record<string, string[]> = {
   health: [],
   retention: [],
   // Platform control plane (ADR-001): cross-tenant by design. Nothing else may import it (test below).
-  platform: ['identity'],
+  platform: ['identity', 'subscription'],
 };
 
 function sourceFiles(dir: string): string[] {

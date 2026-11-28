@@ -14,6 +14,10 @@ export class ReasonDto {
 }
 
 export class UpdatePlatformAdminDto extends ReasonDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @Length(2, 100) fullName?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsEmail() @MaxLength(254) email?: string;
+
   @ApiPropertyOptional({ enum: PLATFORM_ROLES })
   @IsOptional()
   @IsIn(PLATFORM_ROLES)
