@@ -56,6 +56,40 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ ...valid, JWT_ACCESS_SECRET: 'short' })).toThrow(/at least 32/);
   });
 
+  describe('platform plane (ADR-001)', () => {
+    const platform = {
+      PLATFORM_JWT_SECRET: 'p'.repeat(48),
+      PLATFORM_MFA_KEY: Buffer.alloc(32, 1).toString('base64'),
+    };
+
+    it('is optional outside production', () => {
+      const env = parseEnv(valid);
+      expect(env.PLATFORM_JWT_SECRET).toBeUndefined();
+      expect(env.PLATFORM_AUTH_THROTTLE_LIMIT).toBe(5);
+    });
+
+    it('is required in production', () => {
+      expect(() => parseEnv({ ...valid, NODE_ENV: 'production' })).toThrow(/PLATFORM_JWT_SECRET/);
+      expect(() =>
+        parseEnv({ ...valid, NODE_ENV: 'production', PLATFORM_JWT_SECRET: 'p'.repeat(48) }),
+      ).toThrow(/PLATFORM_MFA_KEY/);
+      expect(parseEnv({ ...valid, ...platform, NODE_ENV: 'production' }).NODE_ENV).toBe(
+        'production',
+      );
+    });
+
+    it('needs a long secret that differs from the shop secret, and a 32-byte MFA key', () => {
+      expect(() => parseEnv({ ...valid, PLATFORM_JWT_SECRET: 'p'.repeat(47) })).toThrow(/48/);
+      const same = 'z'.repeat(48);
+      expect(() =>
+        parseEnv({ ...valid, JWT_ACCESS_SECRET: same, PLATFORM_JWT_SECRET: same }),
+      ).toThrow(/different/);
+      expect(() =>
+        parseEnv({ ...valid, PLATFORM_MFA_KEY: Buffer.alloc(16).toString('base64') }),
+      ).toThrow(/32 bytes/);
+    });
+  });
+
   it('does not leak secrets in error messages', () => {
     try {
       parseEnv({

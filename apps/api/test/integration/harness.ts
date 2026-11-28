@@ -85,6 +85,9 @@ export async function createIntegrationApp(
     AUTH_THROTTLE_LIMIT: '100000',
     RECONCILE_THROTTLE_LIMIT: '100000',
     RECONCILE_CACHE_SECONDS: '0',
+    PLATFORM_JWT_SECRET: 'integration-platform-secret-integration-platform-secret-1',
+    PLATFORM_MFA_KEY: Buffer.alloc(32, 3).toString('base64'),
+    PLATFORM_AUTH_THROTTLE_LIMIT: '100000',
     ...overrides,
   });
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();

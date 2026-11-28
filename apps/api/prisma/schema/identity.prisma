@@ -28,11 +28,18 @@ model Organization {
   createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                 DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt                 DateTime? @map("deleted_at") @db.Timestamptz(3)
+  // Platform lock (ADR-001, ADMIN_PANEL.md §2.4): 'NONE' | 'LOCKED' (CHECK in migration). Only ADMIN sets it.
+  lockStatus                String    @default("NONE") @map("lock_status")
+  lockReason                String?   @map("lock_reason")
+  lockedAt                  DateTime? @map("locked_at") @db.Timestamptz(3)
+  lockedById                String?   @map("locked_by") @db.Uuid
+  lockedBy                  PlatformAdmin? @relation("OrganizationLockedBy", fields: [lockedById], references: [id])
 
-  branches    Branch[]
-  members     OrganizationMember[]
-  roles       Role[]
-  invitations Invitation[]
+  branches     Branch[]
+  members      OrganizationMember[]
+  roles        Role[]
+  invitations  Invitation[]
+  subscription Subscription?
 
   @@map("organizations")
 }

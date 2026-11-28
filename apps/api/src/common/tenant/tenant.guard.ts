@@ -1,11 +1,19 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { z } from 'zod';
-import { BRANCH_HEADER } from '@ksms/constants';
+import { BRANCH_HEADER, SUBSCRIPTION_STATE_HEADER } from '@ksms/constants';
 import { PrismaService } from '../../database/prisma.service';
 import type { AppRequest } from '../auth/auth.types';
-import { IS_PUBLIC, REQUIRE_BRANCH } from '../auth/decorators';
+import {
+  ALLOW_WHEN_EXPIRED,
+  ALLOW_WHEN_LOCKED,
+  IS_PLATFORM,
+  IS_PUBLIC,
+  READ_ONLY_SAFE,
+  REQUIRE_BRANCH,
+} from '../auth/decorators';
 import { AppException } from '../errors/app.exception';
+import { shopSubscription } from '../subscription/shop-subscription';
 import { findMember } from './member-lookup';
 
 const uuid = z.uuid();
@@ -15,6 +23,10 @@ const uuid = z.uuid();
  * - The organization comes ONLY from the verified token, never from headers or body.
  * - The user must be an ACTIVE member of that organization.
  * - A requested branch (X-Branch-Id) must be one the member is assigned to AND that is still active.
+ * - The shop's subscription is enforced (ADMIN_PANEL.md §2.5), from fields loaded with the membership:
+ *   LOCKED → 403 ORG_LOCKED (except @AllowWhenLocked routes); EXPIRED → reads only, writes 402
+ *   SUBSCRIPTION_EXPIRED (except @AllowWhenExpired / @ReadOnlySafe); GRACE and the rest pass.
+ *   Every answer carries X-Subscription-State.
  */
 @Injectable()
 export class TenantGuard implements CanActivate {
@@ -25,6 +37,8 @@ export class TenantGuard implements CanActivate {
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const targets = [ctx.getHandler(), ctx.getClass()];
+    // Platform routes have no tenant: they are cross-tenant by design (ADR-001).
+    if (this.reflector.getAllAndOverride<boolean>(IS_PLATFORM, targets)) return true;
     if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets)) return true;
 
     const req = ctx.switchToHttp().getRequest<AppRequest>();
@@ -38,6 +52,34 @@ export class TenantGuard implements CanActivate {
         'ORG_ACCESS_DENIED',
         'You do not have access to this organization',
         403,
+      );
+    }
+
+    const subscription = shopSubscription(member.organization);
+    req.subscription = subscription;
+    ctx
+      .switchToHttp()
+      .getResponse<{ setHeader(n: string, v: string): void }>()
+      .setHeader(SUBSCRIPTION_STATE_HEADER, subscription.state);
+    const flag = (key: string) => this.reflector.getAllAndOverride<boolean>(key, targets) === true;
+    if (subscription.state === 'LOCKED' && !flag(ALLOW_WHEN_LOCKED)) {
+      throw new AppException('ORG_LOCKED', 'This shop is locked. Please contact support.', 403, {
+        lockedAt: subscription.lockedAt,
+      });
+    }
+    const isWrite = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+    if (
+      subscription.state === 'EXPIRED' &&
+      isWrite &&
+      !flag(ALLOW_WHEN_EXPIRED) &&
+      !flag(ALLOW_WHEN_LOCKED) &&
+      !flag(READ_ONLY_SAFE)
+    ) {
+      throw new AppException(
+        'SUBSCRIPTION_EXPIRED',
+        'Your subscription has ended. You can view your data; renew to make changes.',
+        402,
+        { endsAt: subscription.endsAt, graceEndsAt: subscription.graceEndsAt },
       );
     }
 

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { OrganizationModule } from '../organization/organization.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { DevicesService } from './devices.service';
@@ -17,7 +18,7 @@ import {
 } from './staff.controller';
 
 @Module({
-  imports: [OrganizationModule],
+  imports: [OrganizationModule, SubscriptionModule],
   controllers: [
     AuthController,
     EmployeesController,

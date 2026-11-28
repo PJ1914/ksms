@@ -29,11 +29,24 @@ import { ContextModule } from './modules/context/context.module';
 import { HealthModule } from './modules/health/health.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { OrganizationModule } from './modules/organization/organization.module';
+import { PlatformGuard } from './modules/platform/auth/platform.guard';
+import { PLATFORM_AUTH_THROTTLED } from './modules/platform/platform.decorators';
+import { PlatformModule } from './modules/platform/platform.module';
+import { SubscriptionModule } from './modules/subscription/subscription.module';
+import { SupportModule } from './modules/support/support.module';
 
 /** The sign-in identifier of a login request, normalised; null for other requests. */
 function loginIdentifier(req: { body?: unknown }): string | null {
   const id = (req.body as { identifier?: unknown } | undefined)?.identifier;
   return typeof id === 'string' && id.trim() !== '' ? id.trim().toLowerCase().slice(0, 100) : null;
+}
+
+/** The email of an admin-panel login request (ADR-001), normalised; null for other requests. */
+function platformLoginEmail(req: { body?: unknown }): string | null {
+  const email = (req.body as { email?: unknown } | undefined)?.email;
+  return typeof email === 'string' && email.trim() !== ''
+    ? email.trim().toLowerCase().slice(0, 254)
+    : null;
 }
 
 @Module({
@@ -61,6 +74,23 @@ function loginIdentifier(req: { body?: unknown }): string | null {
             !Reflect.getMetadata(AUTH_THROTTLED, ctx.getHandler()) ||
             loginIdentifier(ctx.switchToHttp().getRequest()) === null,
           getTracker: (req) => `identifier:${loginIdentifier(req)}`,
+        },
+        {
+          // Admin panel login and MFA steps (ADR-001): PLATFORM_AUTH_THROTTLE_LIMIT a minute per IP...
+          name: 'platform-auth',
+          ttl: 60_000,
+          limit: env.PLATFORM_AUTH_THROTTLE_LIMIT,
+          skipIf: (ctx) => !Reflect.getMetadata(PLATFORM_AUTH_THROTTLED, ctx.getHandler()),
+        },
+        {
+          // ...and the same per admin email, whatever the IP.
+          name: 'platform-auth-email',
+          ttl: 60_000,
+          limit: env.PLATFORM_AUTH_THROTTLE_LIMIT,
+          skipIf: (ctx) =>
+            !Reflect.getMetadata(PLATFORM_AUTH_THROTTLED, ctx.getHandler()) ||
+            platformLoginEmail(ctx.switchToHttp().getRequest()) === null,
+          getTracker: (req) => `platform-email:${platformLoginEmail(req)}`,
         },
         {
           // Reconciliation scans all history (FIXES F21): at most RECONCILE_THROTTLE_LIMIT a minute.
@@ -91,10 +121,15 @@ function loginIdentifier(req: { body?: unknown }): string | null {
     ReportingModule,
     SyncModule,
     NotificationsModule,
+    PlatformModule,
+    SubscriptionModule,
+    SupportModule,
   ],
   providers: [
-    // Guard order matters: rate limit -> authenticate -> tenant context -> permission (default deny).
+    // Guard order matters: rate limit -> platform plane (acts only on /admin/v1) -> authenticate ->
+    // tenant context -> permission (default deny). The shop guards skip @PlatformRoute() controllers.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: PlatformGuard },
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },

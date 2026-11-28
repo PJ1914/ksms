@@ -13,6 +13,20 @@ export function findMember(prisma: PrismaService, organizationId: string, userId
         where: { branch: { deletedAt: null, isActive: true } },
         select: { branchId: true },
       },
+      // Subscription enforcement rides on this same query: no extra round trip (ADMIN_PANEL.md §2.5).
+      organization: {
+        select: {
+          lockStatus: true,
+          lockedAt: true,
+          subscription: {
+            select: {
+              endsAt: true,
+              graceDays: true,
+              plan: { select: { code: true, isTrial: true } },
+            },
+          },
+        },
+      },
     },
   });
 }

@@ -12,6 +12,7 @@ import type { Db } from '../../database/db.types';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BranchService } from '../organization/branch.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import type { ChangePasswordDto, LoginDto, RegisterOwnerDto } from './auth.dto';
 import { LoginLockoutService } from './login-lockout.service';
 import { PasswordService } from './password.service';
@@ -40,6 +41,7 @@ export class AuthService {
     private readonly branches: BranchService,
     private readonly audit: AuditService,
     private readonly lockout: LoginLockoutService,
+    private readonly subscriptions: SubscriptionService,
   ) {}
 
   /** Creates the organization, first branch, system roles, the owner account and a first session in ONE transaction. */
@@ -60,6 +62,8 @@ export class AuthService {
         },
         select: { id: true },
       });
+      // Every new shop starts on the free trial (ADMIN_PANEL.md decision 4), in this same transaction.
+      await this.subscriptions.startTrial(tx, org.id);
 
       const roleIds = new Map<string, string>();
       for (const [name, keys] of Object.entries(SYSTEM_ROLE_PERMISSIONS)) {
@@ -141,7 +145,10 @@ export class AuthService {
         lockedUntil: true,
         memberships: {
           where: { status: 'ACTIVE', organization: { deletedAt: null } },
-          select: { organizationId: true, organization: { select: { name: true } } },
+          select: {
+            organizationId: true,
+            organization: { select: { name: true, lockStatus: true } },
+          },
         },
       },
     });
@@ -178,6 +185,14 @@ export class AuthService {
           id: m.organizationId,
           name: m.organization.name,
         })),
+      });
+    }
+
+    // A shop locked by the platform cannot sign in (expired shops can: they keep read access).
+    const chosen = user.memberships.find((m) => m.organizationId === organizationId);
+    if (chosen?.organization.lockStatus === 'LOCKED') {
+      throw new AppException('ORG_LOCKED', 'This shop is locked. Please contact support.', 403, {
+        supportContact: await this.supportContact(),
       });
     }
 
@@ -227,7 +242,13 @@ export class AuthService {
       );
 
     const isOwner = member.role.isSystem && member.role.name === 'Owner';
+    const [subscription, supportContact] = await Promise.all([
+      this.subscriptions.summary(organizationId),
+      this.supportContact(),
+    ]);
     return {
+      subscription,
+      supportContact,
       user: member.user,
       organization: member.organization,
       role: { id: member.role.id, name: member.role.name },
@@ -299,6 +320,12 @@ export class AuthService {
   }
 
   /** Idempotent: inserts any permission keys missing from the global catalogue. */
+  /** Support phone/WhatsApp/hours set in the admin panel (works for locked shops too). */
+  async supportContact() {
+    const s = await this.prisma.supportSettings.findUnique({ where: { id: 1 } });
+    return { phone: s?.phone ?? null, whatsapp: s?.whatsapp ?? null, hours: s?.hoursText ?? null };
+  }
+
   async ensurePermissionCatalog(db: Db): Promise<void> {
     await db.permission.createMany({
       data: ALL_PERMISSION_KEYS.map((key) => ({

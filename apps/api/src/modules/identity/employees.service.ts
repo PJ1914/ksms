@@ -5,6 +5,7 @@ import { SessionCache } from '../../common/auth/session-cache';
 import { AppException } from '../../common/errors/app.exception';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import { BranchService } from '../organization/branch.service';
 import { RolesService } from './roles.service';
 import { SessionService } from './session.service';
@@ -56,6 +57,7 @@ export class EmployeesService {
     private readonly roles: RolesService,
     private readonly sessions: SessionService,
     private readonly cache: SessionCache,
+    private readonly subscriptions: SubscriptionService,
   ) {}
 
   async list(organizationId: string) {
@@ -149,6 +151,9 @@ export class EmployeesService {
     return this.prisma.$transaction(async (tx) => {
       const before = await this.find(tx, t.organizationId, id);
       this.assertModifiable(t, before);
+      if (before.status !== 'ACTIVE') {
+        await this.subscriptions.assertWithinLimit(tx, t.organizationId, 'users');
+      }
       await tx.organizationMember.update({ where: { id }, data: { status: 'ACTIVE' } });
       await this.audit.record(tx, {
         organizationId: t.organizationId,

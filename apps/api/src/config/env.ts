@@ -50,11 +50,47 @@ const envSchema = z
       .enum(['true', 'false'])
       .optional()
       .transform((v) => (v === undefined ? undefined : v === 'true')),
+
+    // ---- Platform control plane (ADR-001). Required in production; optional elsewhere so local
+    // development and the existing tests run without them (the admin plane then answers 503).
+    // Signs admin tokens. Must differ from JWT_ACCESS_SECRET so the two planes can never share tokens.
+    PLATFORM_JWT_SECRET: z
+      .string()
+      .min(48, 'PLATFORM_JWT_SECRET must be at least 48 characters')
+      .optional(),
+    // AES-256-GCM key for admin TOTP secrets: 32 random bytes, base64. Generate: openssl rand -base64 32
+    PLATFORM_MFA_KEY: z
+      .string()
+      .refine((v) => Buffer.from(v, 'base64').length === 32, {
+        message: 'PLATFORM_MFA_KEY must be 32 bytes, base64-encoded',
+      })
+      .optional(),
+    // Browser origins of the admin web app (added to CORS).
+    PLATFORM_ADMIN_ORIGINS: csv,
+    // Optional: only these client IPs may reach /admin/v1 at all (empty = any IP).
+    PLATFORM_ADMIN_IP_ALLOWLIST: csv,
+    // Admin login / MFA attempts per minute, per IP and per email.
+    PLATFORM_AUTH_THROTTLE_LIMIT: z.coerce.number().int().min(1).default(5),
   })
   .refine((e) => e.SESSION_ABSOLUTE_TTL_DAYS >= e.REFRESH_TTL_DAYS, {
     path: ['SESSION_ABSOLUTE_TTL_DAYS'],
     message: 'SESSION_ABSOLUTE_TTL_DAYS must be at least REFRESH_TTL_DAYS',
-  });
+  })
+  .refine((e) => e.NODE_ENV !== 'production' || e.PLATFORM_JWT_SECRET !== undefined, {
+    path: ['PLATFORM_JWT_SECRET'],
+    message: 'PLATFORM_JWT_SECRET is required in production',
+  })
+  .refine((e) => e.NODE_ENV !== 'production' || e.PLATFORM_MFA_KEY !== undefined, {
+    path: ['PLATFORM_MFA_KEY'],
+    message: 'PLATFORM_MFA_KEY is required in production',
+  })
+  .refine(
+    (e) => e.PLATFORM_JWT_SECRET === undefined || e.PLATFORM_JWT_SECRET !== e.JWT_ACCESS_SECRET,
+    {
+      path: ['PLATFORM_JWT_SECRET'],
+      message: 'PLATFORM_JWT_SECRET must be different from JWT_ACCESS_SECRET',
+    },
+  );
 
 export type Env = z.infer<typeof envSchema>;
 
