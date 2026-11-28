@@ -14,3 +14,50 @@ services:
         sync: false
       - key: JWT_ACCESS_SECRET
         sync: false
+      # Admin panel (ADR-001): required in production, set both in the Render dashboard.
+      - key: PLATFORM_JWT_SECRET
+        sync: false
+      - key: PLATFORM_MFA_KEY
+        sync: false
+      - key: PLATFORM_ADMIN_ORIGINS
+        sync: false
+
+  # The browser version of the app (Expo web export). Needs EXPO_PUBLIC_API_URL set in the Render
+  # dashboard (the API's https URL ending in /api/v1), and this site's URL added to the API's CORS_ORIGINS.
+  - type: web
+    name: ksms-app
+    runtime: static
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm -r --filter "./packages/*" build && pnpm --filter @ksms/mobile exec expo export --platform web
+    staticPublishPath: apps/mobile/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: 24
+      - key: EXPO_PUBLIC_API_URL
+        sync: false
+
+  # The admin panel (ADMIN_PANEL.md Phase C, apps/admin). Set VITE_API_ORIGIN to the API's https origin
+  # (no path) and add this site's URL to the API's PLATFORM_ADMIN_ORIGINS. Strict CSP below (no inline script).
+  - type: web
+    name: ksms-admin
+    runtime: static
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @ksms/admin build
+    staticPublishPath: apps/admin/dist
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+    envVars:
+      - key: NODE_VERSION
+        value: 24
+      - key: VITE_API_ORIGIN
+        sync: false
