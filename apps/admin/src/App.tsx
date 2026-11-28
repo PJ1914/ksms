@@ -8,13 +8,15 @@ import {
   refreshSession,
   type AdminProfile,
 } from './api';
+import { Palette } from './Palette';
 import { Admins, Audit } from './pages/Team';
 import { Payments, Plans } from './pages/Billing';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
 import { ShopDetail, Shops } from './pages/Shops';
 import { SupportSettings, TicketDetail, Tickets } from './pages/Tickets';
-import { Icon } from './ui';
+import { Users } from './pages/Users';
+import { Avatar, Icon } from './ui';
 
 /** Hash routes: #/shops, #/shops/<id>?..., no server config needed on a static host. */
 function useRoute() {
@@ -35,10 +37,47 @@ function useRoute() {
   return route;
 }
 
+interface NavItem {
+  key: string;
+  label: string;
+  icon: ReactElement;
+  adminOnly?: boolean;
+}
+const NAV: { label: string; items: NavItem[] }[] = [
+  {
+    label: 'Overview',
+    items: [{ key: 'dashboard', label: 'Dashboard', icon: Icon.home }],
+  },
+  {
+    label: 'Customers',
+    items: [
+      { key: 'shops', label: 'Shops', icon: Icon.shop },
+      { key: 'users', label: 'Users', icon: Icon.user },
+      { key: 'tickets', label: 'Tickets', icon: Icon.ticket },
+    ],
+  },
+  {
+    label: 'Money',
+    items: [
+      { key: 'plans', label: 'Plans', icon: Icon.plan },
+      { key: 'payments', label: 'Payments', icon: Icon.money, adminOnly: true },
+    ],
+  },
+  {
+    label: 'Workspace',
+    items: [
+      { key: 'support', label: 'Support contact', icon: Icon.phone },
+      { key: 'admins', label: 'Team', icon: Icon.people, adminOnly: true },
+      { key: 'audit', label: 'Audit log', icon: Icon.log },
+    ],
+  },
+];
+
 export function App() {
   const [admin, setAdmin] = useState<AdminProfile | null>(null);
   const [booting, setBooting] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
   const route = useRoute();
 
   // A reload keeps the session while the tab lives (refresh token in sessionStorage).
@@ -57,39 +96,37 @@ export function App() {
     };
   }, []);
 
-  // Any click or key counts as activity for the 30-minute idle sign-out.
+  // Any click or key counts as activity for the 30-minute idle sign-out; Ctrl/⌘+K opens search.
   useEffect(() => {
-    const on = () => markActivity();
-    window.addEventListener('pointerdown', on);
-    window.addEventListener('keydown', on);
+    const onPointer = () => markActivity();
+    const onKey = (e: KeyboardEvent) => {
+      markActivity();
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearching(true);
+      }
+    };
+    window.addEventListener('pointerdown', onPointer);
+    window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener('pointerdown', on);
-      window.removeEventListener('keydown', on);
+      window.removeEventListener('pointerdown', onPointer);
+      window.removeEventListener('keydown', onKey);
     };
   }, []);
 
   useEffect(() => setMenuOpen(false), [route.raw]);
 
-  if (booting)
+  if (booting) {
     return (
       <p className="muted" style={{ padding: 24 }}>
         Loading…
       </p>
     );
+  }
   if (!admin) return <Login onSignedIn={setAdmin} />;
 
   const isAdmin = admin.role === 'ADMIN';
   const [section = 'dashboard', id] = route.parts;
-  const nav: { key: string; label: string; icon: ReactElement; adminOnly?: boolean }[] = [
-    { key: 'dashboard', label: 'Dashboard', icon: Icon.home },
-    { key: 'shops', label: 'Shops', icon: Icon.shop },
-    { key: 'tickets', label: 'Tickets', icon: Icon.ticket },
-    { key: 'plans', label: 'Plans', icon: Icon.plan },
-    { key: 'payments', label: 'Payments', icon: Icon.money, adminOnly: true },
-    { key: 'support', label: 'Support contact', icon: Icon.phone },
-    { key: 'admins', label: 'Admins', icon: Icon.people, adminOnly: true },
-    { key: 'audit', label: 'Audit log', icon: Icon.log },
-  ];
 
   let page: ReactElement;
   switch (section) {
@@ -99,6 +136,9 @@ export function App() {
       ) : (
         <Shops key={route.raw} params={route.params} />
       );
+      break;
+    case 'users':
+      page = <Users key={route.raw} params={route.params} role={admin.role} />;
       break;
     case 'tickets':
       page = id ? (
@@ -123,7 +163,7 @@ export function App() {
       page = <Audit key={route.raw} params={route.params} />;
       break;
     default:
-      page = <Dashboard role={admin.role} />;
+      page = <Dashboard role={admin.role} name={admin.fullName} />;
   }
 
   return (
@@ -131,27 +171,35 @@ export function App() {
       <aside className={`side ${menuOpen ? 'open' : ''}`}>
         <div className="brand">
           <img src="/favicon.svg" alt="" />
-          Yapaaram Admin
+          <span>
+            Yapaaram
+            <small>Admin console</small>
+          </span>
         </div>
         <nav className="nav" aria-label="Main">
-          {nav
-            .filter((n) => !n.adminOnly || isAdmin)
-            .map((n) => (
-              <a key={n.key} href={`#/${n.key}`} className={section === n.key ? 'active' : ''}>
-                {n.icon}
-                {n.label}
-              </a>
-            ))}
+          {NAV.map((group) => {
+            const items = group.items.filter((n) => !n.adminOnly || isAdmin);
+            if (items.length === 0) return null;
+            return (
+              <div key={group.label}>
+                <div className="nav-label">{group.label}</div>
+                {items.map((n) => (
+                  <a
+                    key={n.key}
+                    href={`#/${n.key}`}
+                    className={section === n.key ? 'active' : ''}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    {n.icon}
+                    {n.label}
+                  </a>
+                ))}
+              </div>
+            );
+          })}
         </nav>
-        <div className="side-foot small">
-          <div>
-            <b>{admin.fullName}</b>
-          </div>
-          <div className="muted">
-            {admin.email} · {admin.role}
-          </div>
+        <div className="side-foot">
           <button
-            style={{ marginTop: 10 }}
             onClick={() => {
               void api
                 .post('/auth/logout')
@@ -163,21 +211,36 @@ export function App() {
           </button>
         </div>
       </aside>
-      <div>
-        <div className="topbar">
-          <button aria-label="Menu" onClick={() => setMenuOpen(true)}>
+
+      <div className="content">
+        <header className="head">
+          <button className="iconbtn menu-btn" aria-label="Menu" onClick={() => setMenuOpen(true)}>
             {Icon.menu}
           </button>
-          <b>Yapaaram Admin</b>
-        </div>
+          <button className="search" onClick={() => setSearching(true)} aria-label="Search">
+            {Icon.search}
+            <span>Search shops, users, pages…</span>
+            <kbd>Ctrl K</kbd>
+          </button>
+          <div className="spacer" />
+          <div className="chip">
+            <Avatar name={admin.fullName} size="sm" round />
+            <span className="who">
+              {admin.fullName}
+              <small>{admin.role === 'ADMIN' ? 'Administrator' : 'Support'}</small>
+            </span>
+          </div>
+        </header>
         <main className="main">{page}</main>
       </div>
+
       {menuOpen && (
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 25 }}
+          style={{ position: 'fixed', inset: 0, zIndex: 35 }}
           onClick={() => setMenuOpen(false)}
         />
       )}
+      {searching && <Palette role={admin.role} onClose={() => setSearching(false)} />}
     </div>
   );
 }

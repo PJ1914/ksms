@@ -1,6 +1,17 @@
 import { useState } from 'react';
 import { api, date, dateTime, newKey, request, rupees, type Role } from '../api';
-import { Alert, Badge, errorText, Loading, Modal, ReasonDialog, useLoad } from '../ui';
+import {
+  Alert,
+  Avatar,
+  Badge,
+  errorText,
+  Icon,
+  Loading,
+  Modal,
+  PageHead,
+  ReasonDialog,
+  useLoad,
+} from '../ui';
 
 interface ShopRow {
   id: string;
@@ -47,21 +58,30 @@ export function Shops({ params }: { params: URLSearchParams }) {
 
   return (
     <>
-      <h1>Shops</h1>
+      <PageHead
+        title="Shops"
+        subtitle="Every shop on Yapaaram, with where it stands in its subscription."
+      />
+      <div className="tabs" role="tablist" aria-label="Stage">
+        {STATES.map((st) => (
+          <button
+            key={st}
+            className={status === st ? 'on' : ''}
+            onClick={() => setStatus(st)}
+            role="tab"
+          >
+            {st ? st[0] + st.slice(1).toLowerCase() : 'All'}
+          </button>
+        ))}
+      </div>
       <div className="filters">
         <input
-          placeholder="Search name or phone"
+          placeholder="Search shop name or phone"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           aria-label="Search shops"
+          style={{ minWidth: 280 }}
         />
-        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="State">
-          {STATES.map((s) => (
-            <option key={s} value={s}>
-              {s || 'Any state'}
-            </option>
-          ))}
-        </select>
         <select value={plan} onChange={(e) => setPlan(e.target.value)} aria-label="Plan">
           <option value="">Any plan</option>
           <option>TRIAL</option>
@@ -71,7 +91,7 @@ export function Shops({ params }: { params: URLSearchParams }) {
         {expiring && <span className="badge b-GRACE">Ending within {expiring} days</span>}
       </div>
       <Loading loading={loading && rows.length === 0} error={error} />
-      <div className="card" style={{ padding: 0 }}>
+      <div className="card flush">
         <table className="cards">
           <thead>
             <tr>
@@ -87,8 +107,13 @@ export function Shops({ params }: { params: URLSearchParams }) {
             {rows.map((r) => (
               <tr key={r.id} className="click" onClick={() => (location.hash = `#/shops/${r.id}`)}>
                 <td data-label="Shop">
-                  <b>{r.name}</b>
-                  {r.phone && <div className="muted small">{r.phone}</div>}
+                  <div className="who-cell">
+                    <Avatar name={r.name} />
+                    <div style={{ minWidth: 0 }}>
+                      <b>{r.name}</b>
+                      {r.phone && <div className="muted small">{r.phone}</div>}
+                    </div>
+                  </div>
                 </td>
                 <td data-label="Owner">
                   {r.owner ? (
@@ -103,11 +128,20 @@ export function Shops({ params }: { params: URLSearchParams }) {
                 <td data-label="State">
                   <Badge value={r.state} />
                 </td>
-                <td data-label="Plan">{r.planCode ?? '—'}</td>
+                <td data-label="Plan">
+                  <Badge value={r.planCode} />
+                </td>
                 <td data-label="Ends">
                   {date(r.endsAt)}
-                  {r.daysLeft !== null && r.daysLeft > 0 && (
-                    <div className="muted small">{r.daysLeft} days left</div>
+                  {r.daysLeft !== null && (
+                    <div
+                      className={`meter ${r.daysLeft <= 0 ? 'bad' : r.daysLeft <= 7 ? 'warn' : ''}`}
+                      title={`${r.daysLeft} days left`}
+                    >
+                      <i
+                        style={{ width: `${Math.max(4, Math.min(100, (r.daysLeft / 30) * 100))}%` }}
+                      />
+                    </div>
                   )}
                 </td>
                 <td data-label="Joined">{date(r.createdAt)}</td>
@@ -224,35 +258,61 @@ export function ShopDetail({ id, role }: { id: string; role: Role }) {
 
   return (
     <>
-      <p className="small">
-        <a href="#/shops">← Shops</a>
+      <p className="small" style={{ margin: '0 0 12px' }}>
+        <a href="#/shops">← Back to shops</a>
       </p>
-      <div className="spread">
-        <div>
-          <h1 style={{ marginBottom: 4 }}>{data.name}</h1>
-          <div className="row">
-            <Badge value={sub.state} />
-            <span className="muted">
-              {sub.planCode ?? 'No plan'} · ends {date(sub.endsAt)}
-            </span>
+      <div className="profile">
+        <div className="banner" />
+        <div className="profile-body">
+          <Avatar name={data.name} size="lg" />
+          <div className="id">
+            <h1>{data.name}</h1>
+            <div className="row">
+              <Badge value={sub.state} />
+              <Badge value={sub.planCode ?? 'No plan'} />
+              {data.phone && <span className="muted">{data.phone}</span>}
+              <span className="muted">Joined {date(data.createdAt)}</span>
+            </div>
+          </div>
+          <div className="row toolbar">
+            {isAdmin && (
+              <button className="primary" onClick={() => setAction('extend')}>
+                {Icon.money} Record payment
+              </button>
+            )}
+            {isAdmin &&
+              (data.lock.status === 'LOCKED' ? (
+                <button onClick={() => setAction('unlock')}>{Icon.check} Unlock</button>
+              ) : (
+                <button className="danger" onClick={() => setAction('lock')}>
+                  {Icon.lock} Lock
+                </button>
+              ))}
+            <button onClick={() => setAction('logout')}>{Icon.alert} Force logout</button>
+            <button onClick={() => setAction('note')}>{Icon.log} Note</button>
           </div>
         </div>
-        <div className="row">
-          {isAdmin && (
-            <button className="primary" onClick={() => setAction('extend')}>
-              Record payment
-            </button>
-          )}
-          {isAdmin &&
-            (data.lock.status === 'LOCKED' ? (
-              <button onClick={() => setAction('unlock')}>Unlock</button>
-            ) : (
-              <button className="danger" onClick={() => setAction('lock')}>
-                Lock
-              </button>
-            ))}
-          <button onClick={() => setAction('logout')}>Force logout</button>
-          <button onClick={() => setAction('note')}>Add note</button>
+        <div className="facts">
+          <div className="fact">
+            <span>Paid until</span>
+            <b>{date(sub.endsAt)}</b>
+          </div>
+          <div className="fact">
+            <span>Days left</span>
+            <b className="num">{sub.daysLeft ?? '—'}</b>
+          </div>
+          <div className="fact">
+            <span>Users</span>
+            <b className="num">{data.users.length}</b>
+          </div>
+          <div className="fact">
+            <span>Bills made</span>
+            <b className="num">{data.usage.sales}</b>
+          </div>
+          <div className="fact">
+            <span>Branches</span>
+            <b className="num">{data.branches.length}</b>
+          </div>
         </div>
       </div>
       <Alert kind="ok">{notice}</Alert>

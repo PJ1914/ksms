@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PasswordService } from '../identity/password.service';
+import { SubscriptionModule } from '../subscription/subscription.module';
 import { PlatformAdminsController } from './admins/platform-admins.controller';
 import { PlatformAdminsService } from './admins/platform-admins.service';
 import { PlatformAuditController } from './audit/platform-audit.controller';
@@ -14,6 +15,8 @@ import { PlatformSessionService } from './auth/platform-session.service';
 import { PlatformTokenService } from './auth/platform-token.service';
 import { PaymentsController, PlansController } from './plans/plans.controller';
 import { ShopsController } from './shops/shops.controller';
+import { UsersController } from './users/users.controller';
+import { UsersService } from './users/users.service';
 import { PlatformSupportController } from './support/platform-support.controller';
 import { ShopsService } from './shops/shops.service';
 import { PlatformSubscriptionsController } from './subscriptions/platform-subscriptions.controller';
@@ -25,6 +28,7 @@ import { PlatformSubscriptionsService } from './subscriptions/platform-subscript
  * (architecture.spec.ts).
  */
 @Module({
+  imports: [SubscriptionModule],
   controllers: [
     PlatformAuthController,
     PlatformAdminsController,
@@ -35,6 +39,7 @@ import { PlatformSubscriptionsService } from './subscriptions/platform-subscript
     PaymentsController,
     DashboardController,
     PlatformSupportController,
+    UsersController,
   ],
   providers: [
     PasswordService,
@@ -48,6 +53,7 @@ import { PlatformSubscriptionsService } from './subscriptions/platform-subscript
     PlatformAdminsService,
     ShopsService,
     PlatformSubscriptionsService,
+    UsersService,
   ],
   exports: [PlatformGuard, PlatformTokenService, PlatformKeys, PlatformAdminsService],
 })

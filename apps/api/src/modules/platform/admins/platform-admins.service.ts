@@ -102,7 +102,12 @@ export class PlatformAdminsService {
     meta: PlatformRequestMeta,
   ) {
     if (id === actor.adminId) throw cannotChangeSelf();
-    if (dto.role === undefined && dto.isActive === undefined) {
+    if (
+      dto.role === undefined &&
+      dto.isActive === undefined &&
+      dto.fullName === undefined &&
+      dto.email === undefined
+    ) {
       throw new AppException('VALIDATION_ERROR', 'Nothing to change', 400);
     }
     return this.prisma.$transaction(async (tx) => {
@@ -115,9 +120,15 @@ export class PlatformAdminsService {
         throw new AppException('LAST_ADMIN', 'There must always be at least one active ADMIN', 409);
       }
 
+      const email = dto.email?.trim().toLowerCase();
+      if (email && email !== before.email) {
+        const clash = await tx.platformAdmin.findUnique({ where: { email }, select: { id: true } });
+        if (clash)
+          throw new AppException('CONFLICT', 'An admin with this email already exists', 409);
+      }
       const after = await tx.platformAdmin.update({
         where: { id },
-        data: { role, isActive },
+        data: { role, isActive, fullName: dto.fullName?.trim(), email },
         select: ADMIN_VIEW,
       });
       // A changed role or a disabled account takes effect at once: sessions are ended.
@@ -129,8 +140,18 @@ export class PlatformAdminsService {
         action: 'admin.update',
         entityType: 'platform_admin',
         entityId: id,
-        before: { role: before.role, isActive: before.isActive },
-        after: { role: after.role, isActive: after.isActive },
+        before: {
+          role: before.role,
+          isActive: before.isActive,
+          fullName: before.fullName,
+          email: before.email,
+        },
+        after: {
+          role: after.role,
+          isActive: after.isActive,
+          fullName: after.fullName,
+          email: after.email,
+        },
         reason: dto.reason,
         meta,
       });
@@ -205,11 +226,19 @@ export class PlatformAdminsService {
    * instead of deadlocking, and "the last ADMIN" cannot be removed by two changes racing.
    */
   private async lockForChange(tx: Db, id: string) {
-    const rows = await tx.$queryRaw<{ id: string; role: PlatformRoleName; is_active: boolean }[]>`
-      SELECT id, role::text AS role, is_active FROM platform_admins ORDER BY id FOR UPDATE`;
+    const rows = await tx.$queryRaw<
+      { id: string; role: PlatformRoleName; is_active: boolean; email: string; full_name: string }[]
+    >`
+      SELECT id, role::text AS role, is_active, email, full_name FROM platform_admins ORDER BY id FOR UPDATE`;
     const target = rows.find((r) => r.id === id);
     if (!target) throw new AppException('NOT_FOUND', 'Admin not found', 404);
     const otherActiveAdmin = rows.some((r) => r.id !== id && r.role === 'ADMIN' && r.is_active);
-    return { role: target.role, isActive: target.is_active, otherActiveAdmin };
+    return {
+      role: target.role,
+      isActive: target.is_active,
+      email: target.email,
+      fullName: target.full_name,
+      otherActiveAdmin,
+    };
   }
 }
