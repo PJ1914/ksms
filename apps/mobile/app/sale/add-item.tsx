@@ -211,8 +211,8 @@ function Results({
         keyExtractor={(p) => p.id}
         keyboardShouldPersistTaps="handled"
         numColumns={embedded ? 3 : 1}
-        columnWrapperStyle={embedded ? { gap: 14 } : undefined}
-        contentContainerStyle={{ paddingBottom: embedded ? 32 : 96, gap: embedded ? 14 : 0 }}
+        columnWrapperStyle={embedded ? { gap: 10 } : undefined}
+        contentContainerStyle={{ paddingBottom: embedded ? 24 : 96, gap: embedded ? 10 : 0 }}
         onEndReachedThreshold={0.5}
         onEndReached={() => void list.loadMore()}
         ItemSeparatorComponent={embedded ? undefined : () => <View style={{ height: 8 }} />}
@@ -560,28 +560,28 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     minWidth: 0,
-    padding: 16,
+    padding: 12,
     gap: 6,
-    borderRadius: 18,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  cardName: { fontSize: 17, fontWeight: '700', color: colors.text, minHeight: 44, marginTop: 6 },
-  cardPrice: { fontSize: 16, color: colors.textMuted, fontWeight: '600' },
-  cardActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  cardName: { fontSize: 14, fontWeight: '600', color: colors.text, minHeight: 36, marginTop: 4 },
+  cardPrice: { fontSize: 13, color: colors.textMuted, fontWeight: '500' },
+  cardActions: { flexDirection: 'row', gap: 6, marginTop: 8 },
   cardAdd: {
     flex: 1,
-    minHeight: 52,
+    minHeight: 40,
     flexDirection: 'row',
     gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
+    borderRadius: 8,
     backgroundColor: colors.primary,
   },
-  cardAddText: { color: colors.onPrimary, fontSize: 17, fontWeight: '800' },
+  cardAddText: { color: colors.onPrimary, fontSize: 13, fontWeight: '700' },
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  embedded: { flex: 1, minWidth: 0, paddingHorizontal: 24, paddingTop: 16 },
+  embedded: { flex: 1, minWidth: 0, paddingHorizontal: 16, paddingTop: 12 },
   tip: { fontSize: 12, color: colors.textMuted, marginBottom: 8 },
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   addBtn: {

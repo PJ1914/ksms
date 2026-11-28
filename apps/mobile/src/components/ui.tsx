@@ -17,7 +17,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius, shadow, tints, type Tint } from '@/theme/colors';
+import { colors, radius, shadow, workspace, tints, type Tint } from '@/theme/colors';
 import { formatINR } from '@/utils/currency';
 
 /** Shared building blocks (Fresh Mandi style). Every screen is built from these. */
@@ -42,7 +42,7 @@ export function useLayout() {
   const navWidth = useContext(NavigationWidth);
   const contentWidth =
     Math.min(width - navWidth, mode === 'phone' ? CONTENT_MAX : DESKTOP_CONTENT_MAX) -
-    (mode === 'phone' ? 40 : 64);
+    (mode === 'phone' ? 40 : workspace.gutter * 2);
   return {
     width,
     height,
@@ -66,7 +66,7 @@ export function useLayout() {
 export const pageStyle: ViewStyle = {
   flex: 1,
   width: '100%',
-  maxWidth: CONTENT_MAX,
+  maxWidth: '100%',
   alignSelf: 'center',
   paddingHorizontal: 20,
   paddingTop: 8,
@@ -80,7 +80,10 @@ export function Page({ children }: { children: React.ReactNode }) {
     <View
       style={[
         styles.page,
-        layout.mode !== 'phone' && { maxWidth: DESKTOP_CONTENT_MAX, paddingHorizontal: 32 },
+        layout.mode !== 'phone' && {
+          maxWidth: DESKTOP_CONTENT_MAX,
+          paddingHorizontal: workspace.gutter,
+        },
       ]}
     >
       {children}
@@ -206,9 +209,9 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
-        wide && { minHeight: 64 },
+        wide && { minHeight: workspace.control, borderRadius: workspace.radius },
         { backgroundColor: palette.bg, borderColor: palette.border },
-        variant === 'primary' && !disabled && shadow.raised,
+        variant === 'primary' && !wide && !disabled && shadow.raised,
         (pressed || busy || disabled) && { opacity: disabled ? 0.45 : 0.8 },
       ]}
     >
@@ -216,10 +219,14 @@ export function Button({
         <ActivityIndicator color={palette.fg} />
       ) : (
         <View style={styles.buttonInner}>
-          {icon ? <Ionicons name={icon} size={wide ? 28 : 20} color={palette.fg} /> : null}
+          {icon ? <Ionicons name={icon} size={wide ? 18 : 20} color={palette.fg} /> : null}
           <Text
             maxFontSizeMultiplier={MAX_FONT_SCALE}
-            style={[styles.buttonText, wide && { fontSize: 19 }, { color: palette.fg }]}
+            style={[
+              styles.buttonText,
+              wide && { fontSize: workspace.body, fontWeight: '600' },
+              { color: palette.fg },
+            ]}
           >
             {title}
           </Text>
@@ -788,8 +795,8 @@ export function TabHeader({
         layout.mode !== 'phone' && styles.desktopTabHeader,
         {
           paddingTop: insets.top + 14,
-          paddingLeft: (layout.mode !== 'phone' ? 32 : 20) + insets.left,
-          paddingRight: (layout.mode !== 'phone' ? 32 : 20) + insets.right,
+          paddingLeft: (layout.mode !== 'phone' ? workspace.gutter : 20) + insets.left,
+          paddingRight: (layout.mode !== 'phone' ? workspace.gutter : 20) + insets.right,
         },
       ]}
     >
@@ -1072,7 +1079,7 @@ const noShadow = { shadowOpacity: 0, elevation: 0 };
 
 const styles = StyleSheet.create({
   screenPad: { padding: 20, paddingBottom: 40 },
-  desktopScreenPad: { padding: 32, paddingBottom: 48 },
+  desktopScreenPad: { padding: workspace.gutter, paddingBottom: 48 },
   field: { marginBottom: 16 },
   label: { fontSize: 13, fontWeight: '700', color: '#3D4C43', marginBottom: 8 },
   hint: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
@@ -1258,12 +1265,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     gap: 12,
     width: '100%',
-    maxWidth: CONTENT_MAX,
+    maxWidth: '100%',
     alignSelf: 'center',
   },
-  desktopTabHeader: { maxWidth: DESKTOP_CONTENT_MAX, paddingBottom: 20 },
+  desktopTabHeader: { maxWidth: '100%', paddingBottom: 20 },
   column: { width: '100%', maxWidth: CONTENT_MAX - 40, alignSelf: 'center' },
-  desktopColumn: { maxWidth: DESKTOP_CONTENT_MAX - 64 },
+  desktopColumn: { maxWidth: '100%' },
   hero: { borderRadius: radius.xl, padding: 18, marginBottom: 12 },
   heroLabel: { fontSize: 13, fontWeight: '700' },
   heroValue: { fontSize: 32, fontWeight: '800', letterSpacing: -0.4, marginTop: 2 },

@@ -78,7 +78,6 @@ export default function HomeScreen() {
   if (layout.mode !== 'phone')
     return (
       <DesktopHome
-        name={firstName}
         shop={`${profile?.organization.name ?? ''}${branch ? ` · ${branch.name}` : ''}`}
         d={d}
         counts={data ?? undefined}

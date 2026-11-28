@@ -1,10 +1,11 @@
+import { appIcon } from '@/theme/art';
 import { router, usePathname, type Href } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Image, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/auth/AuthProvider';
 import { useShortcut } from '@/hooks/useShortcut';
-import { colors } from '@/theme/colors';
+import { colors, workspace } from '@/theme/colors';
 import { MAX_FONT_SCALE, NavigationWidth, useLayout } from './ui';
 import { SIDEBAR_WIDTH, RAIL_WIDTH } from './layout';
 import { WorkspaceButton } from './WorkspaceButton';
@@ -14,9 +15,9 @@ import { CommandSearch } from './CommandSearch';
 type Icon = React.ComponentProps<typeof WorkspaceButton>['icon'];
 type Entry = [string, Icon, Href, RegExp, ...string[]];
 const groups: [string, Entry[]][] = [
-  ['', [['Overview', 'home-outline', '/(tabs)', /^\/$/]]],
+  ['Workspace', [['Overview', 'home-outline', '/(tabs)', /^\/$/]]],
   [
-    'Sell',
+    'Sales',
     [
       ['New bill', 'add', '/sale/new', /^\/sale\/(new|add-item|customer|scan)$/, 'sale.create'],
       ['Held bills', 'pause-circle-outline', '/held-bills', /^\/held-bills$/, 'sale.create'],
@@ -30,7 +31,7 @@ const groups: [string, Entry[]][] = [
     ],
   ],
   [
-    'Manage',
+    'Relationships',
     [
       [
         'Customers',
@@ -51,7 +52,7 @@ const groups: [string, Entry[]][] = [
     ],
   ],
   [
-    '',
+    'Insights',
     [
       [
         'Reports',
@@ -90,11 +91,11 @@ function Sidebar({
       style={{
         width: compact ? RAIL_WIDTH : SIDEBAR_WIDTH,
         flexGrow: 0,
-        backgroundColor: colors.surface,
+        backgroundColor: colors.surfaceMuted,
         borderRightWidth: 1,
         borderColor: colors.border,
       }}
-      contentContainerStyle={{ padding: 12, gap: 4 }}
+      contentContainerStyle={{ padding: compact ? 8 : 14, gap: 2, flexGrow: 1 }}
     >
       {toggle ? (
         <WorkspaceButton
@@ -104,12 +105,26 @@ function Sidebar({
           onPress={toggle}
         />
       ) : (
-        <Text
-          maxFontSizeMultiplier={MAX_FONT_SCALE}
-          style={{ color: colors.primary, fontSize: 20, fontWeight: '800', padding: 10 }}
+        <View
+          style={{
+            flexDirection: 'row',
+            gap: 9,
+            alignItems: 'center',
+            padding: 8,
+            marginBottom: 18,
+          }}
         >
-          Kirana
-        </Text>
+          <Image
+            source={appIcon}
+            style={{ width: 30, height: 30, borderRadius: workspace.radius }}
+          />
+          <Text
+            maxFontSizeMultiplier={MAX_FONT_SCALE}
+            style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}
+          >
+            Yapaaram
+          </Text>
+        </View>
       )}
       {groups.map(([title, entries], groupIndex) => {
         const visible = entries.filter(
@@ -117,16 +132,16 @@ function Sidebar({
         );
         if (!visible.length) return null;
         return (
-          <View key={groupIndex} style={{ marginTop: title ? 14 : 0, gap: 4 }}>
+          <View key={groupIndex} style={{ marginTop: groupIndex ? 10 : 0, gap: 2 }}>
             {!!title && !compact && (
               <Text
                 maxFontSizeMultiplier={MAX_FONT_SCALE}
                 style={{
                   color: colors.textMuted,
-                  fontSize: 14,
-                  fontWeight: '800',
+                  fontSize: workspace.caption,
+                  fontWeight: '600',
                   paddingHorizontal: 14,
-                  paddingVertical: 6,
+                  paddingVertical: 8,
                 }}
               >
                 {title}
@@ -169,16 +184,16 @@ function TopBar({
         paddingHorizontal: 12,
       }}
     >
-      <View style={{ minHeight: 76, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+      <View style={{ minHeight: 56, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
         <WorkspaceButton label="Search (Ctrl+K)" icon="search-outline" onPress={search} />
         <Text
           maxFontSizeMultiplier={MAX_FONT_SCALE}
           numberOfLines={1}
-          style={{ flex: 1, color: colors.text, fontWeight: '700', fontSize: 18 }}
+          style={{ flex: 1, color: colors.text, fontWeight: '600', fontSize: workspace.body }}
         >
           {branch?.name}
         </Text>
-        <View style={{ flexShrink: 1, width: 220 }}>
+        <View style={{ flexShrink: 1, maxWidth: 220 }}>
           <SyncBanner inTopBar />
         </View>
         <WorkspaceButton

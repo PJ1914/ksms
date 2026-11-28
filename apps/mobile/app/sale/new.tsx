@@ -65,7 +65,7 @@ const METHODS = [
 export default function NewBillScreen() {
   const { can, branch } = useAuth();
   const layout = useLayout();
-  const desktop = layout.mode === 'desktop';
+  const desktop = layout.mode !== 'phone';
   const { cart, update, remove, setBillDiscount, clear, checkoutKey } = useCart();
   const { db, holdBill } = useSync();
   const [payments, setPayments] = useState<PaymentEntry[]>([]);
@@ -679,14 +679,13 @@ export default function NewBillScreen() {
   if (!desktop) return bill;
   return (
     <View style={{ flex: 1, flexDirection: 'row', backgroundColor: colors.background }}>
-      <View style={{ flex: 3, minWidth: 0 }}>
+      <View style={{ flex: 1, minWidth: 0 }}>
         <ProductPicker embedded />
       </View>
       <View
         style={{
-          flex: 2,
-          minWidth: 420,
-          maxWidth: 560,
+          width: layout.mode === 'tablet' ? 380 : 460,
+          maxWidth: '44%',
           borderLeftWidth: 1,
           borderColor: colors.border,
           backgroundColor: colors.surface,

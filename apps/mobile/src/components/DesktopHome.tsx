@@ -3,10 +3,10 @@ import { router, type Href } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { Dashboard } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
-import { colors, radius, shadow, tints, type Tint } from '@/theme/colors';
+import { colors, workspace, tints, type Tint } from '@/theme/colors';
 import { formatINR } from '@/utils/currency';
 import { DesktopDashboard } from './DesktopDashboard';
-import { MAX_FONT_SCALE } from './ui';
+import { MAX_FONT_SCALE, useLayout } from './ui';
 
 type Icon = React.ComponentProps<typeof Ionicons>['name'];
 export interface HomeCounts {
@@ -37,10 +37,10 @@ function Action({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
-        minHeight: 60,
-        paddingHorizontal: 22,
-        borderRadius: radius.md,
-        borderWidth: 2,
+        minHeight: workspace.control,
+        paddingHorizontal: 12,
+        borderRadius: workspace.radius,
+        borderWidth: 1,
         borderColor: primary ? colors.primary : colors.border,
         backgroundColor: primary
           ? hovered
@@ -52,10 +52,14 @@ function Action({
         opacity: pressed ? 0.85 : 1,
       })}
     >
-      <Ionicons name={icon} size={30} color={primary ? colors.onPrimary : colors.primary} />
+      <Ionicons name={icon} size={17} color={primary ? colors.onPrimary : colors.primary} />
       <Text
         maxFontSizeMultiplier={MAX_FONT_SCALE}
-        style={{ fontSize: 18, fontWeight: '800', color: primary ? colors.onPrimary : colors.text }}
+        style={{
+          fontSize: workspace.body,
+          fontWeight: '600',
+          color: primary ? colors.onPrimary : colors.text,
+        }}
       >
         {label}
       </Text>
@@ -70,7 +74,7 @@ function Kpi({
   icon,
   tint,
   to,
-  alert,
+  row = false,
 }: {
   label: string;
   value: string | number | null | undefined;
@@ -78,7 +82,7 @@ function Kpi({
   icon: Icon;
   tint: Tint;
   to: Href;
-  alert?: boolean;
+  row?: boolean;
 }) {
   const t = tints[tint];
   return (
@@ -87,53 +91,71 @@ function Kpi({
       accessibilityLabel={`${label}: ${value ?? 'loading'}. ${note ?? ''}`}
       onPress={() => router.push(to)}
       style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({
-        flexGrow: 1,
-        flexBasis: 250,
-        minWidth: 250,
+        flexGrow: row ? 0 : 1,
+        flexBasis: row ? 'auto' : 160,
+        minHeight: row ? 54 : 84,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 16,
-        padding: 20,
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        borderColor: hovered ? colors.primary : alert ? t.fg : colors.border,
+        gap: 10,
+        padding: 12,
+        borderRadius: row ? 0 : workspace.radius,
+        borderWidth: row ? 0 : 1,
+        borderTopWidth: 1,
+        borderColor: hovered ? colors.primary : colors.border,
         backgroundColor: colors.surface,
         opacity: pressed ? 0.85 : 1,
-        ...shadow.card,
       })}
     >
       <View
         style={{
-          width: 64,
-          height: 64,
-          borderRadius: 32,
+          width: 30,
+          height: 30,
+          borderRadius: workspace.radius,
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: t.bg,
         }}
       >
-        <Ionicons name={icon} size={34} color={t.fg} />
+        <Ionicons name={icon} size={16} color={t.fg} />
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
+      <View
+        style={{
+          flex: 1,
+          minWidth: 0,
+          flexDirection: row ? 'row' : 'column',
+          alignItems: row ? 'center' : 'flex-start',
+          gap: 3,
+        }}
+      >
         <Text
           maxFontSizeMultiplier={MAX_FONT_SCALE}
           numberOfLines={1}
-          style={{ fontSize: 15, fontWeight: '700', color: colors.textMuted }}
+          style={{
+            flex: row ? 1 : undefined,
+            fontSize: row ? workspace.body : workspace.caption,
+            fontWeight: '500',
+            color: colors.textMuted,
+          }}
         >
           {label}
         </Text>
         <Text
           maxFontSizeMultiplier={MAX_FONT_SCALE}
           numberOfLines={1}
-          style={{ fontSize: 28, fontWeight: '700', color: colors.text }}
+          style={{
+            fontSize: row ? workspace.body : 22,
+            fontVariant: ['tabular-nums'],
+            fontWeight: '600',
+            color: colors.text,
+          }}
         >
           {value ?? '…'}
         </Text>
-        {note ? (
+        {note && !row ? (
           <Text
             maxFontSizeMultiplier={MAX_FONT_SCALE}
             numberOfLines={1}
-            style={{ fontSize: 14, color: colors.textMuted }}
+            style={{ fontSize: workspace.caption, color: colors.textMuted }}
           >
             {note}
           </Text>
@@ -149,11 +171,10 @@ function Title({ children }: { children: string }) {
       accessibilityRole="header"
       maxFontSizeMultiplier={MAX_FONT_SCALE}
       style={{
-        fontSize: 20,
-        fontWeight: '800',
+        fontSize: 15,
+        fontWeight: '600',
         color: colors.text,
-        marginTop: 36,
-        marginBottom: 16,
+        padding: 14,
       }}
     >
       {children}
@@ -163,17 +184,18 @@ function Title({ children }: { children: string }) {
 
 /** The desktop/tablet home: a compact control-room view, not a stretched phone screen. */
 export function DesktopHome({
-  name,
   shop,
   d,
   counts,
 }: {
-  name: string;
   shop: string;
   d: Dashboard | null | undefined;
   counts: HomeCounts | undefined;
 }) {
   const { can } = useAuth();
+  const { contentWidth } = useLayout();
+  const hasActivity = can('sale.read') || can('report.sales') || can('report.financial');
+  const sideBySide = hasActivity && contentWidth >= 800;
   const date = new Date().toLocaleDateString('en-IN', {
     weekday: 'long',
     day: 'numeric',
@@ -182,20 +204,32 @@ export function DesktopHome({
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: 32, paddingBottom: 56, maxWidth: 1500, width: '100%' }}
+      contentContainerStyle={{
+        padding: workspace.gutter,
+        gap: 16,
+        alignSelf: 'center',
+        paddingBottom: 32,
+        maxWidth: 1440,
+        width: '100%',
+      }}
     >
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 20 }}>
-        <View style={{ flexGrow: 1, minWidth: 260 }}>
+        <View style={{ flexGrow: 1, minWidth: 200 }}>
           <Text
             accessibilityRole="header"
             maxFontSizeMultiplier={MAX_FONT_SCALE}
-            style={{ fontSize: 32, fontWeight: '800', color: colors.text }}
+            style={{
+              fontSize: workspace.title,
+              letterSpacing: -0.6,
+              fontWeight: '600',
+              color: colors.text,
+            }}
           >
-            Namaste, {name}
+            Shop overview
           </Text>
           <Text
             maxFontSizeMultiplier={MAX_FONT_SCALE}
-            style={{ fontSize: 16, color: colors.textMuted, marginTop: 2 }}
+            style={{ fontSize: workspace.caption, color: colors.textMuted, marginTop: 2 }}
           >
             {shop} · {date}
           </Text>
@@ -214,8 +248,7 @@ export function DesktopHome({
         </View>
       </View>
 
-      <Title>Today</Title>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         <Kpi
           label={d?.sales ? "Today's sales" : 'Bills today'}
           value={d?.sales ? formatINR(d.sales.netSales) : counts?.billsToday}
@@ -245,43 +278,60 @@ export function DesktopHome({
         ) : null}
       </View>
 
-      <Title>Needs your attention</Title>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
-        <Kpi
-          label="Low stock"
-          value={counts?.lowStock}
-          icon="alert-circle-outline"
-          tint="mango"
-          to="/(tabs)/stock"
-          alert={!!counts?.lowStock}
-        />
-        <Kpi
-          label="Expiring in 30 days"
-          value={counts?.expiring}
-          icon="time-outline"
-          tint="tomato"
-          to="/(tabs)/stock"
-          alert={!!counts?.expiring}
-        />
-        <Kpi
-          label="Owed to you"
-          value={d ? formatINR(d.owed.customerDue) : counts?.customersOwing}
-          note={`${counts?.customersOwing ?? '…'} customers`}
-          icon="people-outline"
-          tint="tomato"
-          to="/(tabs)/khata"
-        />
-        <Kpi
-          label="You owe"
-          value={d ? formatINR(d.owed.supplierPayable) : counts?.suppliersOwed}
-          note={`${counts?.suppliersOwed ?? '…'} suppliers`}
-          icon="business-outline"
-          tint="blue"
-          to="/suppliers"
-        />
+      <View style={{ flexDirection: sideBySide ? 'row' : 'column', gap: 16 }}>
+        {hasActivity && (
+          <View style={{ flex: sideBySide ? 1 : undefined, minWidth: 0 }}>
+            <DesktopDashboard />
+          </View>
+        )}
+        <View
+          style={{
+            width: sideBySide ? 284 : '100%',
+            alignSelf: 'flex-start',
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: workspace.radius,
+            overflow: 'hidden',
+            backgroundColor: colors.surface,
+          }}
+        >
+          <Title>Needs attention</Title>
+          <Kpi
+            row
+            label="Low stock"
+            value={counts?.lowStock}
+            icon="alert-circle-outline"
+            tint="mango"
+            to="/(tabs)/stock"
+          />
+          <Kpi
+            row
+            label="Expiring in 30 days"
+            value={counts?.expiring}
+            icon="time-outline"
+            tint="tomato"
+            to="/(tabs)/stock"
+          />
+          <Kpi
+            row
+            label="Owed to you"
+            value={d ? formatINR(d.owed.customerDue) : counts?.customersOwing}
+            note={`${counts?.customersOwing ?? '…'} customers`}
+            icon="people-outline"
+            tint="tomato"
+            to="/(tabs)/khata"
+          />
+          <Kpi
+            row
+            label="You owe"
+            value={d ? formatINR(d.owed.supplierPayable) : counts?.suppliersOwed}
+            note={`${counts?.suppliersOwed ?? '…'} suppliers`}
+            icon="business-outline"
+            tint="blue"
+            to="/suppliers"
+          />
+        </View>
       </View>
-
-      <DesktopDashboard />
     </ScrollView>
   );
 }

@@ -130,3 +130,6 @@ export const brand = {
   body: require('../../assets/brand/intro-body.png'),
   rupee: require('../../assets/brand/intro-rupee.png'),
 };
+
+export const appIcon = require('../../assets/brand/icon.png');
+export const loginHero = require('../../assets/brand/login-hero.png');

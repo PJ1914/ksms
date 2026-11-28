@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { illustrations } from '@/theme/art';
+import { illustrations, loginHero } from '@/theme/art';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError } from '@ksms/api-client';
 import { useAuth } from '@/auth/AuthProvider';
@@ -10,6 +10,10 @@ import { Button, Choice, ErrorText, Field } from '@/components/ui';
 import { colors } from '@/theme/colors';
 import { passwordChecks, passwordOk, phoneDigits, phoneProblem } from '@/utils/auth-rules';
 import { friendlyError } from '@/utils/errors';
+import * as SecureStore from '@/auth/secure-store';
+import { useLayout } from '@/components/ui';
+
+const REMEMBER_LOGIN_KEY = 'ksms.rememberedLogin';
 
 type Mode = 'signIn' | 'register' | 'join';
 const SHOP_TYPES = [
@@ -26,6 +30,8 @@ interface ShopChoice {
 
 export default function LoginScreen() {
   const auth = useAuth();
+  const layout = useLayout();
+  const desktop = layout.mode !== 'phone';
   const [mode, setMode] = useState<Mode>('signIn');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -39,6 +45,23 @@ export default function LoginScreen() {
   const [organizationId, setOrganizationId] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rememberLogin, setRememberLogin] = useState(false);
+
+  useEffect(() => {
+    void SecureStore.getItemAsync(REMEMBER_LOGIN_KEY).then((stored) => {
+      if (!stored) return;
+      try {
+        const saved = JSON.parse(stored) as { phone?: string; password?: string };
+        if (saved.phone && saved.password) {
+          setPhone(saved.phone);
+          setPassword(saved.password);
+          setRememberLogin(true);
+        }
+      } catch {
+        void SecureStore.deleteItemAsync(REMEMBER_LOGIN_KEY);
+      }
+    });
+  }, []);
 
   const registering = mode === 'register';
   const joining = mode === 'join';
@@ -73,7 +96,14 @@ export default function LoginScreen() {
       if (joining) await auth.join({ code, fullName, password });
       else if (registering)
         await auth.register({ fullName, phone, password, shopName, businessType: shopType });
-      else await auth.signIn(phone, password, organizationId);
+      else {
+        await auth.signIn(phone, password, organizationId);
+        if (rememberLogin) {
+          await SecureStore.setItemAsync(REMEMBER_LOGIN_KEY, JSON.stringify({ phone, password }));
+        } else {
+          await SecureStore.deleteItemAsync(REMEMBER_LOGIN_KEY);
+        }
+      }
       // On success the root layout switches to the tabs automatically.
     } catch (e) {
       if (e instanceof ApiError && e.code === 'ORGANIZATION_REQUIRED') {
@@ -97,35 +127,47 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       {/* the app root lifts this screen above the keyboard */}
-      <View style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <View style={styles.hero}>
+      <View style={[{ flex: 1 }, desktop && styles.shellDesktop]}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.container, desktop && styles.containerDesktop]}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={[styles.hero, desktop && styles.heroDesktop]}>
+            {desktop ? (
+              <Image source={loginHero} style={styles.heroScene} resizeMode="cover" />
+            ) : null}
             <Image
               source={illustrations.shopfront}
-              style={styles.heroArt}
+              style={[styles.heroArt, desktop && styles.heroArtDesktop]}
               resizeMode="contain"
               accessibilityIgnoresInvertColors
             />
-            <Text style={styles.appName} accessibilityRole="header">
-              Yapaaram
-            </Text>
-            <Text style={styles.brand}>
-              {joining
-                ? 'Join your shop'
-                : registering
-                  ? 'Set up your shop'
-                  : 'Your shop, in your pocket'}
-            </Text>
-            <Text style={styles.subtitle}>
-              {joining
-                ? 'Enter the code the shop owner gave you.'
-                : registering
-                  ? 'Takes a minute. You can add products and customers after.'
-                  : 'Billing, stock and khata — even when the internet is down.'}
-            </Text>
+            {/* Desktop: the picture speaks for itself; the text card is shown on phones only. */}
+            {!desktop && (
+              <View style={styles.heroCopyPhone}>
+                <Text style={styles.appName} accessibilityRole="header">
+                  Yapaaram
+                </Text>
+                <Text style={styles.brand}>
+                  {joining
+                    ? 'Join your shop'
+                    : registering
+                      ? 'Set up your shop'
+                      : 'Your shop, in your pocket'}
+                </Text>
+                <Text style={styles.subtitle}>
+                  {joining
+                    ? 'Enter the code the shop owner gave you.'
+                    : registering
+                      ? 'Takes a minute. You can add products and customers after.'
+                      : 'Billing, stock and khata — even when the internet is down.'}
+                </Text>
+              </View>
+            )}
           </View>
 
-          <View style={styles.form}>
+          <View style={[styles.form, desktop && styles.formDesktop]}>
             {joining && (
               <Field
                 label="Invitation code"
@@ -243,6 +285,21 @@ export default function LoginScreen() {
                 onChange={setOrganizationId}
               />
             )}
+            {!registering && !joining ? (
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: rememberLogin }}
+                onPress={() => setRememberLogin((value) => !value)}
+                style={styles.remember}
+              >
+                <Ionicons
+                  name={rememberLogin ? 'checkbox' : 'square-outline'}
+                  size={20}
+                  color={rememberLogin ? colors.primary : colors.textMuted}
+                />
+                <Text style={styles.rememberText}>Remember password on this device</Text>
+              </Pressable>
+            ) : null}
             <ErrorText message={error} />
             {taken ? (
               <Pressable
@@ -306,7 +363,7 @@ export default function LoginScreen() {
               </Pressable>
             )}
           </View>
-          <View style={styles.trust}>
+          <View style={[styles.trust, desktop && styles.trustDesktop]}>
             <Ionicons name="shield-checkmark-outline" size={16} color={colors.textMuted} />
             <Text style={styles.trustText}>Your data is backed up safely</Text>
           </View>
@@ -318,7 +375,16 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  shellDesktop: { flexDirection: 'row', alignItems: 'stretch' },
   container: { flexGrow: 1, paddingBottom: 24 },
+  // Desktop/tablet: picture on the left takes the leftover width and may shrink; the form keeps a
+  // steady width on the right. No fixed page width, so nothing overflows or collapses at any size.
+  containerDesktop: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    minHeight: '100%',
+    paddingBottom: 0,
+  },
   hero: {
     backgroundColor: colors.primarySoft,
     borderBottomLeftRadius: 40,
@@ -329,6 +395,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   heroArt: { width: 260, height: 190 },
+  heroDesktop: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    minHeight: '100%',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-start',
+    padding: 42,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    overflow: 'hidden',
+  },
+  heroScene: { ...StyleSheet.absoluteFill, width: '100%', height: '100%' },
+  heroArtDesktop: { display: 'none' },
+  heroCopyPhone: { alignItems: 'center' },
   appName: {
     fontSize: 15,
     fontWeight: '800',
@@ -359,6 +441,17 @@ const styles = StyleSheet.create({
     maxWidth: 480,
     alignSelf: 'center',
   },
+  formDesktop: {
+    width: 480,
+    maxWidth: 480,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+    paddingVertical: 32,
+  },
+  trustDesktop: { display: 'none' },
   switch: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   switchText: { fontSize: 15, fontWeight: '700', color: colors.primary },
   consent: { fontSize: 12, color: colors.textMuted, textAlign: 'center', marginBottom: 10 },
@@ -370,4 +463,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   trustText: { fontSize: 12, color: colors.textMuted },
+  remember: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, marginBottom: 4 },
+  rememberText: { color: colors.textMuted, fontSize: 14, fontWeight: '600' },
 });
