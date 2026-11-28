@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, Text } from 'react-native';
-import { colors, radius } from '@/theme/colors';
+import { colors, workspace } from '@/theme/colors';
 import { MAX_FONT_SCALE } from './ui';
 
 export function WorkspaceButton({
@@ -33,15 +33,15 @@ export function WorkspaceButton({
       onFocus={() => setFocus(true)}
       onBlur={() => setFocus(false)}
       style={({ pressed }) => ({
-        minHeight: 56,
-        minWidth: 56,
+        minHeight: workspace.control,
+        minWidth: workspace.control,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: compact ? 'center' : 'flex-start',
-        gap: 14,
+        gap: 10,
         paddingHorizontal: compact ? 4 : 14,
-        borderRadius: radius.sm,
-        borderWidth: 3,
+        borderRadius: workspace.radius,
+        borderWidth: 2,
         borderColor: focus ? colors.info : 'transparent',
         backgroundColor: primary
           ? hover
@@ -55,7 +55,7 @@ export function WorkspaceButton({
         opacity: pressed ? 0.8 : 1,
       })}
     >
-      <Ionicons name={icon} size={26} color={ink} />
+      <Ionicons name={icon} size={19} color={ink} />
       {!compact && (
         <Text
           maxFontSizeMultiplier={MAX_FONT_SCALE}
@@ -63,8 +63,8 @@ export function WorkspaceButton({
           style={{
             flexShrink: 1,
             color: ink,
-            fontSize: 17,
-            fontWeight: active || primary ? '700' : '500',
+            fontSize: workspace.body,
+            fontWeight: active || primary ? '600' : '500',
           }}
         >
           {label}

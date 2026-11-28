@@ -21,6 +21,7 @@ const SECTIONS: { title: string; prefixes: string[] }[] = [
     title: 'Shop and staff',
     prefixes: ['organization', 'branch', 'employee', 'invitation', 'role', 'audit', 'backup'],
   },
+  { title: 'Help and support', prefixes: ['support'] },
 ];
 
 /** What a permission lets the person do, in plain words ("Create sales (POS)"). */

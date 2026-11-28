@@ -53,3 +53,13 @@ export const tints = {
   lavender: { bg: '#EFE6FB', fg: '#5B3FA0' },
 } as const;
 export type Tint = keyof typeof tints;
+
+/** Compact desktop and tablet workspace scale. */
+export const workspace = {
+  gutter: 20,
+  control: 44,
+  body: 14,
+  caption: 12,
+  title: 24,
+  radius: 8,
+} as const;
