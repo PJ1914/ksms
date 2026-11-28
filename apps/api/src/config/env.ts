@@ -51,8 +51,9 @@ const envSchema = z
       .optional()
       .transform((v) => (v === undefined ? undefined : v === 'true')),
 
-    // ---- Platform control plane (ADR-001). Required in production; optional elsewhere so local
-    // development and the existing tests run without them (the admin plane then answers 503).
+    // ---- Platform control plane (ADR-001). Optional everywhere: without BOTH keys the admin panel API
+    // (/admin/v1) is switched off and answers 503, and the shop API runs normally. A missing admin key
+    // must never take the live shop API down.
     // Signs admin tokens. Must differ from JWT_ACCESS_SECRET so the two planes can never share tokens.
     PLATFORM_JWT_SECRET: z
       .string()
@@ -75,14 +76,6 @@ const envSchema = z
   .refine((e) => e.SESSION_ABSOLUTE_TTL_DAYS >= e.REFRESH_TTL_DAYS, {
     path: ['SESSION_ABSOLUTE_TTL_DAYS'],
     message: 'SESSION_ABSOLUTE_TTL_DAYS must be at least REFRESH_TTL_DAYS',
-  })
-  .refine((e) => e.NODE_ENV !== 'production' || e.PLATFORM_JWT_SECRET !== undefined, {
-    path: ['PLATFORM_JWT_SECRET'],
-    message: 'PLATFORM_JWT_SECRET is required in production',
-  })
-  .refine((e) => e.NODE_ENV !== 'production' || e.PLATFORM_MFA_KEY !== undefined, {
-    path: ['PLATFORM_MFA_KEY'],
-    message: 'PLATFORM_MFA_KEY is required in production',
   })
   .refine(
     (e) => e.PLATFORM_JWT_SECRET === undefined || e.PLATFORM_JWT_SECRET !== e.JWT_ACCESS_SECRET,

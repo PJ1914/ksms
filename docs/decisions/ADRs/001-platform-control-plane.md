@@ -25,11 +25,11 @@ Yapaaram is multi-tenant: every shop query is scoped by `organization_id` from t
 8. **Always one ADMIN.** The last active ADMIN cannot be disabled or demoted, and nobody can change their own account. Every change locks all admin rows in id order, so concurrent changes queue instead of racing or deadlocking.
 9. **Audit.** Every platform mutation writes `platform_audit_logs`, which is append-only by trigger, in the same transaction, with reason, IP and correlation id. SUPPORT can read only their own entries.
 10. **Bootstrap only from the CLI.** `pnpm --filter @ksms/api admin:create -- --email … --name …` (`src/create-admin.ts`). There is no public admin sign-up and no admin is ever seeded by a migration.
-11. **Configuration.** `PLATFORM_JWT_SECRET` and `PLATFORM_MFA_KEY` are required in production. Outside production they are optional, and without them `/admin/v1` answers `503 PLATFORM_DISABLED`. Optional: `PLATFORM_ADMIN_ORIGINS` (added to CORS), `PLATFORM_ADMIN_IP_ALLOWLIST`, `PLATFORM_AUTH_THROTTLE_LIMIT` (default 5 per minute per IP and per email).
+11. **Configuration.** `PLATFORM_JWT_SECRET` and `PLATFORM_MFA_KEY` are optional everywhere, but BOTH are needed to turn the admin panel on. Without them `/admin/v1` answers `503 PLATFORM_DISABLED` and a warning is logged at start-up, while the shop API runs normally. (They were first required in production; that made a missing admin secret fail the whole API deploy, so it was relaxed.) Optional: `PLATFORM_ADMIN_ORIGINS` (added to CORS), `PLATFORM_ADMIN_IP_ALLOWLIST`, `PLATFORM_AUTH_THROTTLE_LIMIT` (default 5 per minute per IP and per email).
 
 ## Consequences
 
 - Shop data is reachable only through code in `modules/platform`. Later phases (shops, subscriptions, tickets) add services there and are reviewed against this ADR.
 - Two token families and two Swagger documents: `/api/docs` for the shop API and `/admin/v1/docs` for the admin API.
 - Later phases add shop-side enforcement (lock/expiry) inside the existing member query (no extra round trip). Lock must invalidate `SessionCache` for the revoked sessions; another instance may serve reads from its own cache for up to 15 s (TD-138).
-- **Deploy:** the API refuses to start in production until both new secrets are set on Render.
+- **Deploy:** set both secrets on the API service on Render to turn the admin panel on. Until then the API starts and the admin panel API answers 503.

@@ -1,10 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AppException } from '../../../common/errors/app.exception';
 import { ENV, type Env } from '../../../config/config.module';
 
 /**
- * The platform plane's keys. Both are required in production (env.ts); elsewhere, without them the
- * whole /admin/v1 surface answers 503 PLATFORM_DISABLED instead of running with weak defaults.
+ * The platform plane's keys. Without BOTH of them the whole /admin/v1 surface answers 503
+ * PLATFORM_DISABLED (nothing runs with weak defaults) while the shop API keeps working; a warning is
+ * logged once at start-up so a forgotten key is easy to spot.
  */
 @Injectable()
 export class PlatformKeys {
@@ -14,6 +15,11 @@ export class PlatformKeys {
   constructor(@Inject(ENV) env: Env) {
     this.jwt = env.PLATFORM_JWT_SECRET ? new TextEncoder().encode(env.PLATFORM_JWT_SECRET) : null;
     this.mfa = env.PLATFORM_MFA_KEY ? Buffer.from(env.PLATFORM_MFA_KEY, 'base64') : null;
+    if (!this.enabled && env.NODE_ENV !== 'test') {
+      new Logger(PlatformKeys.name).warn(
+        'Admin panel API is OFF: set PLATFORM_JWT_SECRET and PLATFORM_MFA_KEY to turn it on.',
+      );
+    }
   }
 
   get enabled(): boolean {
