@@ -45,14 +45,28 @@ Return a plain value from a controller to get `{ data }`; return `new Paginated(
 
 Business codes (e.g. `INSUFFICIENT_STOCK`) are added by later phases by throwing `new AppException(code, message, status, details)`.
 
+Subscription and platform codes (`ADMIN_PANEL.md`, ADR-001):
+
+| HTTP | code                                        | Meaning                                                                                   |
+| ---- | ------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| 402  | `SUBSCRIPTION_EXPIRED`                      | Grace period over: the shop is read-only. `details`: `endsAt`, `graceEndsAt`              |
+| 403  | `ORG_LOCKED`                                | The platform locked this shop: nothing but me/logout/subscription works; login is refused |
+| 409  | `PLAN_LIMIT_REACHED`                        | Branch or active-user limit of the plan. `details`: `limit`, `max`, `current`, `planCode` |
+| 401  | `PLATFORM_UNAUTHORIZED`                     | Admin panel: missing/invalid admin token or session                                       |
+| 401  | `MFA_INVALID` / `MFA_TOKEN_INVALID`         | Admin panel: wrong authenticator/recovery code / the login step expired                   |
+| 403  | `ADMIN_LOCKED` / `PASSWORD_CHANGE_REQUIRED` | Admin panel: too many failures / temporary password must be changed first                 |
+| 409  | `LAST_ADMIN`                                | Admin panel: the last active ADMIN cannot be disabled or demoted                          |
+| 503  | `PLATFORM_DISABLED`                         | Admin panel keys are not configured on this server                                        |
+
 ## Headers
 
-| Header             | Direction        | Purpose                                                                                            |
-| ------------------ | ---------------- | -------------------------------------------------------------------------------------------------- |
-| `Authorization`    | request          | `Bearer <access token>`                                                                            |
-| `X-Branch-Id`      | request          | Working branch (UUID). Must be one the user is assigned to. Required where `@RequireBranch()`      |
-| `X-Correlation-Id` | request/response | Client may send 8–64 chars `[A-Za-z0-9_-]`; otherwise generated. Always echoed; in logs and errors |
-| `Idempotency-Key`  | request          | UUID per user action on commands (enforced from Phase 9). Redacted from logs                       |
+| Header                 | Direction        | Purpose                                                                                                          |
+| ---------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `Authorization`        | request          | `Bearer <access token>`                                                                                          |
+| `X-Branch-Id`          | request          | Working branch (UUID). Must be one the user is assigned to. Required where `@RequireBranch()`                    |
+| `X-Correlation-Id`     | request/response | Client may send 8–64 chars `[A-Za-z0-9_-]`; otherwise generated. Always echoed; in logs and errors               |
+| `X-Subscription-State` | response         | Shop API only: `TRIAL`, `ACTIVE`, `GRACE`, `EXPIRED` or `LOCKED` for the caller's shop (show the renewal banner) |
+| `Idempotency-Key`      | request          | UUID per user action on commands (enforced from Phase 9). Redacted from logs                                     |
 
 The organization is **never** taken from a header or body; it comes only from the verified token.
 
